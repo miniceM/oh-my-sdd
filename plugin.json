@@ -1,0 +1,24 @@
+{
+  "name": "oh-my-sdd",
+  "version": "0.1.0",
+  "description": "企业级 SDD 工作流 + iam 身份校验 + DOP 埋点（Claude Code 插件）",
+  "author": {
+    "name": "企业架构团队"
+  },
+  "license": "UNLICENSED",
+  "keywords": [
+    "sdd",
+    "claude-code",
+    "plugin",
+    "enterprise",
+    "iam",
+    "telemetry"
+  ],
+  "commands": "./commands",
+  "skills": "./skills",
+  "metadata": {
+    "enterprise": true,
+    "iamRequired": true,
+    "dopTelemetry": true
+  }
+}
