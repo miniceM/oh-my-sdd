@@ -65,6 +65,59 @@ test('report throws on network error (port closed)', async (t) => {
   await assert.rejects(() => report({ event: 'x' }));
 });
 
+test('reportOrEnqueue retries on transient failure then succeeds', async (t) => {
+  // Stub server that fails the first request with 500, succeeds after.
+  let requestCount = 0;
+  const server = createServer((req, res) => {
+    requestCount++;
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      if (requestCount === 1) {
+        res.writeHead(500); res.end('transient');
+      } else {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end('{"ok":true}');
+      }
+    });
+  });
+  await new Promise((r) => server.listen(0, r));
+  const port = server.address().port;
+  t.after(() => new Promise((r) => server.close(r)));
+  await setupConfig(t, { dop_endpoint: `http://localhost:${port}` });
+
+  const { reportOrEnqueue } = await import('../../hooks/lib/dop-client.js?' + Date.now());
+  await reportOrEnqueue({ event: 'x.retry' });
+
+  // First attempt failed (500), second succeeded — exactly 2 attempts total.
+  assert.equal(requestCount, 2);
+});
+
+test('reportOrEnqueue enqueues after all retries exhausted', async (t) => {
+  // Stub server that always fails.
+  let requestCount = 0;
+  const server = createServer((req, res) => {
+    requestCount++;
+    res.writeHead(500); res.end('always fail');
+  });
+  await new Promise((r) => server.listen(0, r));
+  const port = server.address().port;
+  t.after(() => new Promise((r) => server.close(r)));
+  await setupConfig(t, { dop_endpoint: `http://localhost:${port}` });
+
+  const { reportOrEnqueue } = await import('../../hooks/lib/dop-client.js?' + Date.now());
+  await reportOrEnqueue({ event: 'x.exhaust' });
+
+  // MAX_REPORT_RETRIES = 2 → 1 initial + 2 retries = 3 attempts total.
+  assert.equal(requestCount, 3);
+
+  // Event should have been enqueued to disk for later flush.
+  const { readAll } = await import('../../hooks/lib/event-queue.js?' + Date.now());
+  const queued = await readAll();
+  const found = queued.find((e) => e.event === 'x.exhaust');
+  assert.ok(found, 'event should be enqueued after retries exhausted');
+});
+
 test('shouldSkipTelemetry returns true when telemetry_disabled', async (t) => {
   await setupConfig(t, { telemetry_disabled: true });
   const { shouldSkipTelemetry } = await import('../../hooks/lib/dop-client.js?' + Date.now());
