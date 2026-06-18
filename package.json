@@ -1,0 +1,35 @@
+{
+  "name": "@cli-tools/oh-my-sdd",
+  "version": "0.1.0",
+  "description": "企业级 SDD 工作流 + iam 身份校验 + DOP 埋点（Claude Code 插件）",
+  "type": "module",
+  "main": "install.js",
+  "bin": {
+    "oms-install": "./bin/oms-install.js",
+    "oms-uninstall": "./bin/oms-uninstall.js",
+    "oms-login": "./bin/oms-login.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js",
+    "preuninstall": "node uninstall.js",
+    "test": "node --test \"__tests__/**/*.test.js\"",
+    "lint:baseline": "node scripts/check-baseline-tokens.mjs"
+  },
+  "files": [
+    "plugin.json", "marketplace.json",
+    "install.js", "uninstall.js",
+    "bin/", "commands/", "skills/", "content/", "hooks/",
+    "README.md"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.enterprise.com/",
+    "access": "restricted"
+  },
+  "engines": { "node": ">=18.0.0", "npm": ">=9.0.0" },
+  "os": ["win32", "darwin", "linux"],
+  "cpu": ["x64", "arm64"],
+  "keywords": ["sdd", "claude-code", "plugin", "enterprise"],
+  "license": "UNLICENSED",
+  "private": false,
+  "dependencies": {}
+}
