@@ -115,9 +115,16 @@ async function reportSessionStart(stdin, username) {
     start_sha: startSha,
     timestamp: new Date().toISOString(),
   };
-  // Save start_sha + username for session-end to compute code_delta.
+  // Save start_sha + username + started_at for session-end to compute
+  // code_delta and session duration. started_at is captured here so
+  // session.end can compute duration_sec; slash_commands is populated
+  // later by user-prompt-submit.js (Task 10).
   try {
-    await saveSessionMeta(stdin.session_id, { start_sha: startSha, username });
+    await saveSessionMeta(stdin.session_id, {
+      start_sha: startSha,
+      username,
+      started_at: new Date().toISOString(),
+    });
   } catch (err) {
     warn(`session meta 写入失败: ${err.message}`);
   }

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, chmodSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -185,4 +185,42 @@ test('iam hanging produces ERROR state within timeout, session does not block', 
   // Should surface a service-error message, not the baseline.
   assert.match(out.additionalContext, /iam 服务异常|超时|timeout|身份认证|认证状态/i);
   assert.match(result.stderr, /认证状态|超时|iam/i);
+});
+
+test('OK state: session meta includes started_at for duration calc', async (t) => {
+  // Verifies Finding 2: session-start must write started_at so session-end
+  // can compute duration_sec (previously always null).
+  const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-meta-'));
+  t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
+  const iamDir = makeStubIam({
+    total: 1,
+    credentials: [{ system: 'sdd', username: 'carol', status: 'logged' }],
+  });
+  t.after(() => rmSync(iamDir, { recursive: true, force: true }));
+
+  const before = Date.now();
+  const result = await runHook(
+    { session_id: 'meta-test-1', cwd: '/tmp', source: 'startup' },
+    {
+      HOME: tmpHome,
+      USERPROFILE: tmpHome,
+      PATH: `${iamDir}:${process.env.PATH}`,
+      CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+    }
+  );
+  const after = Date.now();
+
+  assert.equal(result.exitCode, 0);
+  const metaPath = path.join(tmpHome, '.oh-my-sdd', 'sessions', 'meta-test-1.json');
+  assert.equal(existsSync(metaPath), true, 'session meta file should exist');
+  const meta = JSON.parse(readFileSync(metaPath, 'utf8'));
+  assert.equal(meta.username, 'carol');
+  // start_sha may be null if cwd is not a git repo; just assert presence
+  assert.ok('start_sha' in meta, 'start_sha key must be present');
+  // started_at must be present and parse as a recent ISO timestamp
+  assert.equal(typeof meta.started_at, 'string');
+  const startedAtMs = new Date(meta.started_at).getTime();
+  assert.ok(Number.isFinite(startedAtMs), 'started_at must be a valid ISO date');
+  assert.ok(startedAtMs >= before && startedAtMs <= after,
+    `started_at (${meta.started_at}) should be within the hook run window [${before}, ${after}]`);
 });

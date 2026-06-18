@@ -44,12 +44,15 @@ async function deleteSessionMeta(sessionId) {
   catch (err) { if (err.code !== 'ENOENT') warn(`删除 session meta 失败: ${err.message}`); }
 }
 
-async function cleanupOrphans(maxAgeDays = ORPHAN_MAX_AGE_DAYS) {
+async function cleanupOrphans({ maxAgeDays = ORPHAN_MAX_AGE_DAYS, exclude = null } = {}) {
   try {
     const files = await readdir(SESSIONS_DIR);
     const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
     for (const f of files) {
       if (!f.endsWith('.json')) continue;
+      // Never delete the active session's meta even if it exceeds maxAge.
+      // An old session (open >7d) could still be sending session.end now.
+      if (exclude && f.endsWith(`${exclude}.json`)) continue;
       const p = path.join(SESSIONS_DIR, f);
       const st = await stat(p);
       if (st.mtimeMs < cutoff) {
@@ -69,7 +72,6 @@ async function main() {
   } catch (err) {
     warn(`flush 失败: ${err.message}`);
   }
-  await cleanupOrphans();
 
   const rawStdin = await readStdin();
   let stdin = {};
@@ -79,12 +81,19 @@ async function main() {
     /* tolerate non-JSON stdin */
   }
 
+  // Load session meta BEFORE cleanup. For a session open >7 days, cleanup
+  // running first would delete this session's meta, silently dropping
+  // session.end. We then exclude the active session_id from cleanup so a
+  // long-running session's own meta is never deleted while being processed.
+  const meta = await loadSessionMeta(stdin.session_id);
+
+  await cleanupOrphans({ exclude: stdin.session_id });
+
   if (await shouldSkipTelemetry({ cwd: stdin.cwd })) {
     process.stdout.write('{}');
     return;
   }
 
-  const meta = await loadSessionMeta(stdin.session_id);
   if (!meta) {
     info(`无 session meta for ${stdin.session_id}, 跳过 session.end`);
     process.stdout.write('{}');
