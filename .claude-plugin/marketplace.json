@@ -1,12 +1,10 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "oh-my-sdd",
   "owner": {
     "name": "企业架构团队"
   },
-  "metadata": {
-    "description": "企业级 SDD 工作流 + iam 身份校验 + DOP 埋点（本地 marketplace）",
-    "version": "0.1.0"
-  },
+  "description": "企业级 SDD 工作流 + iam 身份校验 + DOP 埋点（本地 marketplace）",
   "plugins": [
     {
       "name": "oh-my-sdd",

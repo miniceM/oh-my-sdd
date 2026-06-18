@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { cp, mkdir, readFile, writeFile, access, constants, rm } from 'node:fs/promises';
+import { cp, mkdir, access, constants, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,9 +12,6 @@ import { saveConfig, DEFAULT_CONFIG } from './hooks/lib/config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = __dirname;
-const CLAUDE_DIR = path.join(path.dirname(getPluginInstallDir()), '..'); // ~/.claude
-const SETTINGS_PATH = path.join(CLAUDE_DIR, 'settings.json');
-const MARKETPLACE_ID = 'oh-my-sdd';
 
 async function preflight() {
   if (!checkNodeVersion('18.0.0')) {
@@ -38,7 +36,7 @@ async function copyPluginFiles() {
   for (const sub of subdirs) {
     await cp(path.join(PACKAGE_ROOT, sub), path.join(dest, sub), { recursive: true });
   }
-  // Copy .claude-plugin/ directory (contains plugin.json manifest)
+  // Copy .claude-plugin/ directory (contains plugin.json + marketplace.json manifests)
   await cp(path.join(PACKAGE_ROOT, '.claude-plugin'), path.join(dest, '.claude-plugin'), { recursive: true });
   // Copy other root manifests (skip any not yet shipped — forward-compatible during
   // staggered releases where e.g. README.md or uninstall.js lag behind)
@@ -46,8 +44,6 @@ async function copyPluginFiles() {
     if (!existsSync(path.join(PACKAGE_ROOT, f))) continue;
     await cp(path.join(PACKAGE_ROOT, f), path.join(dest, f));
   }
-  // marketplace.json stays at root (per superpowers reference)
-  await cp(path.join(PACKAGE_ROOT, 'marketplace.json'), path.join(dest, 'marketplace.json'));
   return dest;
 }
 
@@ -61,23 +57,41 @@ async function ensureStateDir() {
   }
 }
 
-async function registerMarketplace() {
-  // Read existing settings
-  let settings = {};
+async function isClaudeInstalled() {
+  // Check if `claude` is in PATH
+  const cmd = process.platform === 'win32' ? 'where' : 'which';
   try {
-    settings = JSON.parse(await readFile(SETTINGS_PATH, 'utf8'));
-  } catch (err) {
-    if (err.code !== 'ENOENT') throw err;
+    execFileSync(cmd, ['claude'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
   }
+}
 
-  settings.extraKnownMarketplaces = settings.extraKnownMarketplaces ?? {};
-  settings.extraKnownMarketplaces[MARKETPLACE_ID] = {
-    source: getPluginInstallDir(),
-    installedAt: new Date().toISOString(),
-  };
-
-  await mkdir(CLAUDE_DIR, { recursive: true });
-  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n');
+async function registerMarketplace(dest) {
+  if (!(await isClaudeInstalled())) {
+    process.stdout.write('⚠️  未检测到 claude CLI。请手动注册 marketplace：\n');
+    process.stdout.write(`    claude plugin marketplace add ${dest}\n`);
+    process.stdout.write(`    或在 Claude Code 内：/plugin marketplace add ${dest}\n`);
+    return;
+  }
+  process.stdout.write('→ 通过 claude CLI 注册本地 marketplace\n');
+  const result = await new Promise((resolve) => {
+    const child = spawn('claude', ['plugin', 'marketplace', 'add', dest], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (c) => { stdout += c; });
+    child.stderr.on('data', (c) => { stderr += c; });
+    child.on('close', (code) => resolve({ code, stdout, stderr }));
+    child.on('error', (err) => resolve({ code: -1, stdout: '', stderr: err.message }));
+  });
+  if (result.code !== 0) {
+    process.stderr.write(`⚠️  claude plugin marketplace add 失败 (exit ${result.code}):\n`);
+    process.stderr.write(result.stderr || result.stdout || '(no output)\n');
+    process.stderr.write(`    请手动运行：claude plugin marketplace add ${dest}\n`);
+  }
 }
 
 async function main() {
@@ -88,8 +102,7 @@ async function main() {
   process.stdout.write(`  完成：${dest}\n`);
   process.stdout.write('→ 初始化 ~/.oh-my-sdd/ 状态目录\n');
   await ensureStateDir();
-  process.stdout.write('→ 在 settings.json 注册本地 marketplace\n');
-  await registerMarketplace();
+  await registerMarketplace(dest);
   process.stdout.write('\n✓ oh-my-sdd 安装完成\n\n');
   process.stdout.write('下一步：\n');
   process.stdout.write('  1. 运行 `oms-login` 完成 iam 身份认证\n');

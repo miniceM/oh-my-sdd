@@ -16,7 +16,7 @@
     "lint:baseline": "node scripts/check-baseline-tokens.mjs"
   },
   "files": [
-    ".claude-plugin/", "marketplace.json",
+    ".claude-plugin/",
     "install.js", "uninstall.js",
     "bin/", "commands/", "skills/", "content/", "hooks/",
     "README.md"
