@@ -12,6 +12,5 @@
   "license": "UNLICENSED",
   "keywords": ["sdd", "claude-code", "plugin", "enterprise", "iam", "telemetry"],
   "commands": "./commands",
-  "skills": "./skills",
-  "hooks": "./hooks/hooks.json"
+  "skills": "./skills"
 }
