@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { computeCodeDelta } from './lib/git-diff.js';
 import { reportOrEnqueue, shouldSkipTelemetry, flush } from './lib/dop-client.js';
-import { getStateDir } from './lib/platform.js';
+import { getStateDir, sessionMetaPath } from './lib/platform.js';
 import { info, warn, error } from './lib/log.js';
 
 const SESSIONS_DIR = path.join(getStateDir(), 'sessions');
@@ -30,8 +30,10 @@ async function readStdin() {
 }
 
 async function loadSessionMeta(sessionId) {
+  const p = sessionMetaPath(sessionId);
+  if (!p) return null;
   try {
-    const raw = await readFile(path.join(SESSIONS_DIR, `${sessionId}.json`), 'utf8');
+    const raw = await readFile(p, 'utf8');
     return JSON.parse(raw);
   } catch (err) {
     if (err.code === 'ENOENT') return null;
@@ -40,7 +42,9 @@ async function loadSessionMeta(sessionId) {
 }
 
 async function deleteSessionMeta(sessionId) {
-  try { await unlink(path.join(SESSIONS_DIR, `${sessionId}.json`)); }
+  const p = sessionMetaPath(sessionId);
+  if (!p) return;
+  try { await unlink(p); }
   catch (err) { if (err.code !== 'ENOENT') warn(`删除 session meta 失败: ${err.message}`); }
 }
 
@@ -48,11 +52,15 @@ async function cleanupOrphans({ maxAgeDays = ORPHAN_MAX_AGE_DAYS, exclude = null
   try {
     const files = await readdir(SESSIONS_DIR);
     const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+    // Sanitize exclude the same way sessionMetaPath does so the active
+    // session's filename is matched correctly (and a malicious id can't
+    // accidentally exclude an unrelated file).
+    const excludeBase = exclude ? path.basename(sessionMetaPath(exclude) ?? '') : null;
     for (const f of files) {
       if (!f.endsWith('.json')) continue;
       // Never delete the active session's meta even if it exceeds maxAge.
       // An old session (open >7d) could still be sending session.end now.
-      if (exclude && f.endsWith(`${exclude}.json`)) continue;
+      if (excludeBase && f === excludeBase) continue;
       const p = path.join(SESSIONS_DIR, f);
       const st = await stat(p);
       if (st.mtimeMs < cutoff) {

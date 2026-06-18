@@ -1,12 +1,9 @@
 #!/usr/bin/env node
 import { readFile, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 
 import { reportOrEnqueue, shouldSkipTelemetry } from './lib/dop-client.js';
-import { getStateDir } from './lib/platform.js';
+import { sessionMetaPath } from './lib/platform.js';
 import { info, warn, error } from './lib/log.js';
-
-const SESSIONS_DIR = path.join(getStateDir(), 'sessions');
 
 // Hard timeouts to keep Claude Code prompt submission snappy. A stalled DOP
 // POST must never delay the user's prompt. dop-client.js uses AbortController
@@ -42,7 +39,8 @@ function parseSlashCommand(prompt) {
 // write back. Returns null if the meta file is missing — caller should skip
 // the event report in that case (no session context to attribute it to).
 async function loadAndUpdateSession(sessionId, commandName) {
-  const p = path.join(SESSIONS_DIR, `${sessionId}.json`);
+  const p = sessionMetaPath(sessionId);
+  if (!p) return null;
   let meta = {};
   try {
     meta = JSON.parse(await readFile(p, 'utf8'));

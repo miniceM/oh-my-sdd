@@ -28,6 +28,19 @@ export function getStateDir() {
   return path.join(getHomeDir(), '.oh-my-sdd');
 }
 
+// Resolve the on-disk path for a session meta file. session_ids coming from
+// Claude Code via stdin are expected to be UUIDs, but stdin is untrusted
+// input — a malicious value like `../../etc/cron.d/evil` must not escape the
+// sessions dir. We strip every char outside [A-Za-z0-9_-] so any path
+// separators (`/`, `..`, `\`, `:`) collapse harmlessly. Returns null for
+// empty/missing input so callers can short-circuit to a no-op `{}` response
+// rather than touch the filesystem with an empty filename.
+export function sessionMetaPath(sessionId) {
+  const safe = String(sessionId ?? '').replace(/[^a-zA-Z0-9_-]/g, '');
+  if (!safe) return null;
+  return path.join(getStateDir(), 'sessions', `${safe}.json`);
+}
+
 export function isIamInPath() {
   const cmd = process.platform === 'win32' ? 'where' : 'which';
   try {

@@ -8,7 +8,7 @@ import { getCurrentHead, getBranch, getRemote } from './lib/git-diff.js';
 import { reportOrEnqueue, flush, shouldSkipTelemetry } from './lib/dop-client.js';
 import { loadConfig } from './lib/config.js';
 import { debug, warn, error } from './lib/log.js';
-import { getStateDir } from './lib/platform.js';
+import { getStateDir, sessionMetaPath } from './lib/platform.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT ?? path.resolve(__dirname, '..');
@@ -52,13 +52,11 @@ async function readStdin() {
 
 async function saveSessionMeta(sessionId, meta) {
   if (!sessionId) return;
+  const p = sessionMetaPath(sessionId);
+  if (!p) return;
   const dir = path.join(getStateDir(), 'sessions');
   await mkdir(dir, { recursive: true, mode: 0o700 });
-  await writeFile(
-    path.join(dir, `${sessionId}.json`),
-    JSON.stringify(meta, null, 2),
-    { mode: 0o600 }
-  );
+  await writeFile(p, JSON.stringify(meta, null, 2), { mode: 0o600 });
 }
 
 async function getAuthState() {

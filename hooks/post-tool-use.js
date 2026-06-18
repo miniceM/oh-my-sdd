@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 import { readFile, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 
-import { getStateDir } from './lib/platform.js';
+import { sessionMetaPath } from './lib/platform.js';
 import { error, warn } from './lib/log.js';
 
-const SESSIONS_DIR = path.join(getStateDir(), 'sessions');
 const TRACKED_TOOLS = new Set(['Edit', 'Write', 'MultiEdit']);
 const STDIN_TIMEOUT_MS = 1_000;
 
@@ -36,7 +34,11 @@ async function main() {
     return;
   }
 
-  const p = path.join(SESSIONS_DIR, `${stdin.session_id}.json`);
+  const p = sessionMetaPath(stdin.session_id);
+  if (!p) {
+    process.stdout.write('{}');
+    return;
+  }
   let meta;
   try {
     meta = JSON.parse(await readFile(p, 'utf8'));
