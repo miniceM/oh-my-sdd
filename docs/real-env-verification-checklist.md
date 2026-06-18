@@ -130,10 +130,43 @@ curl --version
 
 **目标**：确认 Claude Code 当前版本能识别我们的 `plugin.json` / `hooks.json` / `marketplace.json` 结构。这是 spec § 11 列出的"待实施时核实项"，必须在发布前确认。
 
-> **⏱ 时间预算**：30-45 分钟（含读官方文档）
+> **⏱ 时间预算**：15-30 分钟（用 `claude plugin validate` 比"读文档对比"快得多）
 > **✅ 通过条件**：plugin.json + hooks.json + marketplace.json 三者的字段名/值都与真实 Claude Code 文档/插件一致，且 `/plugin` 命令显示 oh-my-sdd enabled
 > **📦 证据收集**：保存官方文档截图 / 5 个参考插件清单 / `/plugin` 输出截图到 `evidence/phase-1/`
 > **🔗 失败决策**：见附录 A.1（命令不出现）+ A.2（hook 没触发）
+
+### 1.0 用官方工具验证（最先做这步！）
+
+**不要先读文档对比**——用官方 validator，机器验证比人眼可靠。
+
+- [ ] **步骤 1**：跑官方 validator：
+
+```bash
+claude plugin validate ./.claude-plugin/plugin.json
+# 或对整个 plugin 目录：
+claude plugin validate ./ --strict
+```
+
+**期望**：
+- 退出码 0
+- 无 ERROR
+- `--strict` 模式下也无 WARNING（未识别字段、类型不匹配等）
+
+**如果有 warning/error**：
+- 看 error message 提示的字段名
+- 对照 https://code.claude.com/docs/zh-CN/plugins-reference#plugin- Qing单架构 修正
+- 修完再跑一次 `--strict`
+
+- [ ] **步骤 2**：用 `/doctor` 看 plugin 加载详情：
+
+```bash
+claude
+# 在 Claude Code 内：
+/doctor
+# 或 /plugin list 看是否列出 oh-my-sdd
+```
+
+**期望**：oh-my-sdd 列出，无 "ignored folder" 警告。
 
 ### 1.1 plugin.json schema 核对
 
