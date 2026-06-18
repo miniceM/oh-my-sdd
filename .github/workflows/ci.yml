@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: node --version
+      - run: npm install --ignore-scripts
+      - run: npm test
+      - run: npm run lint:baseline
+
+  smoke-check:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          TESTHOME=$(mktemp -d)
+          HOME=$TESTHOME USERPROFILE=$TESTHOME node install.js
+          test -d $TESTHOME/.claude/plugins/oh-my-sdd/
+          test -f $TESTHOME/.oh-my-sdd/config.json
+          HOME=$TESTHOME USERPROFILE=$TESTHOME node uninstall.js
+          ! test -d $TESTHOME/.claude/plugins/oh-my-sdd/
+          test -d $TESTHOME/.oh-my-sdd/
