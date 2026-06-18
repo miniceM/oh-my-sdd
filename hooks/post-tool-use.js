@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { getStateDir } from './lib/platform.js';
-import { error } from './lib/log.js';
+import { error, warn } from './lib/log.js';
 
 const SESSIONS_DIR = path.join(getStateDir(), 'sessions');
 const TRACKED_TOOLS = new Set(['Edit', 'Write', 'MultiEdit']);
@@ -52,7 +52,11 @@ async function main() {
   meta.files_touched = meta.files_touched ?? {};
   meta.files_touched[filePath] = (meta.files_touched[filePath] ?? 0) + 1;
 
-  await writeFile(p, JSON.stringify(meta, null, 2), { mode: 0o600 });
+  try {
+    await writeFile(p, JSON.stringify(meta, null, 2), { mode: 0o600 });
+  } catch (err) {
+    warn(`写入 session meta 失败: ${err.message}`);
+  }
   process.stdout.write('{}');
 }
 
