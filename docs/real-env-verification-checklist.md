@@ -8,6 +8,109 @@
 
 ---
 
+## 执行指南（先读这部分）
+
+### 整体时间预算
+
+| 平台 | 单平台总耗时 | 备注 |
+|------|------------|------|
+| macOS | 半天（~4 小时） | 主验证平台，最完整 |
+| Linux | 2-3 小时 | Phase 1-6 + 关键 Phase 7 项 |
+| Windows | 3-4 小时 | 跨平台 bug 集中地，多留时间 |
+| **三平台合计** | **~1.5 个工作日** | 含等待 Claude Code 启动的时间 |
+
+### 必跑顺序（不可乱序）
+
+```
+Phase 0 (前置) → Phase 1 (Schema) → Phase 2 (安装) → Phase 3 (认证)
+                                                       ↓
+                            ┌──────────────────────────┴──────────┐
+                            ↓                                      ↓
+                    Phase 4 (baseline) ← 依赖 3 通过      Phase 6 (DOP) ← 依赖 4 通过
+                            ↓                                      ↓
+                            └──────────────► Phase 5 (SDD) ◄──────┘
+                                                       ↓
+                                              Phase 7 (跨平台)
+                                                       ↓
+                                  Phase 8 (失败) + Phase 9 (安全) + Phase 10 (性能)
+                                                       ↓
+                                                   签字发布
+```
+
+**关键依赖**：
+- Phase 1 不过 → 不要继续（schema 错了，后面全白测）
+- Phase 3 不过 → Phase 4/6 都会失败（未认证状态）
+- Phase 4 不过 → Phase 5 失败（命令存在但 Claude 不遵守 baseline）
+
+### 快速 Triage（5 分钟决定是否值得继续）
+
+**开始正式验证前，先跑这 3 项，任何一项失败就停下来排查**：
+
+```bash
+# T1: Node 版本对（5 秒）
+node --version  # 必须 ≥ v18
+
+# T2: iam CLI 能跑（10 秒）
+iam auth status -json | jq .  # 必须输出合法 JSON
+
+# T3: Claude Code 能加载插件（30 秒）
+claude -e "/plugin"
+# 输出里必须有 oh-my-sdd
+```
+
+T1-T3 全过 → 进 Phase 1。
+任意一项失败 → 先解决环境问题，不要往下走。
+
+### 通过/失败判定规则
+
+每项的判定规则在步骤里用 `**通过条件**` 显式标注：
+
+- ✅ **通过** = 通过条件全部满足
+- ❌ **失败** = 通过条件任一不满足，**必须停下排查**（不要"差不多就算过"）
+- ⚠️ **已知限制** = 设计上接受的行为，记入报告但不阻塞
+
+### 每相位都要做的事
+
+每个 Phase 结束时，**无论通过还是失败**：
+
+1. **保存证据**（截图 / 日志 / 命令输出）到 `~/oh-my-sdd-verification-evidence/<phase>/`
+2. **更新签字表**（本文末尾）
+3. **失败项** → 查附录 A 排查；查不出 → 建 issue，记入报告
+4. **通过的项** → 打勾，进入下一 Phase
+
+### 何时可以"跳过"某项
+
+**不可以**跳过的情况：
+- 任何 Phase 标了 ✅ 阻塞发布的项
+- 任何平台（macOS/Linux/Windows）的 Phase 1-6
+
+**可以**跳过的情况：
+- Phase 8.3 磁盘满测试（环境难以安全构造，标"code review only"）
+- Phase 10.3 长会话内存（如果项目不打算长会话使用）
+- 同一平台的二次验证（如 Linux 验证过，Ubuntu 容器版可跳过部分）
+
+跳过的项必须在报告里写明理由。
+
+### 工具准备清单
+
+执行前确认这些工具可用（除了 oh-my-sdd 本身）：
+
+```bash
+# 基础工具（一般都有）
+node --version              # ≥ 18
+npm --version               # ≥ 9
+git --version
+jq --version                # 解析 JSON 用
+curl --version
+
+# 平台特定
+# macOS: brew install jq
+# Linux: apt install jq / yum install jq
+# Windows: choco install jq 或 scoop install jq
+```
+
+---
+
 ## 0. 前置条件
 
 执行本 checklist 前必须具备：
@@ -26,6 +129,11 @@
 ## Phase 1: Pre-flight Schema 验证（不依赖运行时）
 
 **目标**：确认 Claude Code 当前版本能识别我们的 `plugin.json` / `hooks.json` / `marketplace.json` 结构。这是 spec § 11 列出的"待实施时核实项"，必须在发布前确认。
+
+> **⏱ 时间预算**：30-45 分钟（含读官方文档）
+> **✅ 通过条件**：plugin.json + hooks.json + marketplace.json 三者的字段名/值都与真实 Claude Code 文档/插件一致，且 `/plugin` 命令显示 oh-my-sdd enabled
+> **📦 证据收集**：保存官方文档截图 / 5 个参考插件清单 / `/plugin` 输出截图到 `evidence/phase-1/`
+> **🔗 失败决策**：见附录 A.1（命令不出现）+ A.2（hook 没触发）
 
 ### 1.1 plugin.json schema 核对
 
@@ -127,6 +235,16 @@ cat ~/.oh-my-sdd/logs/$(date +%F).log
 ## Phase 2: 安装与卸载（真实 npm registry）
 
 **目标**：验证 `npm install -g` 和 `npm uninstall -g` 在企业 registry 上行为正确。
+
+> **⏱ 时间预算**：30-45 分钟
+> **✅ 通过条件**：
+> - 安装无报错 + 4 类文件落地（commands/skills/content/hooks/bin + manifest）
+> - 文件权限 Unix 700/600，Windows 继承 ACL
+> - 升级场景：本地改动被覆盖，但 `~/.oh-my-sdd/` 状态保留
+> - 默认卸载：插件目录删 + settings.json 清理 + 状态保留
+> - `--purge` 卸载：状态目录也删
+> **📦 证据收集**：`ls`/`stat`/`cat` 输出 + 安装/卸载日志截图
+> **🔗 失败决策**：见附录 A.6（Windows 路径问题）；权限错 → 检查 umask
 
 ### 2.1 全局安装
 
@@ -254,6 +372,17 @@ ls ~/.oh-my-sdd/ 2>&1 | grep -q "No such" && echo "PASS" || echo "FAIL"
 
 **目标**：验证 oms-login + iam 集成在真实环境工作。
 
+> **⏱ 时间预算**：30-45 分钟（含失败场景）
+> **✅ 通过条件**：
+> - `iam auth status -json` schema 与 spec § 6.2 一致（含 system/username/status）
+> - `oms-login` 交互式输入成功，密码隐藏为 `*`
+> - 错误密码：退出码 1 + 显示 iam 返回的错误
+> - Ctrl+C 密码输入：立即退出 130，无残留进程
+> - iam 未在 PATH：友好提示 + 退出 1
+> **📦 证据收集**：`iam auth status -json` 输出（脱敏 username）+ oms-login 终端录屏/截图
+> **⚠️ 人工不可替代**：密码输入、Ctrl+C 必须 TTY 真实触发
+> **🔗 失败决策**：见附录 A.3（iam schema 不对）
+
 ### 3.1 iam CLI 独立验证
 
 - [ ] **步骤 1**：直接测试 iam CLI：
@@ -361,6 +490,16 @@ mv $(which iam).bak $(dirname $(which iam).bak)/iam  # 恢复
 
 **目标**：验证 SessionStart hook 在真实会话里注入 baseline。
 
+> **⏱ 时间预算**：30-45 分钟
+> **✅ 通过条件**：
+> - OK 状态：Claude 回答含"企业 SDD Agent"身份声明
+> - NEED_LOGIN：stderr 红色提示 + Claude 回答**不**含 baseline
+> - NO_CLI：stderr 提示安装 iam + Claude 回答**不**含 baseline
+> - ERROR（iam 挂起）：5 秒内 hook 退出（非 60 秒）
+> **📦 证据收集**：每个状态拍 Claude 回答截图 + stderr 截图 + 日志文件
+> **⚠️ 人工不可替代**：判断 Claude 是否真遵守 baseline 必须人眼读输出
+> **🔗 失败决策**：baseline 不被遵守 = 软规则（spec § 5.5），不算 bug；hook 没触发 → 附录 A.2
+
 ### 4.1 已认证状态
 
 - [ ] **前置**：`iam auth status -json` 显示 logged。
@@ -434,6 +573,15 @@ PATH=/usr/bin:/bin claude
 
 **目标**：验证 5 个斜杠命令 + 3 个 skills 在真实会话可用。
 
+> **⏱ 时间预算**：1-1.5 小时（5 命令 + 3 skills 各跑一次）
+> **✅ 通过条件**：
+> - 5 个 `/sdd-*` 命令都能被 Claude Code 识别并执行
+> - 每个命令 Claude 按对应 Ring 的"工作流"+"强制规则"执行（不是凭空乱做）
+> - 3 个 skills 在相关场景被 Claude 主动引用（看到具体规则术语出现）
+> **📦 证据收集**：每个命令的对话截图（含 Claude 的工作流步骤）
+> **⚠️ 人工不可替代**：判断 Claude 是否按 SDD 工作流走，是 LLM 行为判断
+> **🔗 失败决策**：命令不识别 → 附录 A.1；Claude 不遵守 → 软规则问题，记入报告
+
 ### 5.1 SDD 命令逐个验证
 
 - [ ] **前置**：已通过 oms-login 认证，进入 Claude Code 会话。
@@ -500,6 +648,17 @@ PATH=/usr/bin:/bin claude
 ## Phase 6: DOP 埋点（真实 endpoint）
 
 **目标**：验证 3 类事件真实到达 DOP 后端。
+
+> **⏱ 时间预算**：1-1.5 小时（含离线/在线切换）
+> **✅ 通过条件**：
+> - 3 类事件（session.start / session.end / slash.invoked）都在 DOP 后台出现
+> - 字段值正确（user 来自 iam，git_branch 来自项目，code_delta 与改动一致）
+> - duration_sec 是正整数（不是 null）
+> - 离线时事件入队，恢复后 flush 上传
+> - 用户全局 `telemetry_disabled` 和项目 `.sdd-no-telemetry` 都能阻断上报
+> **📦 证据收集**：DOP 后台事件列表截图 + `queue.jsonl` 内容 + 网络抓包（如需）
+> **⚠️ 人工不可替代**：DOP 后台肉眼查（如无 query API）；终端关闭场景必须人触发
+> **🔗 失败决策**：见附录 A.4（DOP 收不到事件）
 
 ### 6.1 配置真实 endpoint
 
@@ -669,6 +828,15 @@ touch .sdd-no-telemetry
 
 **目标**：在三平台上重复 Phase 1-6 的关键步骤。
 
+> **⏱ 时间预算**：每平台 2-3 小时（含切换机器/VM 时间）
+> **✅ 通过条件**：
+> - macOS / Linux / Windows 三平台都能完整跑通 Phase 2 + 3 + 4.1 + 6.4
+> - 文件权限平台各自正确（Unix 700/600，Windows ACL）
+> - Windows 上 hook 命令字符串能被 cmd/PowerShell 正确执行（重点风险）
+> **📦 证据收集**：每平台独立的 `evidence/phase-7-<platform>/` 目录
+> **⚠️ 人工不可替代**：必须真机/真 VM，CI 不能完全替代（Claude Code 交互部分）
+> **🔗 失败决策**：Windows 路径错 → 附录 A.6；其他 → 对应 phase 的失败决策
+
 ### 7.1 macOS（Apple Silicon 或 Intel）
 
 - [ ] Phase 2.1 全局安装成功
@@ -722,6 +890,15 @@ touch .sdd-no-telemetry
 
 **目标**：验证系统在各种异常下的降级行为。
 
+> **⏱ 时间预算**：30-45 分钟
+> **✅ 通过条件**：
+> - DOP 挂了：baseline 仍注入 + 事件入队 + 会话不卡顿
+> - 配置文件损坏：hook 不崩，可能用默认配置
+> - 磁盘满：所有 hook try/catch 兜底（可跳过）
+> **📦 证据收集**：每个失败场景的日志 + queue.jsonl 内容
+> **⚠️ 可跳过项**：8.3 磁盘满测试标 "code review only"
+> **🔗 失败决策**：见附录 A.4 / A.5
+
 ### 8.1 DOP 服务挂了
 
 - [ ] **步骤 1**：临时改 endpoint 到一个不存在的地址：
@@ -768,6 +945,15 @@ echo '{ broken json' > ~/.oh-my-sdd/config.json
 ## Phase 9: 安全审计
 
 **目标**：确认实施过程中的安全决策在真实环境仍然有效。
+
+> **⏱ 时间预算**：20-30 分钟
+> **✅ 通过条件**：
+> - 路径遍历：单元测试覆盖（无需重复手工）
+> - 密码：grep 日志/queue 无匹配；进程 argv 无密码
+> - DOP 数据脱敏：queue 里只有 schema 字段，无敏感内容
+> - 文件权限：所有 `~/.oh-my-sdd/` 目录 700，文件 600
+> **📦 证据收集**：`find ... -exec stat` 输出 + grep 输出（应为空）+ `Get-Acl` (Windows)
+> **🔗 失败决策**：权限错 → 检查 umask / install.js 的 mode 参数；密码泄露 → 立即停发，建 Critical issue
 
 ### 9.1 路径遍历防护
 
@@ -830,6 +1016,15 @@ Get-Acl $env:USERPROFILE\.oh-my-sdd | Format-List
 
 ## Phase 10: 性能与体验
 
+> **⏱ 时间预算**：30 分钟
+> **✅ 通过条件**：
+> - 启动耗时：比未装插件增加 ≤ 1 秒
+> - 单次工具调用：PostToolUse hook ≤ 100ms（用户感知不到）
+> - 长会话：1 小时 + 持续操作，Claude Code 内存增长合理
+> **📦 证据收集**：`time claude -e "exit"` 输出（含/不含插件各 1 次）
+> **⚠️ 可跳过项**：10.3 长会话内存（如不打算长会话使用）
+> **🔗 失败决策**：启动慢 → 检查 iam/DOP 网络延迟；hook 慢 → 看 log 里 warn
+
 ### 10.1 启动耗时
 
 - [ ] **步骤 1**：测量启动耗时：
@@ -882,6 +1077,31 @@ time claude -e "exit"
 | 10. 性能体验 | | | | |
 
 **全部签字 + 全绿 → 可 tag v0.1.0 + npm publish**
+
+---
+
+## 附录 A0：症状速查表
+
+遇到问题时先查这张表，按症状定位排查步骤。
+
+| 症状 | 可能原因 | 排查步骤 |
+|------|---------|---------|
+| `/plugin` 列表里没有 oh-my-sdd | install.js 没跑 / 复制失败 | 见 A.1.1（验证文件落地） |
+| `/sdd-*` 命令在 Claude Code 不出现 | commands/ 目录空 / frontmatter 错 | 见 A.1 |
+| 启动 Claude Code 后 stderr 无任何 oh-my-sdd 输出 | SessionStart hook 没触发 | 见 A.2 |
+| baseline 注入但 Claude 不遵守 | baseline 是软规则 | 见 A.5（设计如此，不是 bug） |
+| `oms-login` 提示"未检测到 iam CLI" | iam 不在 PATH | 见 A.3.1 |
+| `oms-login` 输完密码后卡死 | Ctrl+C/D 控制字符未处理 | 检查是否是 v0.1.0 之前的版本 |
+| iam 已登录但 NEED_LOGIN 状态 | `aih_system_name` 配错 | 见 A.3.2 |
+| DOP 后台收不到任何事件 | endpoint 错 / 鉴权失败 / 网络问题 | 见 A.4 |
+| DOP 收到事件但 user 字段是 null | session-start 没读到 username | 检查 iam auth status -json 的 system 字段 |
+| 离线后重连，积压事件没补传 | flush 未触发 | 检查 session-start.js 的 flush 逻辑 + 日志 |
+| `~/.oh-my-sdd/config.json` 被覆盖 | 升级路径未保留用户配置 | install.js 应跳过已有 config，建 issue |
+| 升级后旧 baseline 还在 | install.js 复制失败 | 见 A.1.2 |
+| Windows 上 hook 命令字符串失败 | cmd 引号转义 / 路径分隔符 | 见 A.6 |
+| 文件权限不是 700/600 | umask 错 / mode 参数失效 | 见 A.7 |
+| `npm install -g` 报权限错 | 全局 npm 目录权限 | 用 nvm 或 sudo（不推荐） |
+| Claude Code 启动卡顿 > 3 秒 | iam 或 DOP 超时未生效 | 见 A.8 |
 
 ---
 
@@ -945,6 +1165,72 @@ Windows cmd 的引号转义与 Unix 不同。可能需要改 `hooks.json` 为：
 ```
 
 或者用 PowerShell 兼容写法。如果 `${CLAUDE_PLUGIN_ROOT}` 在 Windows 不展开，install.js 需要在 Windows 上写入绝对路径。
+
+### A.7 文件权限不对（Unix）
+
+**症状**：`stat` 显示 `~/.oh-my-sdd/` 不是 700，或 config.json 不是 600。
+
+**排查**：
+
+1. 检查 umask：
+
+```bash
+umask
+# 期望 022（默认）或更严格
+# 如果是 000，所有文件会 world-readable
+```
+
+2. 检查 install.js 是否正确传 mode：
+
+```bash
+grep -n "mode:" hooks/lib/*.js install.js
+# 应看到 mode: 0o700 和 mode: 0o600
+```
+
+3. 如果 mode 传了但权限仍不对（Node fs API 在某些情况下 mode 被 umask 影响），手动修正：
+
+```bash
+chmod 700 ~/.oh-my-sdd ~/.oh-my-sdd/sessions ~/.oh-my-sdd/logs
+chmod 600 ~/.oh-my-sdd/*.json ~/.oh-my-sdd/sessions/*.json ~/.oh-my-sdd/queue.jsonl
+```
+
+4. 建 issue 反馈：哪个文件、期望权限、实际权限、umask 值。
+
+### A.8 Claude Code 启动卡顿（> 3 秒）
+
+**症状**：装了 oh-my-sdd 后，`claude` 命令明显变慢。
+
+**排查**：
+
+1. 测量精确耗时：
+
+```bash
+time claude -e "exit"
+# real 时间应 ≤ 2 秒（无插件基线 + 1 秒）
+```
+
+2. 检查 SessionStart hook 日志：
+
+```bash
+cat ~/.oh-my-sdd/logs/$(date +%F).log
+```
+
+看是否有：
+- `iam auth status` 超时（5 秒）→ iam 服务慢或不稳定
+- `DOP flush` 超时（3 秒 × 重试 2 次 = 9 秒）→ DOP 服务慢
+- `reportOrEnqueue 重试` → DOP 网络问题
+
+3. 临时关闭 DOP 验证是否是 DOP 导致：
+
+```bash
+# 临时改 endpoint
+sed -i.bak 's|dop_endpoint.*|dop_endpoint: "http://localhost:1"|' ~/.oh-my-sdd/config.json
+time claude -e "exit"
+# 如果快了，说明 DOP 是瓶颈
+mv ~/.oh-my-sdd/config.json.bak ~/.oh-my-sdd/config.json
+```
+
+4. 长期方案：增加 DOP 重试的并发上限，或允许跳过 flush（v0.2 考虑）。
 
 ---
 
