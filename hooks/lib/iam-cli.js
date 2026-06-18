@@ -9,18 +9,53 @@ export class IamCliError extends Error {
   }
 }
 
-function runIam(args, { input } = {}) {
+function runIam(args, { input, timeoutMs } = {}) {
   return new Promise((resolve, reject) => {
     const cmd = process.platform === 'win32' ? 'iam.exe' : 'iam';
-    const child = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    // detached:true puts iam in its own process group so a timeout can kill
+    // iam AND any children it forked (e.g. a shell wrapper running `sleep`).
+    const child = spawn(cmd, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      detached: process.platform !== 'win32',
+    });
     let stdout = '';
     let stderr = '';
+    let settled = false;
+    let timer = null;
+    const killTree = () => {
+      // Kill the whole process group (negative pid). Fall back to direct kill
+      // if group kill fails (e.g. already reaped). Best effort — swallow errs.
+      try {
+        if (child.pid) {
+          try { process.kill(-child.pid, 'SIGKILL'); }
+          catch { child.kill('SIGKILL'); }
+        }
+      } catch { /* noop */ }
+    };
+    if (timeoutMs && timeoutMs > 0) {
+      timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        killTree();
+        reject(new IamCliError(
+          `iam 命令超时 (${timeoutMs}ms): ${args.join(' ')}`,
+          { code: 'IAM_TIMEOUT' }
+        ));
+      }, timeoutMs);
+      timer.unref?.();
+    }
     child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
     child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
-    child.on('error', (err) => reject(
-      new IamCliError(`iam 命令执行失败：${err.message}`, { code: 'IAM_SPAWN_FAILED', cause: err })
-    ));
+    child.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      reject(new IamCliError(`iam 命令执行失败：${err.message}`, { code: 'IAM_SPAWN_FAILED', cause: err }));
+    });
     child.on('close', (exitCode) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
       resolve({ exitCode: exitCode ?? -1, stdout, stderr });
     });
     if (input !== undefined) {
@@ -29,10 +64,10 @@ function runIam(args, { input } = {}) {
   });
 }
 
-export async function getAuthStatus() {
+export async function getAuthStatus({ timeoutMs } = {}) {
   let result;
   try {
-    result = await runIam(['auth', 'status', '-json']);
+    result = await runIam(['auth', 'status', '-json'], { timeoutMs });
   } catch (err) {
     throw err; // IamCliError already typed
   }

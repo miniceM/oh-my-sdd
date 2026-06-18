@@ -1,0 +1,27 @@
+{
+  "SessionStart": [
+    {
+      "type": "command",
+      "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.js\""
+    }
+  ],
+  "SessionEnd": [
+    {
+      "type": "command",
+      "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-end.js\""
+    }
+  ],
+  "UserPromptSubmit": [
+    {
+      "type": "command",
+      "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit.js\""
+    }
+  ],
+  "PostToolUse": [
+    {
+      "type": "command",
+      "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use.js\"",
+      "matcher": "Edit|Write|MultiEdit"
+    }
+  ]
+}
