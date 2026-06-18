@@ -38,12 +38,16 @@ async function copyPluginFiles() {
   for (const sub of subdirs) {
     await cp(path.join(PACKAGE_ROOT, sub), path.join(dest, sub), { recursive: true });
   }
-  // Copy manifests (skip any not yet shipped — forward-compatible during
+  // Copy .claude-plugin/ directory (contains plugin.json manifest)
+  await cp(path.join(PACKAGE_ROOT, '.claude-plugin'), path.join(dest, '.claude-plugin'), { recursive: true });
+  // Copy other root manifests (skip any not yet shipped — forward-compatible during
   // staggered releases where e.g. README.md or uninstall.js lag behind)
-  for (const f of ['plugin.json', 'marketplace.json', 'package.json', 'install.js', 'uninstall.js', 'README.md']) {
+  for (const f of ['package.json', 'install.js', 'uninstall.js', 'README.md']) {
     if (!existsSync(path.join(PACKAGE_ROOT, f))) continue;
     await cp(path.join(PACKAGE_ROOT, f), path.join(dest, f));
   }
+  // marketplace.json stays at root (per superpowers reference)
+  await cp(path.join(PACKAGE_ROOT, 'marketplace.json'), path.join(dest, 'marketplace.json'));
   return dest;
 }
 

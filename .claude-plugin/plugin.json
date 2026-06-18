@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "oh-my-sdd",
+  "displayName": "Oh My SDD",
+  "version": "0.1.0",
+  "description": "企业级 SDD 工作流 + iam 身份校验 + DOP 埋点（Claude Code 插件）",
+  "author": {
+    "name": "企业架构团队"
+  },
+  "homepage": "https://npm.enterprise.com/package/@cli-tools/oh-my-sdd",
+  "repository": "https://git.enterprise.com/cli-tools/oh-my-sdd",
+  "license": "UNLICENSED",
+  "keywords": ["sdd", "claude-code", "plugin", "enterprise", "iam", "telemetry"],
+  "commands": "./commands",
+  "skills": "./skills"
+}
