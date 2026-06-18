@@ -4,31 +4,55 @@ import { login } from '../hooks/lib/iam-cli.js';
 import { isIamInPath } from '../hooks/lib/platform.js';
 
 function ask(rl, question, { secret = false } = {}) {
-  return new Promise((resolve) => {
-    if (secret) {
-      // Mute stdout for password entry (best-effort on Unix; Windows behavior varies)
-      const stdin = process.stdin;
-      const isTTY = stdin.isTTY;
-      process.stdout.write(question);
-      let data = '';
+  if (secret) {
+    const stdin = process.stdin;
+    if (!stdin.setRawMode) {
+      // Non-TTY: fall back to readline (no echo hiding possible)
+      return new Promise((resolve) => {
+        const rlSecret = createInterface({ input: stdin, output: process.stdout });
+        rlSecret.question(question, (answer) => {
+          rlSecret.close();
+          resolve(answer);
+        });
+      });
+    }
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.setEncoding('utf8');
+    process.stdout.write(question);
+    let data = '';
+    return new Promise((resolve) => {
       const onData = (c) => {
-        // Stop on newline
-        if (c === '\n' || c === '\r' || c === '') {
+        const code = c.codePointAt(0);
+        if (c === '\r' || c === '\n') {
+          stdin.setRawMode(false);
+          stdin.pause();
           stdin.removeListener('data', onData);
           process.stdout.write('\n');
           resolve(data);
-        } else if (c === '') {
-          // Ctrl+C
+        } else if (code === 3) {        // Ctrl+C
+          process.stdout.write('\n');
+          process.exit(130);
+        } else if (code === 4) {        // Ctrl+D (EOF)
+          process.stdout.write('\n');
           process.exit(1);
-        } else {
+        } else if (code === 127 || code === 8) {  // Backspace
+          if (data.length > 0) {
+            data = data.slice(0, -1);
+            process.stdout.write('\b \b');
+          }
+        } else if (code >= 32) {        // Printable
           data += c;
+          process.stdout.write('*');
         }
       };
       stdin.on('data', onData);
-    } else {
+    });
+  } else {
+    return new Promise((resolve) => {
       rl.question(question, (answer) => resolve(answer.trim()));
-    }
-  });
+    });
+  }
 }
 
 async function main() {
@@ -38,6 +62,7 @@ async function main() {
     process.exit(1);
   }
 
+  // Username uses readline
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
     const username = await ask(rl, '用户名: ');
@@ -45,7 +70,9 @@ async function main() {
       process.stderr.write('❌ 用户名不能为空\n');
       process.exit(1);
     }
-    const password = await ask(rl, '密码: ', { secret: true });
+    // Password uses raw mode (closes rl first to release stdin)
+    rl.close();
+    const password = await ask(null, '密码: ', { secret: true });
     if (!password) {
       process.stderr.write('❌ 密码不能为空\n');
       process.exit(1);
@@ -60,7 +87,7 @@ async function main() {
       process.exit(1);
     }
   } finally {
-    rl.close();
+    if (rl && !rl.closed) rl.close();
   }
 }
 
