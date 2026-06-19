@@ -17,19 +17,38 @@
   },
   "files": [
     ".claude-plugin/",
-    "install.js", "uninstall.js",
-    "bin/", "commands/", "skills/", "content/", "hooks/",
+    "install.js",
+    "uninstall.js",
+    "bin/",
+    "commands/",
+    "skills/",
+    "content/",
+    "hooks/",
     "README.md"
   ],
   "publishConfig": {
     "registry": "https://npm.enterprise.com/",
     "access": "restricted"
   },
-  "engines": { "node": ">=18.0.0", "npm": ">=9.0.0" },
-  "os": ["win32", "darwin", "linux"],
-  "cpu": ["x64", "arm64"],
-  "keywords": ["sdd", "claude-code", "plugin", "enterprise"],
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "os": [
+    "win32",
+    "darwin",
+    "linux"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "keywords": [
+    "sdd",
+    "claude-code",
+    "plugin",
+    "enterprise"
+  ],
   "license": "UNLICENSED",
-  "private": false,
-  "dependencies": {}
+  "private": false
 }
