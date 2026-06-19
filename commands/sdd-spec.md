@@ -52,7 +52,8 @@ argument-hint: [change-id 或变更描述，可选]
   - 范围边界（in/out scope）
   - 验收标准（来自 DOP 或与用户确认）
 - 写 `specs/*.md`：把 brainstorming 产出的 spec 内容拆分到 capability 文件
-- 写 `.meta.json`：`Write("openspec/changes/<slug>/.meta.json", {change_id, slug, created_at, dop_status})`
+- 写 `.meta.json`：`Write("openspec/changes/<slug>/.meta.json", {change_id, slug, created_at, dop_status, dry_run})`
+  - `dry_run: true` 标记演练/测试（DOP 后端可过滤此数据）。生产变更写 `false` 或省略。
 
 ### 步骤 5：gh 创建 issue + 分支（如有 gh）
 

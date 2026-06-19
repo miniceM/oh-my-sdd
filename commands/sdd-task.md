@@ -8,6 +8,8 @@ argument-hint: [slug 或 change-id]
 参数 `$ARGUMENTS` 是变更标识。**前置检查**：`openspec/changes/<slug>/design.md` 必须存在。
 
 > 💡 **可选环节**：superpowers:writing-plans 已在 Ring 2 产出基础 tasks。本命令用于**任务细化**（如把粗任务拆成更小步骤），简单变更可以跳过直接 `/sdd-apply`。
+>
+> **跳过时如何记录**：在 `.meta.json` 加 `"task_phase": "skipped - plan was sufficient"` 字段，便于 DOP 统计跳过率和审计追溯。不强制产 commit（避免无意义噪声）。
 
 ## 你的工作流
 
