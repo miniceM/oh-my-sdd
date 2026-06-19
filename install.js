@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdir, access, constants } from 'node:fs/promises';
+import { mkdir, access, constants, readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 
 import { checkNodeVersion, getStateDir, isIamInPath } from './hooks/lib/platform.js';
 import { saveConfig, DEFAULT_CONFIG } from './hooks/lib/config.js';
@@ -11,6 +13,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = __dirname;
 const MARKETPLACE_NAME = 'oh-my-sdd';
 const PLUGIN_NAME = 'oh-my-sdd';
+
+// CLAUDE.md baseline injection — plugin's own CLAUDE.md is NOT auto-loaded,
+// and plugin SessionStart hook additionalContext is silently dropped (Anthropic
+// bug #16538). The only reliable always-load path is the user-level CLAUDE.md.
+const USER_CLAUDE_MD = path.join(os.homedir(), '.claude', 'CLAUDE.md');
+const BEGIN_MARKER = '<!-- BEGIN oh-my-sdd:enterprise-baseline -->';
+const END_MARKER = '<!-- END oh-my-sdd:enterprise-baseline -->';
 
 // announce writes user-facing messages to stderr so npm postinstall doesn't
 // swallow them. npm hides postinstall stdout on success; stderr always shows.
@@ -58,6 +67,52 @@ async function ensureStateDir() {
   } catch {
     await saveConfig(DEFAULT_CONFIG);
   }
+}
+
+// Inject baseline into ~/.claude/CLAUDE.md so it's auto-loaded into every
+// session's system prompt. Plugin SessionStart hook additionalContext is
+// broken (Anthropic bug #16538), so this is the only reliable path.
+// Idempotent: replaces content between BEGIN/END markers; preserves user's
+// other CLAUDE.md content.
+async function injectBaseline() {
+  const baselinePath = path.join(PACKAGE_ROOT, 'content', 'enterprise-baseline.md');
+  let baseline;
+  try {
+    baseline = await readFile(baselinePath, 'utf8');
+  } catch (err) {
+    process.stderr.write(`⚠️  读取 baseline 失败: ${err.message}\n`);
+    process.stderr.write('    CLAUDE.md 未注入。请检查 package 是否完整。\n');
+    return;
+  }
+
+  const section = `${BEGIN_MARKER}\n${baseline.trim()}\n${END_MARKER}\n`;
+
+  let existing = '';
+  if (existsSync(USER_CLAUDE_MD)) {
+    try {
+      existing = await readFile(USER_CLAUDE_MD, 'utf8');
+    } catch (err) {
+      process.stderr.write(`⚠️  读取 ${USER_CLAUDE_MD} 失败: ${err.message}\n`);
+      return;
+    }
+  }
+
+  const beginIdx = existing.indexOf(BEGIN_MARKER);
+  const endIdx = existing.indexOf(END_MARKER);
+  let updated;
+  if (beginIdx >= 0 && endIdx > beginIdx) {
+    // Replace existing section (upgrade path)
+    const before = existing.slice(0, beginIdx);
+    const after = existing.slice(endIdx + END_MARKER.length);
+    updated = before + section + after;
+  } else {
+    // Append (new install)
+    updated = existing + (existing.endsWith('\n') || existing === '' ? '' : '\n') + '\n' + section;
+  }
+
+  await mkdir(path.dirname(USER_CLAUDE_MD), { recursive: true });
+  await writeFile(USER_CLAUDE_MD, updated);
+  announce(`  ✓ 已注入 baseline 到 ${USER_CLAUDE_MD}`);
 }
 
 async function registerMarketplace() {
@@ -114,6 +169,9 @@ async function main() {
 
   announce('→ 安装 plugin');
   await installPlugin();
+
+  announce('→ 注入 baseline 到 ~/.claude/CLAUDE.md');
+  await injectBaseline();
 
   announce('');
   announce('✓ oh-my-sdd 安装完成');

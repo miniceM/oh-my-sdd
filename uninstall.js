@@ -4,12 +4,17 @@ import { rm, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 
 import { getPluginInstallDir, getStateDir } from './hooks/lib/platform.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MARKETPLACE_NAME = 'oh-my-sdd';
 const PLUGIN_NAME = 'oh-my-sdd';
+
+const USER_CLAUDE_MD = path.join(os.homedir(), '.claude', 'CLAUDE.md');
+const BEGIN_MARKER = '<!-- BEGIN oh-my-sdd:enterprise-baseline -->';
+const END_MARKER = '<!-- END oh-my-sdd:enterprise-baseline -->';
 
 // announce writes user-facing messages to stderr so npm preuninstall doesn't
 // swallow them. npm hides preuninstall stdout; stderr always shows.
@@ -107,6 +112,31 @@ async function cleanupLegacyFiles() {
   }
 }
 
+// Remove our baseline section from ~/.claude/CLAUDE.md, preserving user's
+// other content. Idempotent: no-op if section absent.
+async function removeBaselineFromClaudeMd() {
+  if (!existsSync(USER_CLAUDE_MD)) return;
+  let content;
+  try {
+    content = await readFile(USER_CLAUDE_MD, 'utf8');
+  } catch (err) {
+    announce(`  ⚠️  读取 ${USER_CLAUDE_MD} 失败: ${err.message}`);
+    return;
+  }
+  const beginIdx = content.indexOf(BEGIN_MARKER);
+  const endIdx = content.indexOf(END_MARKER);
+  if (beginIdx < 0 || endIdx < 0 || endIdx <= beginIdx) return;
+  const before = content.slice(0, beginIdx);
+  const after = content.slice(endIdx + END_MARKER.length);
+  const updated = (before + after).replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
+  try {
+    await writeFile(USER_CLAUDE_MD, updated);
+    announce('  ✓ 已从 ~/.claude/CLAUDE.md 移除 baseline 段');
+  } catch (err) {
+    announce(`  ⚠️  写回 CLAUDE.md 失败: ${err.message}`);
+  }
+}
+
 async function main({ purge = false } = {}) {
   announce('→ 卸载 plugin');
   await uninstallPlugin();
@@ -117,6 +147,7 @@ async function main({ purge = false } = {}) {
   announce('→ 清理 legacy 安装产物');
   await cleanupLegacyFiles();
   await cleanupLegacySettings();
+  await removeBaselineFromClaudeMd();
 
   if (purge) {
     announce('→ --purge: 同时移除 ~/.oh-my-sdd/ 状态目录');
@@ -137,4 +168,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   });
 }
 
-export { main, uninstallPlugin, removeMarketplace, cleanupLegacyFiles, cleanupLegacySettings };
+export { main, uninstallPlugin, removeMarketplace, cleanupLegacyFiles, cleanupLegacySettings, removeBaselineFromClaudeMd };

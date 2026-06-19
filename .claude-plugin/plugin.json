@@ -12,8 +12,5 @@
   "license": "UNLICENSED",
   "keywords": ["sdd", "claude-code", "plugin", "enterprise", "iam", "telemetry"],
   "commands": "./commands",
-  "skills": "./skills",
-  "sessionStart": {
-    "skill": "enterprise-baseline"
-  }
+  "skills": "./skills"
 }
