@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# scripts/mock-iam — 模拟企业 iam CLI 用于本地开发/测试
+#
+# 用法：
+#   1. chmod +x scripts/mock-iam
+#   2. PATH="$(pwd)/scripts:$PATH" claude
+#   或：
+#   3. ./scripts/dev-launch-claude.sh
+#
+# 支持的命令（覆盖 oh-my-sdd 用到的全部）：
+#   - iam --version
+#   - iam auth status
+#   - iam auth status -json
+#   - iam login -u <user> -p <pass|->     （- 表示从 stdin 读）
+#   - iam logout
+#   - iam whoami
+
+set -euo pipefail
+
+# 可通过环境变量自定义测试用户
+MOCK_USER="${OMS_MOCK_USER:-alice}"
+MOCK_SYSTEM="${OMS_MOCK_SYSTEM:-sdd}"
+
+# 模拟"已登录"状态。设 OMS_MOCK_LOGGED_OUT=1 模拟未登录。
+if [[ "${OMS_MOCK_LOGGED_OUT:-0}" == "1" ]]; then
+  CRED_COUNT=0
+  CRED_JSON="[]"
+else
+  CRED_COUNT=1
+  CRED_JSON="[{\"system\":\"$MOCK_SYSTEM\",\"username\":\"$MOCK_USER\",\"status\":\"logged\"}]"
+fi
+
+cmd="${1:-}"
+subcmd="${2:-}"
+
+case "$cmd" in
+  --version|-v)
+    echo "iam mock v0.0.1-dev"
+    ;;
+
+  auth)
+    if [[ "$subcmd" == "status" ]]; then
+      if [[ "${3:-}" == "-json" ]]; then
+        echo "{\"total\":$CRED_COUNT,\"credentials\":$CRED_JSON}"
+      else
+        # 文本格式
+        if [[ $CRED_COUNT -eq 0 ]]; then
+          echo "(no credentials)"
+        else
+          echo "$MOCK_SYSTEM (logged)"
+        fi
+      fi
+    else
+      echo "iam: unknown auth subcommand '$subcmd'" >&2
+      exit 1
+    fi
+    ;;
+
+  login)
+    # 解析 -u <user> -p <pass|->
+    username=""
+    password=""
+    read_stdin=0
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        -u|--username) username="$2"; shift 2 ;;
+        -p|--password)
+          if [[ "$2" == "-" ]]; then
+            read_stdin=1
+          else
+            password="$2"
+          fi
+          shift 2 ;;
+        *) shift ;;
+      esac
+    done
+
+    if [[ $read_stdin -eq 1 ]]; then
+      read -r password
+    fi
+
+    if [[ -z "$username" || -z "$password" ]]; then
+      echo "iam: missing username or password" >&2
+      exit 1
+    fi
+
+    # 模拟错误密码（设 OMS_MOCK_FAIL_LOGIN=1 强制失败）
+    if [[ "${OMS_MOCK_FAIL_LOGIN:-0}" == "1" ]]; then
+      echo "Invalid username or password" >&2
+      exit 1
+    fi
+
+    echo "Login successful (mock)"
+    ;;
+
+  logout)
+    echo "Logout successful (mock)"
+    ;;
+
+  whoami)
+    if [[ $CRED_COUNT -eq 0 ]]; then
+      echo "Not logged in" >&2
+      exit 1
+    fi
+    echo "Username: $MOCK_USER"
+    echo "System: $MOCK_SYSTEM"
+    ;;
+
+  ""|-h|--help)
+    cat <<EOF
+iam mock v0.0.1-dev — 用于本地测试 oh-my-sdd 的模拟 CLI
+
+支持命令：
+  iam --version
+  iam auth status [-json]
+  iam login -u <user> -p <pass|->
+  iam logout
+  iam whoami
+
+环境变量：
+  OMS_MOCK_USER         用户名 (默认: alice)
+  OMS_MOCK_SYSTEM       system 名 (默认: sdd)
+  OMS_MOCK_LOGGED_OUT=1 模拟未登录状态
+  OMS_MOCK_FAIL_LOGIN=1 模拟登录失败
+EOF
+    ;;
+
+  *)
+    echo "iam mock: unknown command '$cmd'" >&2
+    exit 1
+    ;;
+esac
