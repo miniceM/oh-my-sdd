@@ -21,7 +21,7 @@ export PATH="$SCRIPT_DIR:$PATH"
 
 # 验证 mock iam 可达
 if ! command -v iam >/dev/null 2>&1; then
-  echo "❌ mock iam 不可执行。先跑: chmod +x $SCRIPT_DIR/mock-iam" >&2
+  echo "❌ mock iam 不可执行。先跑: chmod +x $SCRIPT_DIR/iam" >&2
   exit 1
 fi
 
