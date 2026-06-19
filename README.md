@@ -61,9 +61,20 @@ oms-uninstall --purge
 
 ## 系统要求
 
+**必需**：
 - Node.js ≥ 18
-- 操作系统：Windows 10/11、macOS、Linux（x64/arm64）
+- npm ≥ 9
+- claude CLI（Claude Code）
 - `iam` CLI（企业统一身份认证工具）
+
+**推荐**（可选，但能获得更完整的 SDD 体验）：
+- `openspec` CLI —— 提供 `openspec new change` / `openspec validate` / `openspec archive` 等命令
+  ```bash
+  npm install -g @fission-ai/openspec
+  ```
+  未安装时 SDD 命令会用 fallback（`mkdir` + 手动检查），但失去 validate / 自动归档等功能。
+
+**操作系统**：Windows 10/11、macOS、Linux（x64/arm64）
 
 ## 许可
 

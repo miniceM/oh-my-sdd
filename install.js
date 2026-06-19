@@ -36,6 +36,15 @@ async function preflight() {
     process.stderr.write('⚠️  未检测到 iam CLI。可继续安装，但首次会话将提示安装。\n');
     process.stderr.write('    安装后请运行 oms-login 完成身份认证。\n');
   }
+  // openspec 是可选依赖（提供 validate/archive 等高级功能），不阻塞安装
+  const cmd = process.platform === 'win32' ? 'where' : 'which';
+  try {
+    execFileSync(cmd, ['openspec'], { stdio: 'ignore' });
+  } catch {
+    process.stderr.write('⚠️  未检测到 openspec CLI（可选）。SDD 命令会用 fallback 手动 mkdir。\n');
+    process.stderr.write('    推荐安装以获得 validate / archive 等功能：\n');
+    process.stderr.write('    npm install -g @fission-ai/openspec\n');
+  }
 }
 
 function isClaudeInstalled() {
