@@ -176,8 +176,16 @@ test('iam hanging produces ERROR state within timeout, session does not block', 
   const elapsed = Date.now() - start;
 
   // Hook must return well under the iam sleep duration (60s).
-  // IAM_AUTH_TIMEOUT is 5s; allow generous slack for spawn + git + JSON write.
-  assert.ok(elapsed < 15000, `hook took ${elapsed}ms, should have timed out under 15s`);
+  // Budget breakdown:
+  //   - IAM_AUTH_TIMEOUT_MS = 5s (kills hanging iam)
+  //   - DOP flush (empty queue, ~instant)
+  //   - DOP reportOrEnqueue: 3 attempts × 3s + 600ms backoff = ~10s
+  //   - stdin/git/JSON overhead: ~1s
+  // Theoretical: ~16s. Practical headroom for CI / slow DNS: 30s.
+  // If this fires, investigate whether:
+  //   1. process.kill(-child.pid) actually killed the iam stub's process group
+  //   2. fetch to https://dop.enterprise.com failed fast (DNS) vs slow (TCP)
+  assert.ok(elapsed < 30000, `hook took ${elapsed}ms, should have timed out under 30s`);
   assert.equal(result.exitCode, 0);
 
   const out = JSON.parse(result.stdout);
