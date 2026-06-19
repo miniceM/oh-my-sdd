@@ -12,6 +12,12 @@ const PACKAGE_ROOT = __dirname;
 const MARKETPLACE_NAME = 'oh-my-sdd';
 const PLUGIN_NAME = 'oh-my-sdd';
 
+// announce writes user-facing messages to stderr so npm postinstall doesn't
+// swallow them. npm hides postinstall stdout on success; stderr always shows.
+function announce(msg) {
+  process.stderr.write(msg + '\n');
+}
+
 async function preflight() {
   if (!checkNodeVersion('18.0.0')) {
     process.stderr.write(`❌ Node 版本过低。需要 >= 18.0.0，当前 ${process.version}\n`);
@@ -62,7 +68,7 @@ async function registerMarketplace() {
   if (result.code !== 0) {
     const out = (result.stderr + result.stdout).toLowerCase();
     if (out.includes('already') || out.includes('exists') || out.includes('replace')) {
-      process.stdout.write('  (marketplace 已注册，跳过)\n');
+      announce('  (marketplace 已注册，跳过)');
     } else {
       process.stderr.write(`⚠️  claude plugin marketplace add 失败 (exit ${result.code}):\n`);
       process.stderr.write(result.stderr || result.stdout || '(no output)\n');
@@ -70,7 +76,7 @@ async function registerMarketplace() {
     }
     return;
   }
-  process.stdout.write(`  ✓ 已注册 marketplace：${PACKAGE_ROOT}\n`);
+  announce(`  ✓ 已注册 marketplace：${PACKAGE_ROOT}`);
 }
 
 async function installPlugin() {
@@ -78,7 +84,7 @@ async function installPlugin() {
   if (result.code !== 0) {
     const out = (result.stderr + result.stdout).toLowerCase();
     if (out.includes('already') || out.includes('installed')) {
-      process.stdout.write('  (plugin 已安装，跳过)\n');
+      announce('  (plugin 已安装，跳过)');
     } else {
       process.stderr.write(`⚠️  claude plugin install 失败 (exit ${result.code}):\n`);
       process.stderr.write(result.stderr || result.stdout || '(no output)\n');
@@ -86,12 +92,12 @@ async function installPlugin() {
     }
     return;
   }
-  process.stdout.write(`  ✓ 已安装 plugin：${PLUGIN_NAME}@${MARKETPLACE_NAME}\n`);
+  announce(`  ✓ 已安装 plugin：${PLUGIN_NAME}@${MARKETPLACE_NAME}`);
 }
 
 async function main() {
   await preflight();
-  process.stdout.write('→ 检查 Node 版本与 iam CLI\n');
+  announce('→ 检查 Node 版本与 iam CLI');
 
   if (!isClaudeInstalled()) {
     process.stderr.write('\n❌ 未检测到 claude CLI。请手动执行：\n');
@@ -100,20 +106,22 @@ async function main() {
     process.exit(1);
   }
 
-  process.stdout.write('→ 初始化 ~/.oh-my-sdd/ 状态目录\n');
+  announce('→ 初始化 ~/.oh-my-sdd/ 状态目录');
   await ensureStateDir();
 
-  process.stdout.write('→ 注册 marketplace\n');
+  announce('→ 注册 marketplace');
   await registerMarketplace();
 
-  process.stdout.write('→ 安装 plugin\n');
+  announce('→ 安装 plugin');
   await installPlugin();
 
-  process.stdout.write('\n✓ oh-my-sdd 安装完成\n\n');
-  process.stdout.write('下一步：\n');
-  process.stdout.write('  1. 运行 `oms-login` 完成 iam 身份认证\n');
-  process.stdout.write('  2. 重启 Claude Code (或 /reload-plugins)\n');
-  process.stdout.write('  3. 在新会话里使用 /sdd-spec 等命令\n');
+  announce('');
+  announce('✓ oh-my-sdd 安装完成');
+  announce('');
+  announce('下一步：');
+  announce('  1. 运行 `oms-login` 完成 iam 身份认证');
+  announce('  2. 重启 Claude Code (或 /reload-plugins)');
+  announce('  3. 在新会话里使用 /sdd-spec 等命令');
 }
 
 // Only run main when invoked directly, not when imported

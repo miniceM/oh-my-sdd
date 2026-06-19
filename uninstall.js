@@ -11,6 +11,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MARKETPLACE_NAME = 'oh-my-sdd';
 const PLUGIN_NAME = 'oh-my-sdd';
 
+// announce writes user-facing messages to stderr so npm preuninstall doesn't
+// swallow them. npm hides preuninstall stdout; stderr always shows.
+function announce(msg) {
+  process.stderr.write(msg + '\n');
+}
+
 function isClaudeInstalled() {
   const cmd = process.platform === 'win32' ? 'where' : 'which';
   try {
@@ -35,37 +41,37 @@ function runClaude(args) {
 
 async function uninstallPlugin() {
   if (!isClaudeInstalled()) {
-    process.stdout.write('⚠️  未检测到 claude CLI。请手动卸载：\n');
-    process.stdout.write(`  claude plugin uninstall ${PLUGIN_NAME}@${MARKETPLACE_NAME}\n`);
+    announce('⚠️  未检测到 claude CLI。请手动卸载：');
+    announce(`  claude plugin uninstall ${PLUGIN_NAME}@${MARKETPLACE_NAME}`);
     return;
   }
   const result = await runClaude(['plugin', 'uninstall', `${PLUGIN_NAME}@${MARKETPLACE_NAME}`]);
   if (result.code !== 0) {
     const out = (result.stderr + result.stdout).toLowerCase();
     if (out.includes('not installed') || out.includes('not found')) {
-      process.stdout.write('  (plugin 未安装，跳过)\n');
+      announce('  (plugin 未安装，跳过)');
     } else {
-      process.stdout.write(`⚠️  claude plugin uninstall 失败 (exit ${result.code}):\n`);
-      process.stdout.write(result.stderr || result.stdout || '(no output)\n');
+      announce(`⚠️  claude plugin uninstall 失败 (exit ${result.code}):`);
+      announce('  ' + (result.stderr || result.stdout || '(no output)'));
     }
     return;
   }
-  process.stdout.write(`  ✓ 已卸载 plugin：${PLUGIN_NAME}@${MARKETPLACE_NAME}\n`);
+  announce(`  ✓ 已卸载 plugin：${PLUGIN_NAME}@${MARKETPLACE_NAME}`);
 }
 
 async function removeMarketplace() {
   if (!isClaudeInstalled()) {
-    process.stdout.write('⚠️  请手动注销 marketplace：\n');
-    process.stdout.write(`  claude plugin marketplace remove ${MARKETPLACE_NAME}\n`);
+    announce('⚠️  请手动注销 marketplace：');
+    announce(`  claude plugin marketplace remove ${MARKETPLACE_NAME}`);
     return;
   }
   const result = await runClaude(['plugin', 'marketplace', 'remove', MARKETPLACE_NAME]);
   if (result.code !== 0) {
-    process.stdout.write(`⚠️  claude plugin marketplace remove 失败 (exit ${result.code}):\n`);
-    process.stdout.write(result.stderr || result.stdout || '(no output)\n');
+    announce(`⚠️  claude plugin marketplace remove 失败 (exit ${result.code}):`);
+    announce('  ' + (result.stderr || result.stdout || '(no output)'));
     return;
   }
-  process.stdout.write(`  ✓ 已注销 marketplace：${MARKETPLACE_NAME}\n`);
+  announce(`  ✓ 已注销 marketplace：${MARKETPLACE_NAME}`);
 }
 
 // Legacy cleanup: old install.js (commits before c753589) wrote an invalid
@@ -84,9 +90,9 @@ async function cleanupLegacySettings() {
     delete settings.extraKnownMarketplaces[MARKETPLACE_NAME];
     try {
       await writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n');
-      process.stdout.write('  ✓ 已清理 legacy settings.json 条目\n');
+      announce('  ✓ 已清理 legacy settings.json 条目');
     } catch (err) {
-      process.stdout.write(`  ⚠️  清理 settings.json 失败：${err.message}\n`);
+      announce(`  ⚠️  清理 settings.json 失败：${err.message}`);
     }
   }
 }
@@ -97,28 +103,29 @@ async function cleanupLegacyFiles() {
   const dest = getPluginInstallDir();
   if (existsSync(dest)) {
     await rm(dest, { recursive: true, force: true });
-    process.stdout.write('  ✓ 已清理 legacy 插件目录\n');
+    announce('  ✓ 已清理 legacy 插件目录');
   }
 }
 
 async function main({ purge = false } = {}) {
-  process.stdout.write('→ 卸载 plugin\n');
+  announce('→ 卸载 plugin');
   await uninstallPlugin();
 
-  process.stdout.write('→ 注销 marketplace\n');
+  announce('→ 注销 marketplace');
   await removeMarketplace();
 
-  process.stdout.write('→ 清理 legacy 安装产物\n');
+  announce('→ 清理 legacy 安装产物');
   await cleanupLegacyFiles();
   await cleanupLegacySettings();
 
   if (purge) {
-    process.stdout.write('→ --purge: 同时移除 ~/.oh-my-sdd/ 状态目录\n');
+    announce('→ --purge: 同时移除 ~/.oh-my-sdd/ 状态目录');
     await rm(getStateDir(), { recursive: true, force: true });
   } else {
-    process.stdout.write('\n✓ oh-my-sdd 已卸载\n');
-    process.stdout.write('  状态文件保留在 ~/.oh-my-sdd/，重装可复用\n');
-    process.stdout.write('  彻底清理请运行：oms-uninstall --purge\n');
+    announce('');
+    announce('✓ oh-my-sdd 已卸载');
+    announce('  状态文件保留在 ~/.oh-my-sdd/，重装可复用');
+    announce('  彻底清理请运行：oms-uninstall --purge');
   }
 }
 
