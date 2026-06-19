@@ -73,8 +73,20 @@ oms-uninstall --purge
   未装时 `/sdd-review` 归档阶段会**阻塞**（不再有 mv fallback——mv 不 merge，破坏保鲜）。
 
 **推荐（非必需）**：
-- `superpowers` 6.x Claude Code 插件 —— `/sdd-spec/plan/apply/review` 委托它做工作流指导（brainstorming/writing-plans/executing-plans/code-review）
+- `superpowers` 6.x Claude Code 插件 —— `/sdd-plan` 委托 writing-plans、`/sdd-apply` 委托 subagent-driven-development、`/sdd-review` 委托 requesting-code-review
 - `gh` CLI —— `/sdd-spec` 创建 issue + 分支、`/sdd-review` 创建 PR
+
+**每个项目首次使用前**：
+```bash
+cd your-project
+openspec init --tools claude
+```
+此命令在项目本地生成 `/opsx:*` 命令（propose/apply/archive/explore）。`/sdd-spec` 等会**直调 openspec CLI**，不依赖项目本地 `/opsx:*`——但你也可以直接用 `/opsx:propose` 跳过企业包装。
+
+**多 sdd-* 命令并存的说明**：
+- `/sdd-*`（oh-my-sdd 提供）：含 iam/dop/gh 集成 + 委托 openspec/superpowers，**企业内部推荐**
+- `/opsx:*`（openspec 项目本地提供）：纯 openspec 工作流，无企业集成
+- `/superpowers:*`（superpowers 提供）：通用 agentic 工作流（brainstorming/writing-plans/executing-plans/code-review）
 
 **操作系统**：Windows 10/11、macOS、Linux（x64/arm64）
 

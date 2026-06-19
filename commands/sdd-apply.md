@@ -1,9 +1,16 @@
 ---
-description: 当用户在 SDD 流程中已完成 tasks.md、要按任务列表执行实现时使用。SDD Ring 4。委托 superpowers:executing-plans 或 subagent-driven-development。
+description: 当用户在 SDD 流程中已完成 plan、需要实现任务时使用。SDD Ring 4。委托 superpowers:subagent-driven-development（TDD + subagent + 两阶段 review）。
 argument-hint: [slug 或 change-id]
 ---
 
 # /sdd-apply —— SDD 第 4 环：实现执行（薄包装 + 委托）
+
+> ⚠️ **核心约束**：
+> - **plan 文件是 `openspec/changes/<slug>/tasks.md`**（不是 superpowers 默认 plan 位置）
+> - **禁止修改 `openspec/changes/<slug>/specs/*.md`**（spec 是 input）
+> - **禁止修改 `openspec/changes/<slug>/design.md`**（design 是 input）
+> - 每个 task 完成后必须把 tasks.md 里的 `- [ ]` 改成 `- [x]`
+> - commit message 格式：`<task-id>: <subject> (refs <change-id>)`
 
 参数 `$ARGUMENTS` 是变更标识。**前置检查**：`openspec/changes/<slug>/tasks.md` 必须存在，所有 `- [ ]` 已逐个评估。
 
@@ -11,75 +18,64 @@ argument-hint: [slug 或 change-id]
 
 ### 步骤 1：前置检查
 
-- **iam 校验**
+- **iam 校验**：未授权停止
 - **读上游**（用 `Read`）：
-  - `tasks.md`（任务清单）
-  - `.meta.json`（拿 change_id 和分支名）
-- **分支确认**：当前 git 分支必须是 `<NNN>-<slug>` 格式，否则提示用户先 `git checkout` 到正确分支
+  - `openspec/changes/<slug>/tasks.md`（plan 文件）
+  - `openspec/changes/<slug>/design.md`（design 决策）
+  - `openspec/changes/<slug>/specs/*.md`（参考，**不能改**）
+  - `.meta.json`（change_id、分支名）
 
-### 步骤 2：选择执行模式
+### 步骤 2：委托 superpowers:subagent-driven-development
 
-询问用户：
-- **简单模式（推荐小变更）**：调用 **`superpowers:executing-plans`**
-- **复杂模式（推荐大变更）**：调用 **`superpowers:subagent-driven-development`**（每个 task 派 subagent，两阶段 review）
+调用 **`superpowers:subagent-driven-development`** skill，**关键参数**：
+- **plan 文件**：`openspec/changes/<slug>/tasks.md`（**显式指定**，不要让 skill 找默认位置）
+- **per-task subagent 约束**（在 skill 调用 prompt 里写明）：
+  ```
+  每个 subagent 必须：
+  1. 完成后把 openspec/changes/<slug>/tasks.md 对应的 - [ ] 改成 - [x]
+  2. 禁止修改 specs/*.md 和 design.md（这些是 input）
+  3. commit message 格式：<task-id>: <subject> (refs <change-id>)
+  4. 测试红就回到测试，不绕过
+  ```
 
-让用户选择后调用对应 skill。
+skill 会派 fresh subagent per task + 两阶段 review（implementer + reviewer）。
 
-### 步骤 3：执行（委托给 superpowers）
+### 步骤 3：处理 spec/design 矛盾
 
-superpowers 会：
-- 按顺序处理每个 task
-- 每个 task 走 TDD 循环（红 → 绿 → commit）
-- 自动勾选 tasks.md checkbox
-
-我们的 SessionStart/PostToolUse hook 会**自动**：
-- 上报 session.start + slash.invoked 到 DOP
-- 增量记录 code_delta
-- 触发 session.end 上报
-
-### 步骤 4：commit 包装
-
-每个 commit message 必须含：
-- 任务 ID（如 `T3:`）
-- change-id（如 `[ARD123456]`）
-- 简述
-
-示例：`T3: 实现积分兑换 API [ARD123456]`
-
-superpowers 的 executing-plans 会负责 commit 节奏，我们在 commit message 格式上指导。
-
-### 步骤 5：处理 spec/design 矛盾
-
-如 superpowers 报告 spec/design 矛盾：
-- 停止当前 apply
+如 subagent 报告"实现时发现 spec/design 矛盾"：
+- **停止当前 task**（不绕过）
 - 在 `openspec/changes/<slug>/RETRO.md` 记录矛盾点
-- 提示用户回到 `/sdd-spec` 或 `/sdd-plan` 修订上游
-- **不要**擅自改 spec/design
+- 提示用户：要么改 spec/design（回 `/sdd-spec` 或 `/sdd-plan`），要么改 task 假设（在 RETRO 写理由）
+- 等用户决定后继续
 
-### 步骤 6：DOP 标记
+### 步骤 4：DOP 实时上报
 
-- 如有 change-id：`Bash("dop change update <id> --status apply-done")`
+每个 commit 触发 PostToolUse hook 自动上报 slash.invoked / code_delta（已实现，无需手工）。
+可选：完成所有 task 后跑 `Bash("dop change update <id> --status apply-done")`。
 
 ## 强制规则
 
-- ✅ 必须按 tasks.md 顺序（除非 task 显式标注可并行）
-- ✅ 每个 task 独立 commit
-- ✅ commit message 含 change-id + 任务 ID
-- ✅ 矛盾时写 RETRO.md，不擅自改上游
-- ❌ 禁止跳过 task（除非标 optional）
-- ❌ 禁止 multi-task 一个 commit
-- ❌ 禁止改用户 `~/.claude/CLAUDE.md` oh-my-sdd 段
+- ✅ iam 校验通过
+- ✅ **plan 必须用 `openspec/changes/<slug>/tasks.md`**
+- ✅ 每个 task 完成必须勾 `- [ ]` → `- [x]`
+- ✅ commit message 含 change-id
+- ✅ spec/design 矛盾时写 RETRO.md 停止
+- ❌ 禁止修改 `content/enterprise-baseline.md` 或用户 `~/.claude/CLAUDE.md`
+- ❌ 禁止修改 specs/*.md / design.md
+- ❌ 禁止跨 task 共用 commit
+- ❌ 禁止跳过 TDD（subagent 必须 RED → GREEN → REFACTOR）
 
 ## 何时不应使用
 
-- tasks 还没生成（先 `/sdd-task` 或 `/sdd-plan`）
-- ad-hoc 修复（不走 SDD）
+- tasks.md 还有未评估的 `- [ ]`（先评估）
+- spec/design 严重矛盾未解决（先回上游）
+- 测试还在红
 
 ## 输出
 
 完成后告诉用户：
-> ✓ 变更 `<slug>` 实现完成（N 个 task 全绿）
-> ✓ commit 历史含 change-id [ARD123456]
+> ✓ 变更 `<slug>` 所有 tasks 已完成
+> ✓ tasks.md 所有 `- [ ]` 已勾选
 > ✓ DOP 状态：apply-done
 >
-> 运行 `/sdd-review <slug>` 进入 Ring 5（验证归档）。
+> 运行 `/sdd-review <slug>` 进入 Ring 5（验证 + 归档 + 创建 PR）。
