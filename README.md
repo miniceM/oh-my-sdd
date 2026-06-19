@@ -66,13 +66,15 @@ oms-uninstall --purge
 - npm ≥ 9
 - claude CLI（Claude Code）
 - `iam` CLI（企业统一身份认证工具）
-
-**推荐**（可选，但能获得更完整的 SDD 体验）：
-- `openspec` CLI —— 提供 `openspec new change` / `openspec validate` / `openspec archive` 等命令
+- `openspec` CLI —— spec 保鲜的核心，archive 时自动 merge delta 到 `openspec/specs/`，让项目 specs 永远反映系统现状
   ```bash
   npm install -g @fission-ai/openspec
   ```
-  未安装时 SDD 命令会用 fallback（`mkdir` + 手动检查），但失去 validate / 自动归档等功能。
+  未装时 `/sdd-review` 归档阶段会**阻塞**（不再有 mv fallback——mv 不 merge，破坏保鲜）。
+
+**推荐（非必需）**：
+- `superpowers` 6.x Claude Code 插件 —— `/sdd-spec/plan/apply/review` 委托它做工作流指导（brainstorming/writing-plans/executing-plans/code-review）
+- `gh` CLI —— `/sdd-spec` 创建 issue + 分支、`/sdd-review` 创建 PR
 
 **操作系统**：Windows 10/11、macOS、Linux（x64/arm64）
 

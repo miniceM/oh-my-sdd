@@ -14,8 +14,9 @@ argument-hint: [slug 或 change-id]
 - **iam 校验**：未授权停止。
 - **读上游**（用 `Read`）：
   - `openspec/changes/<slug>/proposal.md`
-  - `openspec/changes/<slug>/specs/*.md`
-  - `.meta.json`（拿 change_id）
+  - `openspec/changes/<slug>/specs/*.md`（delta 格式）
+  - `.meta.json`（拿 change_id、delta_capabilities）
+  - **读项目现状**：对每个 delta_capability，`Read("openspec/specs/<capability>/spec.md")`（如存在）—— design 决策必须基于现状，不能凭空
 
 ### 步骤 2：委托 superpowers:writing-plans
 

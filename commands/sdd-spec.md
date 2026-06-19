@@ -44,24 +44,56 @@ argument-hint: [change-id 或变更描述，可选]
 
 让 superpowers 完成"提问 → 方案 → 设计"完整 brainstorming 流程。
 
-### 步骤 4：包装输出
+### 步骤 4：读现状（保鲜关键）
+
+- `Read("openspec/specs/<capability>/spec.md")`（如存在）—— 这是项目的权威 specs
+- 识别本次变更对每个 capability 的影响类型：
+  - **ADDED**：新 capability 或新 requirement/scenario
+  - **MODIFIED**：现有 requirement 文字改了
+  - **REMOVED**：deprecated requirement
+- 与用户确认变更类型清单
+
+### 步骤 5：包装输出（delta 格式）
 
 - 创建目录：`Bash("mkdir -p openspec/changes/<slug>/specs")` 或 `openspec new change <slug>`
 - 写 `proposal.md`（用 `Write`）：
   - 业务背景（来自 DOP 或用户描述）
   - 范围边界（in/out scope）
   - 验收标准（来自 DOP 或与用户确认）
-- 写 `specs/*.md`：把 brainstorming 产出的 spec 内容拆分到 capability 文件
-- 写 `.meta.json`：`Write("openspec/changes/<slug>/.meta.json", {change_id, slug, created_at, dop_status, dry_run})`
-  - `dry_run: true` 标记演练/测试（DOP 后端可过滤此数据）。生产变更写 `false` 或省略。
+- 写 `specs/*.md`——**必须用 delta 格式**（不是全量重写）：
 
-### 步骤 5：gh 创建 issue + 分支（如有 gh）
+  ```markdown
+  # Spec Delta: <capability-name>
+
+  ## ADDED Requirements
+  ### Requirement: <new name>
+  The system SHALL ...
+  #### Scenario: <name>
+  - GIVEN / WHEN / THEN ...
+
+  ## MODIFIED Requirements
+  ### Requirement: <existing name>
+  **Was**:
+  <引用 openspec/specs/ 里的旧文字>
+  **Now**:
+  <新文字>
+
+  ## REMOVED Requirements
+  ### Requirement: <deprecated name>
+  Reason: <why>
+  ```
+
+  这样 `/sdd-review` 跑 `openspec archive` 时会自动 merge delta 到 `openspec/specs/`，保鲜生效。
+
+- 写 `.meta.json`：`Write("openspec/changes/<slug>/.meta.json", {change_id, slug, created_at, dop_status, dry_run, delta_capabilities: [<受影响的 capability 名>]})`
+
+### 步骤 6：gh 创建 issue + 分支（如有 gh）
 
 - 创建 issue：`Bash("gh issue create --title '<change-title>' --body '<proposal摘要>'")`
 - 解析 issue 编号（如 `1234`）
 - 创建分支：`Bash("git checkout -b <NNN>-<slug>")`（NNN = issue 编号）
 
-### 步骤 6：DOP 标记
+### 步骤 7：DOP 标记
 
 - 如有 change-id：`Bash("dop change update <id> --status spec-in-progress")` 或类似命令
 - 失败不阻塞（warn）
@@ -72,9 +104,10 @@ argument-hint: [change-id 或变更描述，可选]
 - ✅ change-id 模式必须尝试 `dop change view`，失败降级告知用户
 - ✅ brainstorming skill 的对话流程不能跳过
 - ✅ slug 必须由用户确认（自然语言模式）
+- ✅ **spec 输出必须用 delta 格式（ADDED/MODIFIED/REMOVED）**——这是 openspec archive merge 的前提
 - ❌ 禁止跳到实现（那是 Ring 4）
 - ❌ 禁止凭空捏造 DOP 数据
-- ❌ 禁止改 `openspec/specs/` 里既有 specs
+- ❌ 禁止直接编辑 `openspec/specs/`（项目 specs 只能通过 archive merge 更新）
 
 ## 何时不应使用
 

@@ -45,17 +45,26 @@ argument-hint: [slug 或 change-id]
 - 如有 change-id：`Bash("dop change update <id> --status review-done --pr <PR_URL>")`
 - 把 PR URL 写回 `.meta.json`
 
-### 步骤 6：归档 openspec change
+### 步骤 6：归档 openspec change（保鲜关键）
 
-- 有 openspec：`Bash("openspec archive <slug>")`
-- 无 openspec：`Bash("mv openspec/changes/<slug> openspec/changes/archive/")`
-- 写 `review.md` 到归档目录：实际工作量、偏离点、follow-up
+- **必须有 openspec CLI**：`Bash("openspec --version")`。未装 → **阻塞归档**，提示：
+  > 保鲜需要 openspec archive 来 merge delta 到 openspec/specs/。
+  > 安装：`npm install -g @fission-ai/openspec`
+- 归档：`Bash("openspec archive <slug>")`——openspec 自动 merge change 的 delta 到 `openspec/specs/`
+- **禁止用 `mv` 兜底**——mv 不会 merge，破坏保鲜承诺
 
-### 步骤 7：写 review.md
+### 步骤 7：验证 merge 结果
+
+- 对每个 `.meta.json` 里 `delta_capabilities` 列出的 capability：
+  - `Read("openspec/specs/<capability>/spec.md")` 确认 delta 已应用
+  - 如未 merge，提示用户检查 `openspec validate <slug> --strict` 输出
+
+### 步骤 8：写 review.md
 
 `Write("openspec/changes/archive/<slug>/review.md")`：
 - 实际工作量 vs 预估
 - 偏离 spec/design 的地方（如有 RETRO.md，引用）
+- merge 结果摘要（哪些 capability 被 ADDED/MODIFIED/REMOVED）
 - 后续 follow-up（tech debt 等）
 
 ## 强制规则
@@ -65,9 +74,11 @@ argument-hint: [slug 或 change-id]
 - ✅ PR body 必须含 change-id 关联
 - ✅ 必须 DOP 标记完成（change-id 模式）
 - ✅ 测试覆盖率 ≥ 80%
+- ✅ **归档必须用 openspec archive**（让 delta merge 进 openspec/specs/，保鲜生效）
 - ❌ 禁止跳过 code review
 - ❌ 禁止删除归档（审计依据）
 - ❌ 禁止在未归档状态下开始新 change 的 Ring 4
+- ❌ 禁止用 `mv` 替代 `openspec archive`（破坏保鲜）
 
 ## 何时不应使用
 
