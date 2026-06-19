@@ -11,8 +11,8 @@
 ## 快速开始
 
 ```bash
-# 1. 全局安装
-npm install -g @cli-tools/oh-my-sdd
+# 1. 全局安装（加 --foreground-scripts 才能看到 postinstall 输出）
+npm install -g --foreground-scripts @cli-tools/oh-my-sdd
 
 # 2. 完成 iam 身份认证（首次）
 oms-login
@@ -20,6 +20,13 @@ oms-login
 # 3. 重启 Claude Code，开始使用
 #    /sdd-spec <change-name>
 ```
+
+> 💡 **关于 `--foreground-scripts`**：npm 默认静默 postinstall 输出（即使 stderr 也吞），加这个 flag 才能看到安装进度和"下一步"提示。**不加也能装成功**，只是看不到提示——安装失败时 npm 会自动显示所有输出。
+>
+> 如果想默认看到，可以设 npm config：
+> ```bash
+> npm config set foreground-scripts true
+> ```
 
 ## 配置
 
