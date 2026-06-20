@@ -9,11 +9,12 @@
 //   import { printWelcome } from './bin/oms-welcome.js'  # 编程式调用
 
 const LOGO = [
-  '  ╔═╗ ╔═╗ ╔═╗ ╔═╗',
-  '  ║ ║ ║ ║ ║ ║ ║ ║   ┌─┐',
-  '  ║ ║ ║ ║ ║ ║ ║ ║   │ │',
-  '  ║ ║ ║ ║ ║ ║ ║ ║   ╰┬┘',
-  '  ╚═╝ ╚═╝ ╚═╝ ╚═╝   ─┘',
+  '  ███████╗██╗  ██╗███████╗███████╗███████╗',
+  '      ██║╚██╗██╔╝██╔════╝██║   ██║██║   ██║',
+  '      ██║ ╚████╔╝ ╚██████╗██║   ██║██║   ██║',
+  '  ██╗ ██║  ╚██╔╝       ╚██╗██║   ██║██║   ██║',
+  '  ╚█████╔╝  ╚═╝   ██████╔╝╚██████╔╝╚██████╔╝',
+  '   ╚════╝       ╚════╝  ╚═════╝ ╚═════╝   ',
 ];
 
 // ANSI 颜色码（终端原生，零依赖）
@@ -38,7 +39,7 @@ function welcome({ version = 'v0.2.1-alpha', username = null } = {}) {
     ? `${GREEN}✓${RESET} 欢迎，${BOLD}${username}${RESET}（${version}）`
     : `${BOLD}oh-my-sdd${RESET} ${DIM}${version}${RESET}`;
   out.push(`  ${subtitle}`);
-  out.push(`  ${DIM}企业级 SDD 工作流 Claude Code 插件${RESET}`);
+  out.push(`  ${BOLD}zy 企业级 SDD 工作流${RESET}`);
   out.push('');
 
   // 已就绪特性
@@ -59,7 +60,8 @@ function welcome({ version = 'v0.2.1-alpha', username = null } = {}) {
   out.push('');
 
   // 每项目初始化提示
-  out.push(`  ${DIM}首次在新项目使用${RESET}`);
+  out.push(`  ${DIM}首次在新项目使用${RESET} ${GREEN}(必须在项目目录下执行)${RESET}`);
+  out.push(`    ${BOLD}cd your-project${RESET}`);
   out.push(`    ${BOLD}openspec init --tools claude${RESET}`);
   out.push('');
 
