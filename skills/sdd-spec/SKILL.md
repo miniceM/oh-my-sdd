@@ -24,6 +24,10 @@ argument-hint: [change-id 或变更描述，可选]
 - **openspec 检查**：`Bash("openspec --version")`。未装 → **阻塞**，提示 `npm install -g @fission-ai/openspec`。
 - **dop 检查**：`Bash("dop --version")`。未装 → 提示用自然语言模式（跳过 DOP 拉取）。
 - **gh 检查**：`Bash("gh --version")`。未装 → 警告（不阻塞，跳过 issue/分支创建）。
+- **unfinalized reviews 检查**：扫 `openspec/changes/*/` 找 `dop_status=pr-created` 但无 `archive_done_at` 的变更。
+  - 如有 → **警告**："N 个之前的变更 PR 已创建但未 finalize（openspec/specs/ drift 风险）。建议先跑 `/sdd-review --finalize <slug>` 完成归档。"
+  - 用户确认"我知道，继续新变更" → 继续
+  - 用户选"先去 finalize" → 停止本命令
 
 ### 步骤 2：解析参数 + 确定 change-id + slug
 

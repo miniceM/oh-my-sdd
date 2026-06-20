@@ -171,11 +171,68 @@ async function main() {
     }
   }
 
+  // 扫描 unfinalized SDD changes（PR 已创建但 /sdd-review --finalize 未跑）
+  // 防止用户 merge PR 后忘记 finalize，导致 openspec/specs/ drift
+  let unfinalizedReminder = '';
+  if (authState.state === 'OK') {
+    try {
+      const unfinalized = await scanUnfinalizedReviews(stdin.cwd);
+      if (unfinalized.length > 0) {
+        const lines = unfinalized.map(c =>
+          `  • ${c.slug} (change-id: ${c.change_id}, status: ${c.dop_status})`
+        );
+        const header = `⚠️ oh-my-sdd: ${unfinalized.length} 个变更未完成 /sdd-review --finalize\n` +
+                       `   openspec/specs/ 可能 drift。请尽快 finalize：\n`;
+        const footer = `\n   命令：/sdd-review --finalize <slug>\n`;
+        const msg = header + lines.join('\n') + footer;
+        process.stderr.write(msg + '\n');
+        unfinalizedReminder = msg;
+      }
+    } catch (err) {
+      debug(`扫描 unfinalized 失败（非阻塞）: ${err.message}`);
+    }
+  }
+
   const output = {
-    additionalContext,
+    additionalContext: unfinalizedReminder
+      ? `${additionalContext}\n\n---\n${unfinalizedReminder}`
+      : additionalContext,
     hookSpecificOutput: { hookEventName: 'SessionStart' },
   };
   process.stdout.write(JSON.stringify(output));
+}
+
+// 扫描 cwd/openspec/changes/ 找出 dop_status=pr-created 且未 archive 的变更
+import { readdir } from 'node:fs/promises';
+async function scanUnfinalizedReviews(cwd) {
+  const changesDir = path.join(cwd, 'openspec', 'changes');
+  let entries;
+  try {
+    entries = await readdir(changesDir, { withFileTypes: true });
+  } catch {
+    return [];  // 不是 SDD 项目（无 openspec/changes/）
+  }
+  const unfinalized = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === 'archive') continue;
+    const metaPath = path.join(changesDir, entry.name, '.meta.json');
+    try {
+      const meta = JSON.parse(await readFile(metaPath, 'utf8'));
+      // 阶段 1 完成的标志：dop_status=pr-created 或 review-done-pr 但没有 archive_done_at
+      if ((meta.dop_status === 'pr-created' || meta.dop_status === 'pr-ready-to-finalize')
+          && !meta.archive_done_at) {
+        unfinalized.push({
+          slug: entry.name,
+          change_id: meta.change_id || '(unknown)',
+          dop_status: meta.dop_status,
+          pr_url: meta.pr_url || null,
+        });
+      }
+    } catch {
+      // 无 .meta.json 或 JSON 损坏 - 跳过
+    }
+  }
+  return unfinalized;
 }
 
 main().catch((err) => {
