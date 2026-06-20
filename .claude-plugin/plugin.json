@@ -11,6 +11,5 @@
   "repository": "https://git.enterprise.com/cli-tools/oh-my-sdd",
   "license": "UNLICENSED",
   "keywords": ["sdd", "claude-code", "plugin", "enterprise", "iam", "telemetry"],
-  "commands": "./commands",
   "skills": "./skills"
 }

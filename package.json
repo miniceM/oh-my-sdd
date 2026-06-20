@@ -20,7 +20,6 @@
     "install.js",
     "uninstall.js",
     "bin/",
-    "commands/",
     "skills/",
     "content/",
     "hooks/",
