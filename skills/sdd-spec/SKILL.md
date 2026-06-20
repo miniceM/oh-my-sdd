@@ -59,9 +59,39 @@ argument-hint: [change-id 或变更描述，可选]
 
 ### 步骤 6：gh 创建 issue + 分支（如有 gh）
 
-- 创建 issue：`Bash("gh issue create --title '<change-title>' --body '<proposal摘要>'")`
-- 解析 issue 编号
-- 创建分支：`Bash("git checkout -b <NNN>-<slug>")`
+**issue 是整个变更的 tracking ticket**（从 spec 到 review-done），不是当前阶段汇报。body 必须用以下结构：
+
+```markdown
+## 变更背景
+<来自 DOP change.description 或用户自然语言描述>
+
+## 变更内容
+<整个变更要交付什么 - 来自 proposal.md 的 What Changes 部分>
+- 新增 capability: ...
+- 修改 capability: ...
+- 删除 capability: ...
+
+## 验收标准（整个变更完成的标准，不是当前阶段）
+<来自 DOP change.acceptance_criteria 或与用户确认的整体目标>
+- [ ] <验收点 1>
+- [ ] <验收点 2>
+- [ ] ...
+
+## 关联
+- DOP change: <change-id>
+- openspec 目录: `openspec/changes/<slug>/`
+- 分支: `<NNN>-<slug>`
+```
+
+**禁止包含**：
+- ❌ 当前阶段（Ring 1）的小结或验收（如"proposal.md 已写"）
+- ❌ "下一环 /sdd-plan..."提示（issue 不引导阶段切换，那是命令输出的事）
+- ❌ 实现细节（设计/任务/代码——那是 plan/apply 阶段的事）
+
+调用：
+- `Bash("gh issue create --title '[<change-id>] <change-title>' --body '<上面模板>'")`
+- 解析 issue 编号（如 `1234`）
+- 创建分支：`Bash("git checkout -b <NNN>-<slug>")`（NNN = issue 编号，slug 用 kebab-case）
 
 ### 步骤 7：DOP 标记
 
@@ -74,10 +104,12 @@ argument-hint: [change-id 或变更描述，可选]
 - ✅ **必须用 openspec CLI 创建 change**（`openspec new change`），不要手工 `mkdir`
 - ✅ specs 必须用 openspec instructions 提供的 delta 模板填
 - ✅ slug 必须由用户确认（自然语言模式）
+- ✅ **gh issue body 必须含整体验收标准（不是当前阶段），不含"下一环"提示**
 - ❌ 禁止跳到实现
 - ❌ 禁止凭空捏造 DOP 数据
 - ❌ 禁止直接编辑 `openspec/specs/`（项目 specs 只能通过 archive merge 更新）
 - ❌ 禁止调用 `/opsx:propose`（与本项目创建重复）
+- ❌ 禁止把当前阶段小结/验收写进 gh issue body（issue 是整个变更的 tracking）
 
 ## 何时不应使用
 
