@@ -46,22 +46,30 @@ argument-hint: [change-id 或变更描述，可选]
 - `Bash("openspec instructions proposal --change <slug> --json")` 拿 proposal 模板
 - `Bash("openspec instructions specs --change <slug> --json")` 拿 specs 模板
   - **template 字段自带 delta 格式（ADDED/MODIFIED/REMOVED）**——直接按模板填，不需要额外格式指令
+- `Bash("openspec instructions design --change <slug> --json")` 拿 design 模板
+  - **重要**：Ring 1 必须产出 design.md，让 /sdd-plan 的 writing-plans 能直接拆 task
 
-### 步骤 5：按模板填 + Write
+### 步骤 5：按模板填 + Write（proposal + specs + design 三件套）
 
-- `Write("openspec/changes/<slug>/proposal.md")`：业务背景、范围、验收（模板字段）
+- `Write("openspec/changes/<slug>/proposal.md")`：业务背景、范围、整体验收（模板字段）
 - `Write("openspec/changes/<slug>/specs/<capability>/spec.md")`：**delta 格式**，按模板填
   - ADDED Requirements：新需求 + scenario
   - MODIFIED Requirements：复制完整旧块 + 改新内容
   - REMOVED Requirements：reason + migration
   - RENAMED Requirements：FROM: / TO:
+- `Write("openspec/changes/<slug>/design.md")`：**技术设计文档**，按模板填
+  - Context：当前系统状态、为什么改
+  - Goals / Non-Goals：明确范围边界
+  - Decisions：关键技术决策 + rationale（含被否决的备选方案）
+  - Risks / Trade-offs：已知风险与权衡
+  - **这一步是 Ring 2 的输入**——design 写清楚，writing-plans 才能直接拆 task
 - `Write("openspec/changes/<slug>/.meta.json")`：`{change_id, slug, created_at, dop_status, dry_run, delta_capabilities}`
 
 ### 步骤 6：gh 创建 issue + 分支（如有 gh）
 
 > ⚠️ **执行顺序关键**：
 > 1. **先读完整 body 模板**（下方），把内容**填好**（用文本编辑器或 mental buffer）
-> 2. **再调用 `gh issue create`** 一次成型
+> 2. **再调用 `gh issue create`** 
 > 3. **禁止**先创建一个 issue 再用 `gh issue edit` 改 body——这是 API 浪费 + issue 历史污染 + 用户困惑
 
 **issue 是整个变更的 tracking ticket**（从 spec 到 review-done），不是当前阶段汇报。body 必须用以下结构（填好后一次性提交）：
@@ -93,7 +101,7 @@ argument-hint: [change-id 或变更描述，可选]
 - ❌ "下一环 /sdd-plan..."提示（issue 不引导阶段切换，那是命令输出的事）
 - ❌ 实现细节（设计/任务/代码——那是 plan/apply 阶段的事）
 
-调用（一次成型）：
+调用（一次完成）：
 - `Bash("gh issue create --title '[<change-id>] <change-title>' --body '<上面模板>'")`
 - 解析 issue 编号（如 `1234`）
 - 创建分支：`Bash("git checkout -b <NNN>-<slug>")`（NNN = issue 编号，slug 用 kebab-case）
@@ -125,8 +133,8 @@ argument-hint: [change-id 或变更描述，可选]
 ## 输出
 
 完成后告诉用户：
-> ✓ 变更 `<slug>` 规格已生成（delta 格式）
+> ✓ 变更 `<slug>` 规格已生成（proposal + specs + design 三件套）
 > ✓ gh issue #<NNN> 已创建，分支 `<NNN>-<slug>` 已切换
 > ✓ DOP 状态更新：spec-in-progress
 >
-> 运行 `/sdd-plan <slug>` 进入 Ring 2（技术计划）。
+> 运行 `/sdd-plan <slug>` 进入 Ring 2（任务拆分）。
