@@ -2,6 +2,7 @@
 import { createInterface } from 'node:readline';
 import { login } from '../hooks/lib/iam-cli.js';
 import { isIamInPath } from '../hooks/lib/platform.js';
+import { printWelcome } from './oms-welcome.js';
 
 function ask(rl, question, { secret = false } = {}) {
   if (secret) {
@@ -80,7 +81,9 @@ async function main() {
 
     const result = await login(username, password);
     if (result.ok) {
-      process.stdout.write('✓ 登录成功。请重启 Claude Code 让 baseline 生效。\n');
+      process.stdout.write('✓ 登录成功。\n\n');
+      // 显示欢迎页（含版本、特性、Quick start、CTA）
+      printWelcome({ username });
       process.exit(0);
     } else {
       process.stderr.write(`❌ 登录失败：${result.error}\n`);
