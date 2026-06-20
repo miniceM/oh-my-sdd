@@ -75,6 +75,24 @@ argument-hint: [slug 或 change-id]
 - merge 结果摘要（哪些 capability ADDED/MODIFIED/REMOVED）
 - 后续 follow-up
 
+### 步骤 8.5：显式 commit（**关键——禁止跳过！**）
+
+> ⚠️ review.md / RETRO.md 必须落盘到 git，否则归档历史不完整。
+> archive 操作（步骤 4）只移动文件，不创建 commit。
+
+```bash
+Bash("git add openspec/changes/archive/<slug>/review.md openspec/changes/<slug>/RETRO.md openspec/specs/ openspec/changes/<slug>/.meta.json 2>/dev/null || true")
+Bash("git commit -m 'review(<slug>): ring 5 freeze - review summary + specs merged'")
+```
+
+**commit message 格式**：`review(<slug>): ring 5 freeze - <一句话摘要>`
+
+**包含**：
+- review.md（步骤 8 写的）
+- RETRO.md（如有，apply 阶段产生）
+- `openspec/specs/` 的 merge 结果（archive 步骤 4 已更新）
+- `.meta.json`（含 PR URL 等更新）
+
 ## 强制规则
 
 - ✅ 必须 superpowers:requesting-code-review 通过（无 Critical/Important）
@@ -84,6 +102,7 @@ argument-hint: [slug 或 change-id]
 - ✅ 测试覆盖率 ≥ 80%
 - ✅ **归档必须用 openspec archive**（merge delta，保鲜生效）
 - ✅ archive 后必须验证 openspec/specs/ 已更新
+- ✅ **步骤 8.5 必须显式 commit 产物**（review.md + RETRO.md + specs merge + .meta 更新）
 - ❌ 禁止跳过 code review
 - ❌ 禁止删除归档（审计依据）
 - ❌ 禁止在未归档状态下开始新 change 的 Ring 4

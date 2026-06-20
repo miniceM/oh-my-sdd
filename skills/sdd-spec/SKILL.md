@@ -62,6 +62,23 @@ argument-hint: [change-id 或变更描述，可选]
 > proposal + specs 已满足 openspec 保鲜条件（archive 时 merge specs/ delta）。
 - `Write("openspec/changes/<slug>/.meta.json")`：`{change_id, slug, created_at, dop_status, dry_run, delta_capabilities}`
 
+### 步骤 5.5：显式 commit（**关键——禁止跳过！**）
+
+> ⚠️ 未 commit 的产物在 git 历史和 PR review 看来**等于不存在**。
+> /sdd-spec 不委托任何带 commit 的 skill，所以**必须自己 commit**。
+
+```bash
+Bash("git add openspec/changes/<slug>/proposal.md openspec/changes/<slug>/specs/ openspec/changes/<slug>/.meta.json openspec/changes/<slug>/.openspec.yaml")
+Bash("git commit -m 'spec(<slug>): ring 1 freeze - proposal + delta specs'")
+```
+
+**commit message 格式**：`spec(<slug>): ring 1 freeze - <一句话摘要>`
+
+**禁止**：
+- ❌ 跳过此步骤（"反正 gh issue 创建了就行"——错，issue 不含 spec 内容）
+- ❌ 把 design.md / tasks.md 一起 commit（它们是 Ring 2 的产物）
+- ❌ 用 `git add -A`（会带无关文件，违反 baseline）
+
 ### 步骤 6：gh 创建 issue + 分支（如有 gh）
 
 > ⚠️ **执行顺序关键**：
@@ -114,6 +131,7 @@ argument-hint: [change-id 或变更描述，可选]
 - ✅ **必须用 openspec CLI 创建 change**（`openspec new change`），不要手工 `mkdir`
 - ✅ specs 必须用 openspec instructions 提供的 delta 模板填
 - ✅ slug 必须由用户确认（自然语言模式）
+- ✅ **步骤 5.5 必须显式 commit 产物**（spec freeze 是 git 历史的离散事件）
 - ✅ **gh issue body 必须含整体验收标准（不是当前阶段），不含"下一环"提示**
 - ❌ 禁止跳到实现
 - ❌ 禁止凭空捏造 DOP 数据

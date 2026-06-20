@@ -48,6 +48,16 @@ argument-hint: [slug 或 change-id]
 - `Read("openspec/changes/<slug>/tasks.md")` 验证写入成功
 - 检查 `docs/superpowers/plans/` 没被污染
 
+### 步骤 3.5：显式 commit（**关键——禁止跳过！**）
+
+> ⚠️ writing-plans 内置 commit 可能 commit 错位置（docs/superpowers/）。
+> 必须自己 commit openspec/ 版本。
+
+```bash
+Bash("git add openspec/changes/<slug>/tasks.md")
+Bash("git commit -m 'task(<slug>): ring 3 refine - tasks细化'")
+```
+
 ### 步骤 4：DOP 标记
 
 - 如有 change-id：`Bash("dop change update <id> --status tasks-ready")`

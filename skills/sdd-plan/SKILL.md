@@ -64,6 +64,23 @@ writing-plans 会接着：
   - **如多了**：移动到 openspec 目录，提示用户"已纠正 superpowers 默认输出"
 - 检查 tasks.md 用 `- [ ]` checkbox 格式（openspec archive 期望）
 
+### 步骤 4.5：显式 commit（**关键——禁止跳过！**）
+
+> ⚠️ brainstorming + writing-plans 自带 commit 是侥幸——它们 commit 的可能是
+> docs/superpowers/ 路径的文件（步骤 4 已纠正）。**纠正后必须再 commit openspec/ 版本**，
+> 否则 git 历史里 design.md/tasks.md "无根"。
+
+```bash
+Bash("git add openspec/changes/<slug>/design.md openspec/changes/<slug>/tasks.md")
+Bash("git commit -m 'plan(<slug>): ring 2 freeze - design + tasks ready'")
+```
+
+**commit message 格式**：`plan(<slug>): ring 2 freeze - <一句话摘要>`
+
+**禁止**：
+- ❌ 跳过此步骤（"brainstorming 已经 commit 过了"——可能 commit 的是错位置）
+- ❌ 用 `git add -A`
+
 ### 步骤 5：DOP 标记
 
 - 如有 change-id：`Bash("dop change update <id> --status plan-ready")` 或类似
@@ -74,6 +91,7 @@ writing-plans 会接着：
 - ✅ iam 校验通过才能继续
 - ✅ **必须委托 superpowers:brainstorming**（不是直接调 writing-plans）
 - ✅ brainstorming 会 chain 到 writing-plans——一次调用产出 design + tasks 两件套
+- ✅ **步骤 4.5 必须显式 commit 产物**（即使 brainstorming/writing-plans 已 commit，可能是错位置）
 - ✅ design.md + tasks.md 都必须写到 `openspec/changes/<slug>/`
 - ✅ tasks.md 用 `- [ ]` checkbox 格式（openspec archive 期望）
 - ❌ 禁止写到 `docs/superpowers/specs/` 或 `docs/superpowers/plans/`
