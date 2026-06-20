@@ -59,7 +59,12 @@ argument-hint: [change-id 或变更描述，可选]
 
 ### 步骤 6：gh 创建 issue + 分支（如有 gh）
 
-**issue 是整个变更的 tracking ticket**（从 spec 到 review-done），不是当前阶段汇报。body 必须用以下结构：
+> ⚠️ **执行顺序关键**：
+> 1. **先读完整 body 模板**（下方），把内容**填好**（用文本编辑器或 mental buffer）
+> 2. **再调用 `gh issue create`** 一次成型
+> 3. **禁止**先创建一个 issue 再用 `gh issue edit` 改 body——这是 API 浪费 + issue 历史污染 + 用户困惑
+
+**issue 是整个变更的 tracking ticket**（从 spec 到 review-done），不是当前阶段汇报。body 必须用以下结构（填好后一次性提交）：
 
 ```markdown
 ## 变更背景
@@ -88,7 +93,7 @@ argument-hint: [change-id 或变更描述，可选]
 - ❌ "下一环 /sdd-plan..."提示（issue 不引导阶段切换，那是命令输出的事）
 - ❌ 实现细节（设计/任务/代码——那是 plan/apply 阶段的事）
 
-调用：
+调用（一次成型）：
 - `Bash("gh issue create --title '[<change-id>] <change-title>' --body '<上面模板>'")`
 - 解析 issue 编号（如 `1234`）
 - 创建分支：`Bash("git checkout -b <NNN>-<slug>")`（NNN = issue 编号，slug 用 kebab-case）
@@ -110,6 +115,7 @@ argument-hint: [change-id 或变更描述，可选]
 - ❌ 禁止直接编辑 `openspec/specs/`（项目 specs 只能通过 archive merge 更新）
 - ❌ 禁止调用 `/opsx:propose`（与本项目创建重复）
 - ❌ 禁止把当前阶段小结/验收写进 gh issue body（issue 是整个变更的 tracking）
+- ❌ **禁止 gh issue create 后又 gh issue edit 改 body**——一次成型（API 浪费 + 历史污染 + 用户困惑）
 
 ## 何时不应使用
 
