@@ -135,6 +135,40 @@ EOF
 }
 
 # ============================================================
+# change list — 列出当前用户名下所有可用变更
+# ============================================================
+change_list() {
+  log "change list"
+
+  if [[ "${OMS_MOCK_DOP_FAIL_GET:-0}" == "1" ]]; then
+    echo "❌ dop change list failed (forced)" >&2
+    exit 1
+  fi
+
+  # 返回当前用户的所有 open 状态 change（用于 /sdd-spec 让用户选）
+  cat <<EOF
+{
+  "user": "$USER",
+  "total": 2,
+  "changes": [
+    {
+      "id": "ARD123456",
+      "title": "用户测试demo",
+      "status": "open",
+      "type": "feature"
+    },
+    {
+      "id": "ARD222222",
+      "title": "信用卡积分兑换功能",
+      "status": "open",
+      "type": "feature"
+    }
+  ]
+}
+EOF
+}
+
+# ============================================================
 # Main dispatch
 # ============================================================
 case "${1:-}" in
@@ -150,6 +184,7 @@ Usage: dop <command> [options]
 Commands:
   --version              显示版本
   --help                 显示帮助
+  change list            列出当前用户名下所有 open 变更
   change view <id>       查看变更详情
   change update <id>     更新变更状态
     --status <X>           spec-in-progress | plan-ready | tasks-ready | apply-done | review-done
@@ -161,7 +196,7 @@ Commands:
 
 环境变量:
   OMS_MOCK_DOP_USER        用户名（默认 alice）
-  OMS_MOCK_DOP_FAIL_GET    =1 时 change view 模拟失败
+  OMS_MOCK_DOP_FAIL_GET    =1 时 change view/list 模拟失败
   OMS_MOCK_DOP_FAIL_UPDATE =1 时 change update 模拟失败
   OMS_MOCK_DOP_LOG         日志路径（默认 ~/.oh-my-sdd/logs/mock-dop.log）
 
@@ -173,6 +208,7 @@ EOF
     subcmd="${1:-}"
     shift || true
     case "$subcmd" in
+      list) change_list ;;
       view) change_view "${1:-}" ;;
       update) change_update "$@" ;;
       *) echo "未知子命令: dop change $subcmd" >&2; exit 1 ;;

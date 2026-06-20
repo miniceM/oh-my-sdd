@@ -53,8 +53,7 @@
 - 用户说"开始做 X"时，先用 `/sdd-spec` 起规格；用户说"接着写代码"时，确认前序 spec/plan 已冻结。
 - 跨阶段回退（如 review 时发现 spec 问题）必须显式说明回退到的 Ring。
 - 单次回复不要同时跑两个阶段命令；阶段切换由用户驱动。
-
-## 参考资源
+- **所有 git commit message 必须以 `[<change-id>]` 开头**——这是阻断性强制要求。无 change-id 的 commit 禁止产生。change-id 来自 `/sdd-spec` 阶段（用户传入或从 `dop change list` 选）。
 
 详细规范不在本 baseline 展开，按需查阅：
 - **`skills/api-design`**：REST/RPC 接口设计、错误码、版本兼容规范。

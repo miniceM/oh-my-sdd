@@ -55,7 +55,7 @@ argument-hint: [slug 或 change-id]
 
 ```bash
 Bash("git add openspec/changes/<slug>/tasks.md")
-Bash("git commit -m 'task(<slug>): ring 3 refine - tasks细化'")
+Bash("git commit -m '[<change-id>] task: ring 3 refine - tasks细化'")
 ```
 
 ### 步骤 4：DOP 标记

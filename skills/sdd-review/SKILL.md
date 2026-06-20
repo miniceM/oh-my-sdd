@@ -82,10 +82,10 @@ argument-hint: [slug 或 change-id]
 
 ```bash
 Bash("git add openspec/changes/archive/<slug>/review.md openspec/changes/<slug>/RETRO.md openspec/specs/ openspec/changes/<slug>/.meta.json 2>/dev/null || true")
-Bash("git commit -m 'review(<slug>): ring 5 freeze - review summary + specs merged'")
+Bash("git commit -m '[<change-id>] review: ring 5 freeze - review summary + specs merged'")
 ```
 
-**commit message 格式**：`review(<slug>): ring 5 freeze - <一句话摘要>`
+**commit message 格式**：`[<change-id>] review: ring 5 freeze - <一句话摘要>`
 
 **包含**：
 - review.md（步骤 8 写的）

@@ -72,10 +72,12 @@ writing-plans 会接着：
 
 ```bash
 Bash("git add openspec/changes/<slug>/design.md openspec/changes/<slug>/tasks.md")
-Bash("git commit -m 'plan(<slug>): ring 2 freeze - design + tasks ready'")
+Bash("git commit -m '[<change-id>] plan: ring 2 freeze - design + tasks ready'")
 ```
 
-**commit message 格式**：`plan(<slug>): ring 2 freeze - <一句话摘要>`
+**commit message 格式**：`[<change-id>] plan: ring 2 freeze - <一句话摘要>`
+
+> change-id 从 `.meta.json` 的 `change_id` 字段读（/sdd-spec 阶段已写入）
 
 **禁止**：
 - ❌ 跳过此步骤（"brainstorming 已经 commit 过了"——可能 commit 的是错位置）

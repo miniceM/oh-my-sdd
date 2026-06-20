@@ -11,7 +11,7 @@ argument-hint: [slug 或 change-id]
 > - **禁止修改 `openspec/changes/<slug>/specs/*.md`**（spec 是 input）
 > - **禁止修改 `openspec/changes/<slug>/design.md`**（design 是 input）
 > - 每个 task 完成后必须把 tasks.md 里的 `- [ ]` 改成 `- [x]`
-> - commit message 格式：`<task-id>: <subject> (refs <change-id>)`
+> - commit message 格式：`[<change-id>] <task-id>: <subject>`（强制以 change-id 开头）
 
 参数 `$ARGUMENTS` 是变更标识。**前置检查**：`openspec/changes/<slug>/tasks.md` 必须存在，所有 `- [ ]` 已逐个评估。
 
@@ -35,7 +35,7 @@ argument-hint: [slug 或 change-id]
   每个 subagent 必须：
   1. 完成后把 openspec/changes/<slug>/tasks.md 对应的 - [ ] 改成 - [x]
   2. 禁止修改 specs/*.md 和 design.md（这些是 input）
-  3. commit message 格式：<task-id>: <subject> (refs <change-id>)
+  3. commit message 格式：`[<change-id>] <task-id>: <subject>`
   4. 测试红就回到测试，不绕过
   ```
 
@@ -59,7 +59,7 @@ skill 会派 fresh subagent per task + 两阶段 review（implementer + reviewer
 - ✅ iam 校验通过
 - ✅ **plan 必须用 `openspec/changes/<slug>/tasks.md`**
 - ✅ 每个 task 完成必须勾 `- [ ]` → `- [x]`
-- ✅ commit message 含 change-id
+- ✅ commit message 必须以 `[<change-id>]` 开头（阻断性强制）
 - ✅ spec/design 矛盾时写 RETRO.md 停止
 - ❌ 禁止修改 `content/enterprise-baseline.md` 或用户 `~/.claude/CLAUDE.md`
 - ❌ 禁止修改 specs/*.md / design.md

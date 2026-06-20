@@ -25,14 +25,34 @@ argument-hint: [change-id 或变更描述，可选]
 - **dop 检查**：`Bash("dop --version")`。未装 → 提示用自然语言模式（跳过 DOP 拉取）。
 - **gh 检查**：`Bash("gh --version")`。未装 → 警告（不阻塞，跳过 issue/分支创建）。
 
-### 步骤 2：解析参数 + 确定 slug
+### 步骤 2：解析参数 + 确定 change-id + slug
 
-- **如果 `$ARGUMENTS` 匹配 change-id**（如 `^[A-Z]{2,6}\d+$`）：
+> ⚠️ **change-id 是阻断性强制要求**——所有 git commit message 必须以 `[<change-id>]` 开头。无 change-id 不能进入下一步。
+
+- **如果 `$ARGUMENTS` 匹配 change-id 格式**（如 `^[A-Z]{2,6}\d+$`）：
+  - 直接用作 change-id
   - `Bash("dop change view $ARGUMENTS")` 拉详情
-  - **如果 dop 失败**：降级为自然语言模式
+  - **如果 dop 失败**：警告用户但允许继续（用户可能知道内部 id 不在 DOP 里）
   - slug = `$ARGUMENTS`（如 `ARD123456`）
-- **如果是自然语言**：作为业务背景；生成 slug 建议（kebab-case + 日期）；**必须让用户确认 slug**
-- **如果为空**：问用户"change-id 或描述"
+
+- **如果是自然语言描述**（不匹配 change-id 格式）：
+  - 描述作为业务背景
+  - **必须获取 change-id**：
+    - 跑 `Bash("dop change list")` 拉当前用户名下所有 open change
+    - 用 `AskUserQuestion` 让用户从列表中**选一个**，或**自己输入**新 change-id
+    - 列表格式示例：
+      ```
+      选 1: ARD123456 - 用户测试demo
+      选 2: ARD222222 - 信用卡积分兑换功能
+      选 3: 自己输入 change-id
+      ```
+    - 用户选 1/2 → 用对应 id
+    - 用户选 3 → 问"请输入 change-id"，验证格式 `^[A-Z]{2,6}\d+$`
+  - slug = change-id（统一用 change-id 当目录名，便于追溯）
+
+- **如果 `$ARGUMENTS` 为空**：
+  - 先问"change-id 或描述"（用户可能直接给 id）
+  - 收到答案后按上面两种模式处理
 
 ### 步骤 3：读现状（保鲜关键）
 
@@ -69,10 +89,10 @@ argument-hint: [change-id 或变更描述，可选]
 
 ```bash
 Bash("git add openspec/changes/<slug>/proposal.md openspec/changes/<slug>/specs/ openspec/changes/<slug>/.meta.json openspec/changes/<slug>/.openspec.yaml")
-Bash("git commit -m 'spec(<slug>): ring 1 freeze - proposal + delta specs'")
+Bash("git commit -m '[<change-id>] spec: ring 1 freeze - proposal + delta specs'")
 ```
 
-**commit message 格式**：`spec(<slug>): ring 1 freeze - <一句话摘要>`
+**commit message 格式**：`[<change-id>] spec: ring 1 freeze - <一句话摘要>`
 
 **禁止**：
 - ❌ 跳过此步骤（"反正 gh issue 创建了就行"——错，issue 不含 spec 内容）
