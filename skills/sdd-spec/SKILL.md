@@ -46,10 +46,9 @@ argument-hint: [change-id 或变更描述，可选]
 - `Bash("openspec instructions proposal --change <slug> --json")` 拿 proposal 模板
 - `Bash("openspec instructions specs --change <slug> --json")` 拿 specs 模板
   - **template 字段自带 delta 格式（ADDED/MODIFIED/REMOVED）**——直接按模板填，不需要额外格式指令
-- `Bash("openspec instructions design --change <slug> --json")` 拿 design 模板
-  - **重要**：Ring 1 必须产出 design.md，让 /sdd-plan 的 writing-plans 能直接拆 task
+  - **保鲜靠这里**：specs 用 delta 格式，archive 时 merge 到 openspec/specs/
 
-### 步骤 5：按模板填 + Write（proposal + specs + design 三件套）
+### 步骤 5：按模板填 + Write（proposal + specs 两件套）
 
 - `Write("openspec/changes/<slug>/proposal.md")`：业务背景、范围、整体验收（模板字段）
 - `Write("openspec/changes/<slug>/specs/<capability>/spec.md")`：**delta 格式**，按模板填
@@ -57,12 +56,10 @@ argument-hint: [change-id 或变更描述，可选]
   - MODIFIED Requirements：复制完整旧块 + 改新内容
   - REMOVED Requirements：reason + migration
   - RENAMED Requirements：FROM: / TO:
-- `Write("openspec/changes/<slug>/design.md")`：**技术设计文档**，按模板填
-  - Context：当前系统状态、为什么改
-  - Goals / Non-Goals：明确范围边界
-  - Decisions：关键技术决策 + rationale（含被否决的备选方案）
-  - Risks / Trade-offs：已知风险与权衡
-  - **这一步是 Ring 2 的输入**——design 写清楚，writing-plans 才能直接拆 task
+- `Write("openspec/changes/<slug>/.meta.json")`：`{change_id, slug, created_at, dop_status, dry_run, delta_capabilities}`
+
+> **注意**：本步骤不产 design.md——design 由 /sdd-plan 的 brainstorming 交互式产出。
+> proposal + specs 已满足 openspec 保鲜条件（archive 时 merge specs/ delta）。
 - `Write("openspec/changes/<slug>/.meta.json")`：`{change_id, slug, created_at, dop_status, dry_run, delta_capabilities}`
 
 ### 步骤 6：gh 创建 issue + 分支（如有 gh）
@@ -133,8 +130,8 @@ argument-hint: [change-id 或变更描述，可选]
 ## 输出
 
 完成后告诉用户：
-> ✓ 变更 `<slug>` 规格已生成（proposal + specs + design 三件套）
+> ✓ 变更 `<slug>` 规格已生成（proposal + specs 两件套，delta 格式保鲜就绪）
 > ✓ gh issue #<NNN> 已创建，分支 `<NNN>-<slug>` 已切换
 > ✓ DOP 状态更新：spec-in-progress
 >
-> 运行 `/sdd-plan <slug>` 进入 Ring 2（任务拆分）。
+> 运行 `/sdd-plan <slug>` 进入 Ring 2（brainstorming 交互式产 design + tasks）。
