@@ -50,11 +50,19 @@ argument-hint: [slug 或 change-id]
 - **specs/*.md 路径**（delta 格式需求）
 - **明确的输出路径约束**：`openspec/changes/<slug>/design.md`（**禁止** docs/superpowers/specs/）
 - **明确的输出路径约束**：`openspec/changes/<slug>/design.md`（**禁止** docs/superpowers/specs/）
-- **writing-plans 的约束**（chain 时传递）：
+- **writing-plans 的约束**（chain 时传递，**关键，必须显式传**）：
   - 输出路径：`openspec/changes/<slug>/tasks.md`（**禁止** docs/superpowers/plans/）
   - **保留 writing-plans 原生格式 `### Task N:` heading**（不要用 openspec `## N.` 数字列表——subagent-driven-development 的 task-brief 脚本只认原生格式）
-  - **每个 task 的 commit message 必须用格式 `[<change-id>] apply: <task-id> - <subject>`**（与 spec/plan/review 风格一致，避免 /sdd-apply 阶段冲突）
-  - change-id 从 .meta.json 读
+  - **每个 task 的 commit message 必须用格式 `[<change-id>] apply: <task-id> - <subject>`**（阻断性强制，与 baseline 一致）
+    - change-id 从 .meta.json 读，**大写原样保留**（如 `ARD123456`，不要小写）
+    - **关键：writing-plans 内置模板用 `feat(scope): subject`（conventional commits），必须覆盖**。每个 task 的 commit 步骤示例：
+      ```bash
+      # ❌ 错误（writing-plans 默认产出，会触发 baseline 阻断）
+      git commit -m "feat(ard123456): add health check"
+      # ✅ 正确（强制格式）
+      git commit -m "[ARD123456] apply: T1 - add health check"
+      ```
+    - **在调 writing-plans 的 Skill prompt 里要明示这两个例子**，让 writing-plans 看到反例就不会犯错
 
 brainstorming 会：
 1. 读 proposal + specs（不用从零开始，已有 spec 直接进 design 探索）
@@ -68,13 +76,25 @@ writing-plans 会接着：
 - 每个 task 的 commit 步骤用上面约定的格式
 - 输出到 `openspec/changes/<slug>/tasks.md`
 
-### 步骤 4：验证输出位置（关键兜底）
+### 步骤 4：验证输出位置 + commit message 格式（关键兜底）
 
+**4a. 验证文件位置**：
 - `Read("openspec/changes/<slug>/design.md")` 确认存在
 - `Read("openspec/changes/<slug>/tasks.md")` 确认存在
 - 检查 `docs/superpowers/specs/` 和 `docs/superpowers/plans/` 是否多了文件
   - **如多了**：移动到 openspec 目录，提示用户"已纠正 superpowers 默认输出"
-- 检查 tasks.md 用 `- [ ]` checkbox 格式（openspec archive 期望）
+
+**4b. 验证 tasks.md 用 `- [ ]` checkbox 格式**（openspec archive 期望）
+
+**4c. 验证每个 task 的 commit message 格式**（关键，避免 /sdd-apply 阶段冲突）：
+- 扫 tasks.md 里所有 `git commit -m "..."` 行
+- **正确格式**：`[<change-id>] apply: <task-id> - <subject>`（如 `[ARD123456] apply: T1 - add health check`）
+- **错误格式**（writing-plans 默认产出，必须修正）：
+  - `feat(<scope>): <subject>` — conventional commits 风格
+  - `apply(<scope>): <subject>` — 任何 `type(scope): subject` 形式
+  - change-id 被小写（`ard123456` 而非 `ARD123456`）
+- **发现错误格式 → 立即用 Edit 改写到正确格式**（不要让用户抉择，自动化修复）
+  - 例：`feat(ard123456): add health check` → `[ARD123456] apply: T1 - add health check`
 
 ### 步骤 4.5：显式 commit（**关键——禁止跳过！**）
 
