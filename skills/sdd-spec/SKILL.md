@@ -80,6 +80,13 @@ argument-hint: [change-id 或变更描述，可选]
   - MODIFIED Requirements：复制完整旧块 + 改新内容
   - REMOVED Requirements：reason + migration
   - RENAMED Requirements：FROM: / TO:
+  - **Scenario 写作质量（重要）**：
+    - **success scenario**：描述系统正常行为，必须可验证（如 `WHEN X THEN Y`）
+    - **failure scenario**：描述失败/边界条件，**必须基于实测，不能凭推测**
+      - 例：写"openspec validate 失败当 X"之前，**实际跑一次** X 看 openspec 是否真失败
+      - 没法立即测 → 标 `<!-- TODO: 实测验证 -->` 或改为"假设性行为"语气，不要写"系统 SHALL 失败"
+      - 推测性 scenario 会被 /sdd-apply 实施时发现是错的，触发 RETRO 浪费时间
+    - 避免列举"想当然"的失败触发条件——openspec/工具行为只有实测才准
 - `Write("openspec/changes/<slug>/.meta.json")`：`{change_id, slug, created_at, dop_status, dry_run, delta_capabilities}`
 
 > **注意**：本步骤不产 design.md——design 由 /sdd-plan 的 brainstorming 交互式产出。
