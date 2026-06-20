@@ -44,6 +44,10 @@ argument-hint: [slug 或 change-id]
 - **specs/*.md 路径**（delta 格式需求）
 - **openspec design 模板**（步骤 2 拿的）——告诉 brainstorming 输出 design.md 时按此格式
 - **明确的输出路径约束**：`openspec/changes/<slug>/design.md`（**禁止** docs/superpowers/specs/）
+- **writing-plans 的约束**（chain 时传递）：
+  - 输出路径：`openspec/changes/<slug>/tasks.md`（**禁止** docs/superpowers/plans/）
+  - **每个 task 的 commit message 必须用格式 `[<change-id>] apply: <task-id> - <subject>`**（与 spec/plan/review 风格一致，避免 /sdd-apply 阶段冲突）
+  - change-id 从 .meta.json 读
 
 brainstorming 会：
 1. 读 proposal + specs（不用从零开始，已有 spec 直接进 design 探索）
@@ -54,7 +58,8 @@ brainstorming 会：
 
 writing-plans 会接着：
 - 基于 design 产 tasks 清单（TDD 友好、bite-sized）
-- 输出到 `openspec/changes/<slug>/tasks.md`（强约束，**禁止** docs/superpowers/plans/）
+- 每个 task 的 commit 步骤用上面约定的格式
+- 输出到 `openspec/changes/<slug>/tasks.md`
 
 ### 步骤 4：验证输出位置（关键兜底）
 
