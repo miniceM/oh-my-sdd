@@ -115,9 +115,13 @@ Bash("git pull origin main")
 `Write("openspec/changes/archive/<slug>/review.md")`（archive 已移动文件到 archive/）：
 - 追加 "Merge 结果摘要"（哪些 capability ADDED/MODIFIED/REMOVED）
 
-### 步骤 F5：DOP 完成标记
+### 步骤 F5：DOP 完成标记 + 写 archive_done_at
 
 - `Bash("dop change update <id> --status review-done")`
+- **更新 `.meta.json`**（关键——否则 SessionStart hook 提醒不消失）：
+  - 路径：`openspec/changes/archive/<slug>/.meta.json`（archive 已移动文件）
+  - 加字段：`dop_status: "review-done"`、`archive_done_at: "<ISO timestamp>"`
+  - 用 `Read` 读现有 .meta.json + 合并新字段 + `Write` 回写
 
 ### 步骤 F6：显式 commit + push（在 main 上）
 
