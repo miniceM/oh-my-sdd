@@ -10,7 +10,7 @@ argument-hint: [slug 或 change-id]
 > - plan 文件是 `openspec/changes/<slug>/tasks.md`（**不是** superpowers 默认 plan 位置）
 > - 禁止修改 specs/*.md + design.md（都是 input）
 > - 每个 task 完成后必须把 tasks.md 里 `- [ ]` 改成 `- [x]`
-> - commit message 格式：`[<change-id>] apply: <task-id> - <subject>`（直接用 tasks.md 里的 commit message，不自创）
+> - commit message 格式：`[<change-id>] <type>: <task-id> - <subject>`（直接用 tasks.md 里的 commit message，不自创）
 
 **前置检查**：tasks.md 必须存在，所有 `- [ ]` 已逐个评估。
 
@@ -44,7 +44,7 @@ argument-hint: [slug 或 change-id]
   ```
   1. 完成每个 task 后把 tasks.md 对应的 - [ ] 改成 - [x]
   2. 禁止修改 specs/*.md 和 design.md
-  3. commit message 格式：[<change-id>] apply: <task-id> - <subject>
+  3. commit message 格式：[<change-id>] <type>: <task-id> - <subject>
      （直接用 tasks.md 里的 commit message，不要自创）
   4. 测试红就回到测试，不绕过
   ```
@@ -68,7 +68,7 @@ argument-hint: [slug 或 change-id]
 - ✅ plan 用 `openspec/changes/<slug>/tasks.md`
 - ✅ 让用户选执行模式（不自作主张）
 - ✅ 每 task 勾 `- [ ]` → `- [x]`
-- ✅ commit message 用 tasks.md 里的格式（`[<change-id>] apply: <task-id> - <subject>`）
+- ✅ commit message 用 tasks.md 里的格式（`[<change-id>] <type>: <task-id> - <subject>`）
 - ✅ spec/design 矛盾写 RETRO.md 停止
 - ❌ 禁止修改 baseline / CLAUDE.md / specs/*.md / design.md
 - ❌ 禁止跨 task 共用 commit
