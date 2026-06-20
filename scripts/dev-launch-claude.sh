@@ -19,13 +19,18 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # 把 mock iam 加到 PATH 最前
 export PATH="$SCRIPT_DIR:$PATH"
 
-# 验证 mock iam 可达
+# 验证 mock iam + dop 可达
 if ! command -v iam >/dev/null 2>&1; then
   echo "❌ mock iam 不可执行。先跑: chmod +x $SCRIPT_DIR/iam" >&2
   exit 1
 fi
+if ! command -v dop >/dev/null 2>&1; then
+  echo "❌ mock dop 不可执行。先跑: chmod +x $SCRIPT_DIR/dop" >&2
+  exit 1
+fi
 
 echo "→ PATH 已注入 mock iam: $(command -v iam)"
+echo "→ PATH 已注入 mock dop: $(command -v dop)"
 echo "→ mock 用户: ${OMS_MOCK_USER:-alice}"
 echo "→ mock system: ${OMS_MOCK_SYSTEM:-sdd}"
 if [[ "${OMS_MOCK_LOGGED_OUT:-0}" == "1" ]]; then
@@ -36,6 +41,9 @@ echo ""
 # 验证 mock 输出
 echo "→ mock iam auth status -json 输出:"
 iam auth status -json
+echo ""
+echo "→ mock dop change view ARD123456 (示例):"
+dop change view ARD123456 2>&1 | head -5
 echo ""
 
 # 启动 Claude Code

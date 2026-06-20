@@ -1,0 +1,189 @@
+#!/usr/bin/env bash
+# scripts/dop — mock dop CLI 用于本地无 DOP 系统时跑通 SDD 流程
+#
+# 用法：
+#   ./scripts/dev-launch-claude.sh 启动 Claude Code（PATH 含 scripts/）
+#
+# 环境变量控制：
+#   OMS_MOCK_DOP_USER        用户名（默认 alice）
+#   OMS_MOCK_DOP_FAIL_GET    =1 时 change view 模拟失败（404）
+#   OMS_MOCK_DOP_FAIL_UPDATE =1 时 change update 模拟失败（500）
+#   OMS_MOCK_DOP_LOG         日志路径（默认 ~/.oh-my-sdd/logs/mock-dop.log）
+#
+# 已知 change-id 测试数据：
+#   ARD123456  → "用户测试demo"（用户指定）
+#   ARD222222  → "信用卡积分兑换功能"（额外测试用例）
+#   其他 id    → 404 not found
+
+set -euo pipefail
+
+VERSION="dop mock v0.0.1-dev"
+LOG_FILE="${OMS_MOCK_DOP_LOG:-$HOME/.oh-my-sdd/logs/mock-dop.log}"
+USER="${OMS_MOCK_DOP_USER:-alice}"
+
+mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+
+log() {
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*" >> "$LOG_FILE"
+}
+
+# ============================================================
+# change view <id> — 返回变更详情
+# ============================================================
+change_view() {
+  local id="$1"
+  log "change view $id"
+
+  if [[ "${OMS_MOCK_DOP_FAIL_GET:-0}" == "1" ]]; then
+    echo "❌ dop change view failed (forced, OMS_MOCK_DOP_FAIL_GET=1)" >&2
+    exit 1
+  fi
+
+  # 按 id 返回特定测试数据。Agent 解析 JSON 输出提取字段。
+  case "$id" in
+    ARD123456)
+      cat <<EOF
+{
+  "id": "$id",
+  "title": "用户测试demo",
+  "status": "open",
+  "type": "feature",
+  "owner": "$USER",
+  "description": "用户测试 demo - 用于验证 oh-my-sdd 端到端流程",
+  "acceptance_criteria": [
+    "可以走完 SDD 5 环流程",
+    "openspec/specs/ 被 archive merge 更新",
+    "gh issue + PR 自动关联"
+  ],
+  "created_at": "2026-06-20T00:00:00Z"
+}
+EOF
+      ;;
+    ARD222222)
+      cat <<EOF
+{
+  "id": "$id",
+  "title": "信用卡积分兑换功能",
+  "status": "open",
+  "type": "feature",
+  "owner": "$USER",
+  "description": "用户可以使用信用卡积分兑换商品/服务",
+  "acceptance_criteria": [
+    "用户在 app 看到积分余额",
+    "可选择商品兑换",
+    "兑换成功后扣减积分"
+  ],
+  "created_at": "2026-06-20T00:00:00Z"
+}
+EOF
+      ;;
+    *)
+      echo "❌ Change not found: $id" >&2
+      echo "已知测试 id: ARD123456 (用户测试demo), ARD222222 (信用卡积分)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+# ============================================================
+# change update <id> --status <X> [--pr <URL>] — 标记状态
+# ============================================================
+change_update() {
+  local id="$1"
+  shift
+  local status=""
+  local pr=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --status) status="$2"; shift 2 ;;
+      --pr) pr="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
+  log "change update $id --status $status --pr ${pr:-N/A}"
+
+  if [[ "${OMS_MOCK_DOP_FAIL_UPDATE:-0}" == "1" ]]; then
+    echo "❌ dop change update failed (forced, OMS_MOCK_DOP_FAIL_UPDATE=1)" >&2
+    exit 1
+  fi
+
+  # 模拟成功响应（用 if/else 避免 bash 参数展开的转义陷阱）
+  local timestamp
+  timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [[ -n "$pr" ]]; then
+    cat <<EOF
+{
+  "id": "$id",
+  "status": "$status",
+  "pr_url": "$pr",
+  "updated_at": "$timestamp",
+  "updated_by": "$USER"
+}
+EOF
+  else
+    cat <<EOF
+{
+  "id": "$id",
+  "status": "$status",
+  "updated_at": "$timestamp",
+  "updated_by": "$USER"
+}
+EOF
+  fi
+}
+
+# ============================================================
+# Main dispatch
+# ============================================================
+case "${1:-}" in
+  --version|-V)
+    echo "$VERSION"
+    ;;
+  --help|-h)
+    cat <<EOF
+dop mock CLI — 模拟企业 DOP 系统的本地测试工具
+
+Usage: dop <command> [options]
+
+Commands:
+  --version              显示版本
+  --help                 显示帮助
+  change view <id>       查看变更详情
+  change update <id>     更新变更状态
+    --status <X>           spec-in-progress | plan-ready | tasks-ready | apply-done | review-done
+    --pr <URL>             关联 PR URL (可选)
+
+已知测试 change-id:
+  ARD123456              "用户测试demo"
+  ARD222222              "信用卡积分兑换功能"
+
+环境变量:
+  OMS_MOCK_DOP_USER        用户名（默认 alice）
+  OMS_MOCK_DOP_FAIL_GET    =1 时 change view 模拟失败
+  OMS_MOCK_DOP_FAIL_UPDATE =1 时 change update 模拟失败
+  OMS_MOCK_DOP_LOG         日志路径（默认 ~/.oh-my-sdd/logs/mock-dop.log）
+
+日志: $LOG_FILE
+EOF
+    ;;
+  change)
+    shift
+    subcmd="${1:-}"
+    shift || true
+    case "$subcmd" in
+      view) change_view "${1:-}" ;;
+      update) change_update "$@" ;;
+      *) echo "未知子命令: dop change $subcmd" >&2; exit 1 ;;
+    esac
+    ;;
+  "")
+    echo "dop mock: 缺少命令。运行 dop --help 查看用法。" >&2
+    exit 1
+    ;;
+  *)
+    echo "dop mock: 未知命令 $1" >&2
+    exit 1
+    ;;
+esac
