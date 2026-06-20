@@ -31,21 +31,28 @@ argument-hint: [slug 或 change-id]
   - `.meta.json`（change_id、delta_capabilities）
   - **读项目现状**：对每个 delta_capability，`Read("openspec/specs/<capability>/spec.md")`（如存在）
 
-### 步骤 2：拿 openspec design/tasks 模板（用于约束 brainstorming/writing-plans 输出格式）
+### 步骤 2：了解 openspec 与 superpowers 格式差异（关键！避免后续冲突）
 
-- `Bash("openspec instructions design --change <slug> --json")` 拿 design 模板
-- `Bash("openspec instructions tasks --change <slug> --json")` 拿 tasks 模板
-- 解析 JSON 的 template 字段——让 brainstorming/writing-plans 按这个格式输出
+> ⚠️ **不要强行让 superpowers 用 openspec 模板**——会导致 /sdd-apply 阶段 task-brief 脚本找不到 task。
+
+**格式差异**：
+| 工件 | openspec 模板 | superpowers 原生 | 选哪个？ |
+|------|-------------|---------------|---------|
+| design.md | Context/Goals/Decisions/Risks | 类似但更自由 | **brainstorming 原生**（不要约束模板） |
+| tasks.md | `## N.` + `N.M` 数字列表 | `### Task N:` heading + 详细步骤 | **writing-plans 原生**（强制！subagent-driven-development 的 task-brief 脚本只认这个格式） |
+
+**结论**：/sdd-plan 不拉 openspec tasks 模板。让 writing-plans 用其原生 `### Task N:` 格式——这是 superpowers 工具链协同的关键。openspec validate/archive 只看 tasks.md 是否存在 + 含 `- [ ]` checkboxes，不强制 header 格式。
 
 ### 步骤 3：委托 superpowers:brainstorming（关键步骤）
 
 调用 **`superpowers:brainstorming`** skill，传入：
 - **proposal.md 路径**（业务背景）
 - **specs/*.md 路径**（delta 格式需求）
-- **openspec design 模板**（步骤 2 拿的）——告诉 brainstorming 输出 design.md 时按此格式
+- **明确的输出路径约束**：`openspec/changes/<slug>/design.md`（**禁止** docs/superpowers/specs/）
 - **明确的输出路径约束**：`openspec/changes/<slug>/design.md`（**禁止** docs/superpowers/specs/）
 - **writing-plans 的约束**（chain 时传递）：
   - 输出路径：`openspec/changes/<slug>/tasks.md`（**禁止** docs/superpowers/plans/）
+  - **保留 writing-plans 原生格式 `### Task N:` heading**（不要用 openspec `## N.` 数字列表——subagent-driven-development 的 task-brief 脚本只认原生格式）
   - **每个 task 的 commit message 必须用格式 `[<change-id>] apply: <task-id> - <subject>`**（与 spec/plan/review 风格一致，避免 /sdd-apply 阶段冲突）
   - change-id 从 .meta.json 读
 
