@@ -71,6 +71,10 @@ argument-hint: [change-id 或变更描述，可选]
 ### 步骤 5：按模板填 + Write（proposal + specs 两件套）
 
 - `Write("openspec/changes/<slug>/proposal.md")`：业务背景、范围、整体验收（模板字段）
+  - **What Changes 段必须分类声明**：
+    - 业务变更：capability 加/改/删（在 `Capabilities` 子段列）
+    - **脚手架/工具链产物**：openspec 自动生成的 `openspec/config.yaml`、`.openspec.yaml`、`.claude/commands/opsx/*` 等。**显式列**为"脚手架（openspec init 产物，不算业务变更）"
+    - 这样 code reviewer 看到 commit 里有 openspec/config.yaml 不会困惑——proposal 已说明它是脚手架
 - `Write("openspec/changes/<slug>/specs/<capability>/spec.md")`：**delta 格式**，按模板填
   - ADDED Requirements：新需求 + scenario
   - MODIFIED Requirements：复制完整旧块 + 改新内容
