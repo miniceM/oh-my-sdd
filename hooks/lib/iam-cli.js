@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 
 export class IamCliError extends Error {
   constructor(message, { code = 'IAM_CLI_ERROR', cause } = {}) {
@@ -11,22 +11,29 @@ export class IamCliError extends Error {
 
 function runIam(args, { input, timeoutMs } = {}) {
   return new Promise((resolve, reject) => {
-    const cmd = process.platform === 'win32' ? 'iam.exe' : 'iam';
-    // detached:true puts iam in its own process group so a timeout can kill
-    // iam AND any children it forked (e.g. a shell wrapper running `sleep`).
+    const isWin = process.platform === 'win32';
+    // Windows: 真实 iam 可能是 .exe（原生二进制）或 .cmd（npm shim）。
+    // 用 'iam' + shell:true 让 cmd.exe 通过 PATHEXT 自动解析扩展名。
+    // Unix: 直接 spawn，detached:true 让超时能杀整个进程组。
+    const cmd = 'iam';
     const child = spawn(cmd, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      detached: process.platform !== 'win32',
+      detached: !isWin,
+      shell: isWin,
     });
     let stdout = '';
     let stderr = '';
     let settled = false;
     let timer = null;
     const killTree = () => {
-      // Kill the whole process group (negative pid). Fall back to direct kill
-      // if group kill fails (e.g. already reaped). Best effort — swallow errs.
+      if (!child.pid) return;
       try {
-        if (child.pid) {
+        if (process.platform === 'win32') {
+          // Windows: 负 PID 不支持。用 taskkill /T 杀整个进程树。
+          // shell:true 时 child.pid 是 cmd.exe 的 pid，真正的 iam 是它的子进程。
+          execFileSync('taskkill', ['/PID', child.pid, '/T', '/F'], { stdio: 'ignore' });
+        } else {
+          // Unix: 杀整个进程组（负 pid）。兜底直接 kill。
           try { process.kill(-child.pid, 'SIGKILL'); }
           catch { child.kill('SIGKILL'); }
         }

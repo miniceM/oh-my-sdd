@@ -2,6 +2,10 @@ import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 
+export function isWindows() {
+  return process.platform === 'win32';
+}
+
 export function getNodeVersion() {
   return process.version;
 }
@@ -42,9 +46,19 @@ export function sessionMetaPath(sessionId) {
 }
 
 export function isIamInPath() {
-  const cmd = process.platform === 'win32' ? 'where' : 'which';
+  if (isWindows()) {
+    // Windows: `where iam` 通常能查 PATHEXT 里的所有扩展名（.exe/.cmd/.bat）。
+    // 但如果 PATHEXT 被改或 iam 是非标准扩展，显式多试几种更稳。
+    for (const name of ['iam', 'iam.exe', 'iam.cmd', 'iam.bat']) {
+      try {
+        execFileSync('where', [name], { stdio: 'ignore' });
+        return true;
+      } catch { /* try next */ }
+    }
+    return false;
+  }
   try {
-    execFileSync(cmd, ['iam'], { stdio: 'ignore' });
+    execFileSync('which', ['iam'], { stdio: 'ignore' });
     return true;
   } catch {
     return false;

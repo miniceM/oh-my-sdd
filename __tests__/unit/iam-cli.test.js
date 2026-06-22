@@ -26,7 +26,7 @@ test('getAuthStatus uses --json flag and parses credentials-only payload', async
   );
   t.after(() => rmSync(stubDir, { recursive: true, force: true }));
   const oldPath = process.env.PATH;
-  process.env.PATH = `${stubDir}:${process.env.PATH}`;
+  process.env.PATH = `${stubDir}${path.delimiter}${process.env.PATH}`;
   t.after(() => { process.env.PATH = oldPath; });
 
   const { getAuthStatus } = await import('../../hooks/lib/iam-cli.js?' + Date.now());
@@ -52,7 +52,7 @@ test('getAuthStatus throws on non-zero exit', async (t) => {
   const stubDir = makeStubIam('boom', 1);
   t.after(() => rmSync(stubDir, { recursive: true, force: true }));
   const oldPath = process.env.PATH;
-  process.env.PATH = `${stubDir}:${process.env.PATH}`;
+  process.env.PATH = `${stubDir}${path.delimiter}${process.env.PATH}`;
   t.after(() => { process.env.PATH = oldPath; });
 
   const { getAuthStatus, IamCliError } = await import('../../hooks/lib/iam-cli.js?' + Date.now());
@@ -64,7 +64,7 @@ test('getAuthStatus throws on missing credentials field', async (t) => {
   const stubDir = makeStubIam('{"total":1}');
   t.after(() => rmSync(stubDir, { recursive: true, force: true }));
   const oldPath = process.env.PATH;
-  process.env.PATH = `${stubDir}:${process.env.PATH}`;
+  process.env.PATH = `${stubDir}${path.delimiter}${process.env.PATH}`;
   t.after(() => { process.env.PATH = oldPath; });
 
   const { getAuthStatus, IamCliError } = await import('../../hooks/lib/iam-cli.js?' + Date.now());

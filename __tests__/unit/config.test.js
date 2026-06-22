@@ -17,6 +17,7 @@ test('loadConfig returns defaults when file missing', async (t) => {
   const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-cfg-'));
   t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
   process.env.HOME = tmpHome;
+  process.env.USERPROFILE = tmpHome;  // Windows: os.homedir() 优先 USERPROFILE
   process.env.USERPROFILE = tmpHome;
 
   const { loadConfig, DEFAULT_CONFIG } = await import('../../hooks/lib/config.js?' + Date.now());
@@ -28,6 +29,7 @@ test('saveConfig writes file and loadConfig reads it back', async (t) => {
   const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-cfg-'));
   t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
   process.env.HOME = tmpHome;
+  process.env.USERPROFILE = tmpHome;  // Windows: os.homedir() 优先 USERPROFILE
   process.env.USERPROFILE = tmpHome;
 
   const mod = await import('../../hooks/lib/config.js?' + Date.now());

@@ -24,17 +24,30 @@ const NODE_BIN_DIR = (() => {
 
 function makeStubIam(jsonOutput) {
   const dir = mkdtempSync(path.join(tmpdir(), 'iam-stub-'));
-  const cmd = path.join(dir, 'iam');
-  // 匹配新旧两种 flag（兼容期保留）
-  const script = `#!/bin/bash\nif [ "$1" = "auth" ] && [ "$2" = "status" ] && { [ "$3" = "--json" ] || [ "$3" = "-json" ]; }; then\n  echo '${JSON.stringify(jsonOutput)}'\nfi\n`;
-  writeFileSync(cmd, script);
-  chmodSync(cmd, 0o755);
+  const jsonStr = JSON.stringify(jsonOutput).replace(/"/g, '""');  // cmd.exe 转义
+  if (process.platform === 'win32') {
+    // Windows: 写 iam.cmd 让 where/spawn 能找到
+    const cmdPath = path.join(dir, 'iam.cmd');
+    const script = `@echo off\r\nif "%~1"=="auth" if "%~2"=="status" if "%~3"=="--json" (\r\n  echo ${jsonStr}\r\n) else if "%~1"=="auth" if "%~2"=="status" if "%~3"=="-json" (\r\n  echo ${jsonStr}\r\n)\r\nexit /b 0\r\n`;
+    writeFileSync(cmdPath, script);
+  } else {
+    const cmd = path.join(dir, 'iam');
+    const script = `#!/bin/bash\nif [ "$1" = "auth" ] && [ "$2" = "status" ] && { [ "$3" = "--json" ] || [ "$3" = "-json" ]; }; then\n  echo '${JSON.stringify(jsonOutput)}'\nfi\n`;
+    writeFileSync(cmd, script);
+    chmodSync(cmd, 0o755);
+  }
   return dir;
 }
 
 // Stub iam that hangs forever (simulates network stall / deadlocked CLI).
 function makeHangingIam() {
   const dir = mkdtempSync(path.join(tmpdir(), 'iam-hang-'));
+  if (process.platform === 'win32') {
+    // Windows: ping -n 60 127.0.0.1 >nul 模拟 sleep 60
+    const cmdPath = path.join(dir, 'iam.cmd');
+    writeFileSync(cmdPath, '@echo off\r\nping -n 60 127.0.0.1 >nul\r\n');
+    return dir;
+  }
   const cmd = path.join(dir, 'iam');
   const script = '#!/bin/bash\nsleep 60\n';
   writeFileSync(cmd, script);
@@ -84,7 +97,7 @@ test('OK state: baseline injected + DOP session.start sent', async (t) => {
     {
       HOME: tmpHome,
       USERPROFILE: tmpHome,
-      PATH: `${iamDir}:${process.env.PATH}`,
+      PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
       CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
     }
   );
@@ -110,7 +123,7 @@ test('NEED_LOGIN state: auth-required shown, no baseline, stderr warning', async
     {
       HOME: tmpHome,
       USERPROFILE: tmpHome,
-      PATH: `${iamDir}:${process.env.PATH}`,
+      PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
       CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
     }
   );
@@ -173,7 +186,7 @@ test('iam hanging produces ERROR state within timeout, session does not block', 
     {
       HOME: tmpHome,
       USERPROFILE: tmpHome,
-      PATH: `${iamDir}:${process.env.PATH}`,
+      PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
       CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
     }
   );
@@ -219,7 +232,7 @@ test('OK state: session meta includes started_at for duration calc', async (t) =
     {
       HOME: tmpHome,
       USERPROFILE: tmpHome,
-      PATH: `${iamDir}:${process.env.PATH}`,
+      PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
       CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
     }
   );
