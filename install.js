@@ -21,9 +21,17 @@ const USER_CLAUDE_MD = path.join(os.homedir(), '.claude', 'CLAUDE.md');
 const BEGIN_MARKER = '<!-- BEGIN oh-my-sdd:enterprise-baseline -->';
 const END_MARKER = '<!-- END oh-my-sdd:enterprise-baseline -->';
 
-// announce writes user-facing messages to stderr so npm postinstall doesn't
-// swallow them. npm hides postinstall stdout on success; stderr always shows.
+// announce writes progress messages to BOTH stdout and stderr.
+//
+// Why both:
+//   - npm postinstall swallows stdout on success → stderr carries the message
+//   - Windows PowerShell sometimes swallows child-process stderr → stdout carries it
+//   - Direct CLI runs (oms-install) → stdout is the natural stream
+//
+// Duplication is intentional and harmless in all three scenarios. Users see
+// each message once in their terminal regardless of platform.
 function announce(msg) {
+  process.stdout.write(msg + '\n');
   process.stderr.write(msg + '\n');
 }
 
@@ -39,7 +47,7 @@ async function preflight() {
   // openspec 是 spec 保鲜的核心——/sdd-review 归档阶段必须用它 merge delta
   const cmd = process.platform === 'win32' ? 'where' : 'which';
   try {
-    execFileSync(cmd, ['openspec'], { stdio: 'ignore' });
+    execFileSync(cmd, ['openspec'], { stdio: 'ignore', timeout: 5_000 });
   } catch {
     process.stderr.write('⚠️  未检测到 openspec CLI。可继续安装，但 /sdd-review 归档阶段会阻塞。\n');
     process.stderr.write('    安装：npm install -g @fission-ai/openspec\n');
@@ -48,9 +56,18 @@ async function preflight() {
 }
 
 function isClaudeInstalled() {
-  const cmd = process.platform === 'win32' ? 'where' : 'which';
+  if (process.platform === 'win32') {
+    // Windows: claude 通常是 npm shim (.cmd)。多试几种扩展名，应对 PATHEXT 被改的情况。
+    for (const name of ['claude', 'claude.exe', 'claude.cmd', 'claude.bat']) {
+      try {
+        execFileSync('where', [name], { stdio: 'ignore', timeout: 5_000 });
+        return true;
+      } catch { /* try next */ }
+    }
+    return false;
+  }
   try {
-    execFileSync(cmd, ['claude'], { stdio: 'ignore' });
+    execFileSync('which', ['claude'], { stdio: 'ignore', timeout: 5_000 });
     return true;
   } catch {
     return false;
@@ -59,13 +76,45 @@ function isClaudeInstalled() {
 
 function runClaude(args) {
   return new Promise((resolve) => {
-    const child = spawn('claude', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const isWin = process.platform === 'win32';
+    // Windows: claude 是 npm shim (.cmd)，必须用 shell:true 让 cmd.exe 解析。
+    // Unix: 直接 spawn。
+    const child = spawn('claude', args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: isWin,
+    });
     let stdout = '';
     let stderr = '';
+    let settled = false;
     child.stdout.on('data', (c) => { stdout += c; });
     child.stderr.on('data', (c) => { stderr += c; });
-    child.on('close', (code) => resolve({ code, stdout, stderr }));
-    child.on('error', (err) => resolve({ code: -1, stdout: '', stderr: err.message }));
+
+    // 30s timeout：claude plugin install 一般 < 10s，超时说明 hang 了。
+    // 超时后杀子进程，返回错误而不是让整个 install 永远卡住。
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { child.kill('SIGKILL'); } catch { /* noop */ }
+      resolve({
+        code: -1,
+        stdout,
+        stderr: stderr + `\n⏱ claude 命令超时 (30s)，已强制终止`,
+      });
+    }, 30_000);
+    timer.unref?.();
+
+    child.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr });
+    });
+    child.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ code: -1, stdout, stderr: err.message });
+    });
   });
 }
 
