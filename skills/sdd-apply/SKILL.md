@@ -58,9 +58,11 @@ argument-hint: [slug 或 change-id]
 - 提示用户：改 spec/design（回 /sdd-spec 或 /sdd-plan）或改 task 假设（RETRO 写理由）
 - 等用户决定后继续
 
-### 步骤 5：DOP 实时上报
+### 步骤 5：本地进度标记（不调 dop CLI）
 
-每个 commit 触发 PostToolUse hook 自动上报（已实现）。完成所有 task 后 `dop change update <id> --status apply-done`。
+每个 commit 触发 PostToolUse hook 自动 HTTP 上报到 DOP（已实现，非 CLI）。完成所有 task 后**本地标记**：
+
+`Edit("openspec/changes/<slug>/.meta.json")`：把 `dop_status` 设为 `"apply-done"`，加 `dop_status_at: <ISO timestamp>`。
 
 ## 强制规则
 

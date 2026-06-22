@@ -25,7 +25,8 @@ const NODE_BIN_DIR = (() => {
 function makeStubIam(jsonOutput) {
   const dir = mkdtempSync(path.join(tmpdir(), 'iam-stub-'));
   const cmd = path.join(dir, 'iam');
-  const script = `#!/bin/bash\nif [ "$1" = "auth" ] && [ "$2" = "status" ] && [ "$3" = "-json" ]; then\n  echo '${JSON.stringify(jsonOutput)}'\nfi\n`;
+  // 匹配新旧两种 flag（兼容期保留）
+  const script = `#!/bin/bash\nif [ "$1" = "auth" ] && [ "$2" = "status" ] && { [ "$3" = "--json" ] || [ "$3" = "-json" ]; }; then\n  echo '${JSON.stringify(jsonOutput)}'\nfi\n`;
   writeFileSync(cmd, script);
   chmodSync(cmd, 0o755);
   return dir;
@@ -70,8 +71,11 @@ test('OK state: baseline injected + DOP session.start sent', async (t) => {
   const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-'));
   t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
   const iamDir = makeStubIam({
-    total: 1,
-    credentials: [{ system: 'sdd', username: 'alice', status: 'logged' }],
+    // 新契约（2026-06-22）：无 total 字段，2 个 credentials（devops + gitee）
+    credentials: [
+      { username: 'deepus',  status: 'logged', is_api_key_true: true  },
+      { username: 'gituser', status: 'logged', is_api_key_true: false },
+    ],
   });
   t.after(() => rmSync(iamDir, { recursive: true, force: true }));
 
@@ -96,7 +100,7 @@ test('NEED_LOGIN state: auth-required shown, no baseline, stderr warning', async
   const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-'));
   t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
   const iamDir = makeStubIam({
-    total: 0,
+    // 新契约：无 total 字段，未登录时 credentials 为空
     credentials: [],
   });
   t.after(() => rmSync(iamDir, { recursive: true, force: true }));
@@ -201,8 +205,11 @@ test('OK state: session meta includes started_at for duration calc', async (t) =
   const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-meta-'));
   t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
   const iamDir = makeStubIam({
-    total: 1,
-    credentials: [{ system: 'sdd', username: 'carol', status: 'logged' }],
+    // 新契约：2 个 credentials，username 是 carol
+    credentials: [
+      { username: 'carol-devops', status: 'logged', is_api_key_true: true  },
+      { username: 'carol-gitee',  status: 'logged', is_api_key_true: false },
+    ],
   });
   t.after(() => rmSync(iamDir, { recursive: true, force: true }));
 
@@ -222,7 +229,8 @@ test('OK state: session meta includes started_at for duration calc', async (t) =
   const metaPath = path.join(tmpHome, '.oh-my-sdd', 'sessions', 'meta-test-1.json');
   assert.equal(existsSync(metaPath), true, 'session meta file should exist');
   const meta = JSON.parse(readFileSync(metaPath, 'utf8'));
-  assert.equal(meta.username, 'carol');
+  // pickAnyLoggedUsername 返回第一个 logged 的 username
+  assert.equal(meta.username, 'carol-devops');
   // start_sha may be null if cwd is not a git repo; just assert presence
   assert.ok('start_sha' in meta, 'start_sha key must be present');
   // started_at must be present and parse as a recent ISO timestamp

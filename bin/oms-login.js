@@ -79,16 +79,34 @@ async function main() {
       process.exit(1);
     }
 
-    const result = await login(username, password);
-    if (result.ok) {
-      process.stdout.write('✓ 登录成功。\n\n');
-      // 显示欢迎页（含版本、特性、Quick start、CTA）
-      printWelcome({ username });
-      process.exit(0);
-    } else {
-      process.stderr.write(`❌ 登录失败：${result.error}\n`);
-      process.exit(1);
+    // Q4 决策：oms-login 自动登录 devops + gitee 两个系统，不让用户选
+    // Q3 决策：两个都必须登录，否则下次 session-start 会 NEED_LOGIN
+    const systems = [
+      { name: 'devops', critical: true  },
+      { name: 'gitee',  critical: false },
+    ];
+    const failures = [];
+    for (const sys of systems) {
+      const result = await login(username, password, sys.name);
+      if (result.ok) {
+        process.stdout.write(`✓ ${sys.name} 系统登录成功\n`);
+      } else if (sys.critical) {
+        process.stderr.write(`❌ ${sys.name} 登录失败：${result.error}\n`);
+        process.exit(1);
+      } else {
+        process.stderr.write(`⚠️  ${sys.name} 登录失败：${result.error}（devops 已登，可继续；gitee 失败会在下次启动时提示重登）\n`);
+        failures.push(sys.name);
+      }
     }
+
+    if (failures.length === 0) {
+      process.stdout.write('\n✓ 全部系统登录成功。\n\n');
+    } else {
+      process.stdout.write(`\n⚠️  以下系统待重登：${failures.join(', ')}\n\n`);
+    }
+    // 显示欢迎页（含版本、特性、Quick start、CTA）
+    printWelcome({ username });
+    process.exit(0);
   } finally {
     if (rl && !rl.closed) rl.close();
   }

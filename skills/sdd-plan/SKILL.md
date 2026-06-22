@@ -64,9 +64,11 @@ git commit -m '[<change-id>] plan: ring 2 freeze - design + tasks ready'
 
 change-id 从 `.meta.json` 读。
 
-### 步骤 5：DOP 标记
+### 步骤 5：本地进度标记（不调 dop CLI）
 
-`Bash("dop change update <id> --status plan-ready")`，失败 warn。
+真实 dop 没有 `change update`——进度记录到 `.meta.json`：
+
+`Edit("openspec/changes/<slug>/.meta.json")`：把 `dop_status` 设为 `"plan-ready"`，加 `dop_status_at: <ISO timestamp>`。
 
 ## 强制规则
 

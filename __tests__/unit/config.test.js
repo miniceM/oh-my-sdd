@@ -7,7 +7,9 @@ import path from 'node:path';
 test('DEFAULT_CONFIG has required keys', async () => {
   const { DEFAULT_CONFIG } = await import('../../hooks/lib/config.js');
   assert.ok(DEFAULT_CONFIG.dop_endpoint);
-  assert.ok('aih_system_name' in DEFAULT_CONFIG);
+  // 2026-06-22 改造：aih_system_name 替换为 required_systems（devops+gitee 都必须登）
+  assert.ok('required_systems' in DEFAULT_CONFIG);
+  assert.equal(DEFAULT_CONFIG.required_systems, 2);
   assert.equal(DEFAULT_CONFIG.telemetry_disabled, false);
 });
 

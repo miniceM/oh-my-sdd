@@ -4,7 +4,7 @@ import { getStateDir } from './platform.js';
 
 export const DEFAULT_CONFIG = {
   dop_endpoint: 'https://dop.enterprise.com',
-  aih_system_name: 'sdd',
+  required_systems: 2,  // devops + gitee（Q3 决策：两个都必须登录）
   log_level: 'info',
   telemetry_disabled: false,
 };

@@ -67,7 +67,7 @@ function runIam(args, { input, timeoutMs } = {}) {
 export async function getAuthStatus({ timeoutMs } = {}) {
   let result;
   try {
-    result = await runIam(['auth', 'status', '-json'], { timeoutMs });
+    result = await runIam(['auth', 'status', '--json'], { timeoutMs });
   } catch (err) {
     throw err; // IamCliError already typed
   }
@@ -82,23 +82,24 @@ export async function getAuthStatus({ timeoutMs } = {}) {
     parsed = JSON.parse(result.stdout);
   } catch (err) {
     throw new IamCliError(
-      `iam auth status -json 输出无法解析为 JSON`,
+      `iam auth status --json 输出无法解析为 JSON`,
       { code: 'IAM_INVALID_JSON', cause: err }
     );
   }
-  if (typeof parsed.total !== 'number' || !Array.isArray(parsed.credentials)) {
+  // 真实契约（2026-06-22 校准）：顶层只有 credentials 数组，无 total 字段
+  if (!Array.isArray(parsed.credentials)) {
     throw new IamCliError(
-      `iam auth status -json 输出缺少 total 或 credentials 字段`,
+      `iam auth status --json 输出缺少 credentials 字段`,
       { code: 'IAM_SCHEMA_MISMATCH' }
     );
   }
   return parsed;
 }
 
-export async function login(username, password) {
+export async function login(username, password, system = 'devops') {
   // stdin pipes password to avoid leaking in process list / shell history
   const result = await runIam(
-    ['login', '-u', username, '-p', '-'],
+    ['auth', 'login', '-u', username, '-p', '-', '--system', system],
     { input: password + '\n' }
   );
   if (result.exitCode === 0) {
@@ -107,16 +108,27 @@ export async function login(username, password) {
   return { ok: false, error: result.stderr.trim() || '登录失败（原因未知）' };
 }
 
-export function findUsernameForSystem(status, systemName) {
-  if (!status?.credentials?.length) return null;
-  const match = status.credentials.find(c => c.system === systemName);
-  if (match?.username) return match.username;
-  return status.credentials[0]?.username ?? null;
+/**
+ * 检查是否所有必需系统都已登录。
+ *
+ * 真实 iam 输出的 credentials 数组里没有 system 字段，无法直接区分账号属于
+ * devops 还是 gitee。业务约定：必须登录 2 个系统（devops + gitee），所以
+ * 简化判定——credentials 数组里至少有 2 条且全部 status=logged。
+ *
+ * 未来若真实 iam 在 credentials 元素里加回 system 字段，可改成按系统名精确匹配。
+ */
+export function isFullyAuthenticated(status, requiredSystems = 2) {
+  if (!Array.isArray(status?.credentials)) return false;
+  if (status.credentials.length < requiredSystems) return false;
+  return status.credentials.every(c => c && c.status === 'logged');
 }
 
-export function pickCredentialForSystem(status, systemName) {
-  if (!status?.credentials?.length) return null;
-  return status.credentials.find(c => c.system === systemName)
-      ?? status.credentials[0]
-      ?? null;
+/**
+ * 返回任意已登录 credential 的 username（用于 session 上报、日志）。
+ * 不区分系统——多系统全登后任选其一即可。
+ */
+export function pickAnyLoggedUsername(status) {
+  if (!Array.isArray(status?.credentials)) return null;
+  const cred = status.credentials.find(c => c?.status === 'logged');
+  return cred?.username ?? null;
 }

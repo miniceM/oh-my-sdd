@@ -3,7 +3,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { getAuthStatus, IamCliError, pickCredentialForSystem } from './lib/iam-cli.js';
+import { getAuthStatus, IamCliError, isFullyAuthenticated, pickAnyLoggedUsername } from './lib/iam-cli.js';
 import { getCurrentHead, getBranch, getRemote } from './lib/git-diff.js';
 import { reportOrEnqueue, flush, shouldSkipTelemetry } from './lib/dop-client.js';
 import { loadConfig } from './lib/config.js';
@@ -77,9 +77,10 @@ async function getAuthState() {
     return { state: 'ERROR', status: null, err };
   }
   const cfg = await loadConfig();
-  const cred = pickCredentialForSystem(status, cfg.aih_system_name);
-  if (cred && cred.status === 'logged') {
-    return { state: 'OK', status, username: cred.username };
+  // Q3 决策：devops + gitee 两个系统都必须登录
+  const requiredSystems = cfg.required_systems ?? 2;
+  if (isFullyAuthenticated(status, requiredSystems)) {
+    return { state: 'OK', status, username: pickAnyLoggedUsername(status) };
   }
   return { state: 'NEED_LOGIN', status };
 }

@@ -34,9 +34,11 @@ argument-hint: [slug 或 change-id] 或 --finalize [slug 或 change-id]
 PR body 必须含：change-id（如 `Closes: ARD123456`）、proposal 摘要、测试结果、review findings 摘要。
 **PR diff 应只含实现 + openspec/changes/<slug>/ 工件，不含 openspec/specs/ 改动或 archive 目录**。
 
-### 步骤 5：DOP 标记
+### 步骤 5：本地进度标记（不调 dop CLI）
 
-`Bash("dop change update <id> --status pr-created --pr <PR_URL>")`。PR URL 写回 .meta.json。
+真实 dop 没有 `change update`——进度记录到 `.meta.json`：
+
+`Edit("openspec/changes/<slug>/.meta.json")`：把 `dop_status` 设为 `"pr-created"`，加 `dop_status_at: <ISO timestamp>` 和 `pr_url: <PR_URL>`。
 
 ### 步骤 6：写 review.md（pre-merge 版，**不写 merge 结果**）
 
@@ -83,13 +85,11 @@ git checkout main && git pull origin main
 
 `Write("openspec/changes/archive/<slug>/review.md")`：追加"merge 结果摘要"（哪些 capability ADDED/MODIFIED/REMOVED）。
 
-### F5：DOP 完成 + 写 archive_done_at
+### F5：本地进度标记 + 写 archive_done_at（不调 dop CLI）
 
-```bash
-dop change update <id> --status review-done
-```
+真实 dop 没有 `change update`——进度记录到 `.meta.json`：
 
-更新 `openspec/changes/archive/<slug>/.meta.json`（archive 已移动）：`dop_status: "review-done"` + `archive_done_at: <ISO timestamp>`。**关键**——否则 SessionStart hook 提醒不消失。
+`Edit("openspec/changes/archive/<slug>/.meta.json")`（archive 已移动）：把 `dop_status` 设为 `"review-done"`，加 `dop_status_at: <ISO timestamp>` 和 `archive_done_at: <ISO timestamp>`。**关键**——否则 SessionStart hook 未完成提醒不消失。
 
 ### F6：commit + push（在 main 上）
 

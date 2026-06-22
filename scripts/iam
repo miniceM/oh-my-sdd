@@ -1,127 +1,199 @@
 #!/usr/bin/env bash
-# scripts/mock-iam — 模拟企业 iam CLI 用于本地开发/测试
+# scripts/iam — mock 企业 iam CLI（对齐真实契约，2026-06-22 校准）
+#
+# 真实契约（来自内网截图）：
+#   - iam auth status [--json]     # flag 是双横线 --json
+#   - iam auth login -u <u> -p <p|-> --system <devops|gitee>
+#   - iam auth logout
+#   - JSON 输出无 total 字段，credentials 元素有 is_api_key_true，无 system
+#
+# Mock 行为：
+#   - 默认登录 2 个账号（deepus=devops API key + gituser=gitee 账号）
+#   - OMS_MOCK_LOGGED_OUT=1 全部未登
+#   - OMS_MOCK_HALF_LOGIN=1 只登 devops（测试 NEED_LOGIN 提示）
 #
 # 用法：
-#   1. chmod +x scripts/mock-iam
-#   2. PATH="$(pwd)/scripts:$PATH" claude
-#   或：
-#   3. ./scripts/dev-launch-claude.sh
-#
-# 支持的命令（覆盖 oh-my-sdd 用到的全部）：
-#   - iam --version
-#   - iam auth status
-#   - iam auth status -json
-#   - iam login -u <user> -p <pass|->     （- 表示从 stdin 读）
-#   - iam logout
-#   - iam whoami
+#   PATH="$(pwd)/scripts:$PATH" claude
+#   或：./scripts/dev-launch-claude.sh
 
 set -euo pipefail
 
-# 可通过环境变量自定义测试用户
-MOCK_USER="${OMS_MOCK_USER:-alice}"
-MOCK_SYSTEM="${OMS_MOCK_SYSTEM:-sdd}"
+MOCK_USER_DEVOPS="${OMS_MOCK_USER_DEVOPS:-deepus}"
+MOCK_USER_GITEE="${OMS_MOCK_USER_GITEE:-gituser}"
 
-# 模拟"已登录"状态。设 OMS_MOCK_LOGGED_OUT=1 模拟未登录。
-if [[ "${OMS_MOCK_LOGGED_OUT:-0}" == "1" ]]; then
-  CRED_COUNT=0
-  CRED_JSON="[]"
-else
-  CRED_COUNT=1
-  CRED_JSON="[{\"system\":\"$MOCK_SYSTEM\",\"username\":\"$MOCK_USER\",\"status\":\"logged\"}]"
-fi
+# 构造 credentials 数组
+build_credentials_json() {
+  local half="${OMS_MOCK_HALF_LOGIN:-0}"
+  local out="${OMS_MOCK_LOGGED_OUT:-0}"
+
+  if [[ "$out" == "1" ]]; then
+    echo "[]"
+    return
+  fi
+
+  if [[ "$half" == "1" ]]; then
+    # 只登了 devops
+    cat <<EOF
+[
+  {"username":"$MOCK_USER_DEVOPS","status":"logged","is_api_key_true":true}
+]
+EOF
+    return
+  fi
+
+  # 完整登录：devops + gitee
+  cat <<EOF
+[
+  {"username":"$MOCK_USER_DEVOPS","status":"logged","is_api_key_true":true},
+  {"username":"$MOCK_USER_GITEE","status":"logged","is_api_key_true":false}
+]
+EOF
+}
+
+build_credentials_text() {
+  local creds
+  creds="$(build_credentials_json)"
+  local count
+  count="$(echo "$creds" | grep -c '"username"')"
+
+  if [[ "$count" -eq 0 ]]; then
+    echo "Authentication:"
+    echo "  (no credentials)"
+    echo
+    echo "Total: 0 credential(s)"
+    return
+  fi
+
+  echo "Authentication:"
+  # 模拟真实输出："username: 000001 (logged)"
+  # mock 给每个账号一个递增的 6 位数字 ID
+  local idx=1
+  echo "$creds" | grep -oE '"username":"[^"]+"' | sed 's/"username":"//; s/"$//' | while read -r u; do
+    local uid
+    uid="$(printf "%06d" "$idx")"
+    echo "  $u: $uid (logged)"
+    idx=$((idx + 1))
+  done
+  echo
+  echo "Total: $count credential(s)"
+}
+
+do_login() {
+  local username=""
+  local password=""
+  local system=""
+  local read_stdin=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -u|--username) username="$2"; shift 2 ;;
+      -p|--password)
+        if [[ "$2" == "-" ]]; then
+          read_stdin=1
+        else
+          password="$2"
+        fi
+        shift 2 ;;
+      --system) system="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
+  if [[ $read_stdin -eq 1 ]]; then
+    read -r password
+  fi
+
+  if [[ -z "$username" || -z "$password" ]]; then
+    echo "iam: missing username or password" >&2
+    exit 1
+  fi
+
+  if [[ -z "$system" ]]; then
+    echo "iam: --system is required (devops|gitee)" >&2
+    exit 1
+  fi
+
+  case "$system" in
+    devops|gitee) ;;
+    *)
+      echo "iam: unknown system '$system' (expected: devops|gitee)" >&2
+      exit 1
+      ;;
+  esac
+
+  if [[ "${OMS_MOCK_FAIL_LOGIN:-0}" == "1" ]]; then
+    echo "Invalid username or password" >&2
+    exit 1
+  fi
+
+  echo "Login successful ($system, mock)"
+}
 
 cmd="${1:-}"
 subcmd="${2:-}"
 
 case "$cmd" in
   --version|-v)
-    echo "iam mock v0.0.1-dev"
+    echo "iam mock v0.2.0-dev"
     ;;
 
   auth)
-    if [[ "$subcmd" == "status" ]]; then
-      if [[ "${3:-}" == "-json" ]]; then
-        echo "{\"total\":$CRED_COUNT,\"credentials\":$CRED_JSON}"
-      else
-        # 文本格式
-        if [[ $CRED_COUNT -eq 0 ]]; then
-          echo "(no credentials)"
+    case "$subcmd" in
+      status)
+        if [[ "${3:-}" == "--json" ]]; then
+          # 真实契约：无 total 字段
+          echo "{\"credentials\":$(build_credentials_json)}"
+        elif [[ "${3:-}" == "-json" ]]; then
+          # 向后兼容（已废弃）
+          echo "⚠️  iam: -json 已废弃，请用 --json（双横线）" >&2
+          echo "{\"credentials\":$(build_credentials_json)}"
         else
-          echo "$MOCK_SYSTEM (logged)"
+          build_credentials_text
         fi
-      fi
-    else
-      echo "iam: unknown auth subcommand '$subcmd'" >&2
-      exit 1
-    fi
-    ;;
+        ;;
 
-  login)
-    # 解析 -u <user> -p <pass|->
-    username=""
-    password=""
-    read_stdin=0
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        -u|--username) username="$2"; shift 2 ;;
-        -p|--password)
-          if [[ "$2" == "-" ]]; then
-            read_stdin=1
-          else
-            password="$2"
-          fi
-          shift 2 ;;
-        *) shift ;;
-      esac
-    done
+      login)
+        do_login "${@:3}"
+        ;;
 
-    if [[ $read_stdin -eq 1 ]]; then
-      read -r password
-    fi
+      logout)
+        echo "Logout successful (mock)"
+        ;;
 
-    if [[ -z "$username" || -z "$password" ]]; then
-      echo "iam: missing username or password" >&2
-      exit 1
-    fi
-
-    # 模拟错误密码（设 OMS_MOCK_FAIL_LOGIN=1 强制失败）
-    if [[ "${OMS_MOCK_FAIL_LOGIN:-0}" == "1" ]]; then
-      echo "Invalid username or password" >&2
-      exit 1
-    fi
-
-    echo "Login successful (mock)"
-    ;;
-
-  logout)
-    echo "Logout successful (mock)"
+      *)
+        echo "iam: unknown auth subcommand '$subcmd'" >&2
+        echo "available: status, login, logout" >&2
+        exit 1
+        ;;
+    esac
     ;;
 
   whoami)
-    if [[ $CRED_COUNT -eq 0 ]]; then
+    creds="$(build_credentials_json)"
+    count="$(echo "$creds" | grep -c '"username"' || true)"
+    if [[ "$count" -eq 0 ]]; then
       echo "Not logged in" >&2
       exit 1
     fi
-    echo "Username: $MOCK_USER"
-    echo "System: $MOCK_SYSTEM"
+    echo "Logged in systems: $count"
     ;;
 
   ""|-h|--help)
     cat <<EOF
-iam mock v0.0.1-dev — 用于本地测试 oh-my-sdd 的模拟 CLI
+iam mock v0.2.0-dev — 对齐企业真实契约（2026-06-22）
 
 支持命令：
   iam --version
-  iam auth status [-json]
-  iam login -u <user> -p <pass|->
-  iam logout
+  iam auth status [--json]
+  iam auth login -u <user> -p <pass|-> --system <devops|gitee>
+  iam auth logout
   iam whoami
 
 环境变量：
-  OMS_MOCK_USER         用户名 (默认: alice)
-  OMS_MOCK_SYSTEM       system 名 (默认: sdd)
-  OMS_MOCK_LOGGED_OUT=1 模拟未登录状态
-  OMS_MOCK_FAIL_LOGIN=1 模拟登录失败
+  OMS_MOCK_USER_DEVOPS   devops 用户名 (默认: deepus)
+  OMS_MOCK_USER_GITEE    gitee 用户名 (默认: gituser)
+  OMS_MOCK_LOGGED_OUT=1  全部未登
+  OMS_MOCK_HALF_LOGIN=1  只登 devops（测试 NEED_LOGIN）
+  OMS_MOCK_FAIL_LOGIN=1  模拟密码错误
 EOF
     ;;
 

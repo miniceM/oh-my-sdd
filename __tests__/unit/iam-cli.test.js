@@ -19,8 +19,11 @@ function makeStubIam(output, exitCode = 0) {
   return dir;
 }
 
-test('getAuthStatus parses valid JSON', async (t) => {
-  const stubDir = makeStubIam('{"total":1,"credentials":[{"system":"sdd","username":"alice","status":"logged"}]}');
+test('getAuthStatus uses --json flag and parses credentials-only payload', async (t) => {
+  // 新契约：无 total 字段，credentials 元素有 is_api_key_true，无 system
+  const stubDir = makeStubIam(
+    '{"credentials":[{"username":"deepus","status":"logged","is_api_key_true":true},{"username":"gituser","status":"logged","is_api_key_true":false}]}'
+  );
   t.after(() => rmSync(stubDir, { recursive: true, force: true }));
   const oldPath = process.env.PATH;
   process.env.PATH = `${stubDir}:${process.env.PATH}`;
@@ -28,12 +31,15 @@ test('getAuthStatus parses valid JSON', async (t) => {
 
   const { getAuthStatus } = await import('../../hooks/lib/iam-cli.js?' + Date.now());
   const status = await getAuthStatus();
-  assert.equal(status.total, 1);
-  assert.equal(status.credentials[0].system, 'sdd');
+  assert.ok(Array.isArray(status.credentials));
+  assert.equal(status.credentials.length, 2);
+  assert.equal(status.credentials[0].username, 'deepus');
+  assert.equal(status.credentials[0].is_api_key_true, true);
+  // 新契约：不再有 total 字段（但解析层不应崩）
+  assert.equal(status.total, undefined);
 });
 
 test('getAuthStatus throws on command missing', async (t) => {
-  // Set PATH to empty so iam isn't found
   const oldPath = process.env.PATH;
   process.env.PATH = '/nonexistent';
   t.after(() => { process.env.PATH = oldPath; });
@@ -53,39 +59,77 @@ test('getAuthStatus throws on non-zero exit', async (t) => {
   await assert.rejects(() => getAuthStatus(), IamCliError);
 });
 
-test('getAuthStatus throws on invalid JSON output', async (t) => {
-  const stubDir = makeStubIam('not json');
+test('getAuthStatus throws on missing credentials field', async (t) => {
+  // 旧契约 stub（有 total 无 credentials）→ 应抛 IAM_SCHEMA_MISMATCH
+  const stubDir = makeStubIam('{"total":1}');
   t.after(() => rmSync(stubDir, { recursive: true, force: true }));
   const oldPath = process.env.PATH;
   process.env.PATH = `${stubDir}:${process.env.PATH}`;
   t.after(() => { process.env.PATH = oldPath; });
 
   const { getAuthStatus, IamCliError } = await import('../../hooks/lib/iam-cli.js?' + Date.now());
-  await assert.rejects(() => getAuthStatus(), IamCliError);
+  await assert.rejects(() => getAuthStatus(), (err) => {
+    assert.ok(err instanceof IamCliError);
+    assert.equal(err.code, 'IAM_SCHEMA_MISMATCH');
+    return true;
+  });
 });
 
-test('findUsernameForSystem returns matching username', async () => {
-  const { findUsernameForSystem } = await import('../../hooks/lib/iam-cli.js');
+test('isFullyAuthenticated returns true when all required systems logged', async () => {
+  const { isFullyAuthenticated } = await import('../../hooks/lib/iam-cli.js');
   const status = {
-    total: 2,
     credentials: [
-      { system: 'gitlab', username: 'alice', status: 'logged' },
-      { system: 'sdd',    username: 'alice', status: 'logged' },
+      { username: 'deepus',  status: 'logged', is_api_key_true: true  },
+      { username: 'gituser', status: 'logged', is_api_key_true: false },
     ],
   };
-  assert.equal(findUsernameForSystem(status, 'sdd'), 'alice');
+  assert.equal(isFullyAuthenticated(status, 2), true);
 });
 
-test('findUsernameForSystem falls back to first credential', async () => {
-  const { findUsernameForSystem } = await import('../../hooks/lib/iam-cli.js');
+test('isFullyAuthenticated returns false when fewer than required', async () => {
+  const { isFullyAuthenticated } = await import('../../hooks/lib/iam-cli.js');
   const status = {
-    total: 1,
-    credentials: [{ system: 'gitlab', username: 'bob', status: 'logged' }],
+    credentials: [
+      { username: 'deepus', status: 'logged', is_api_key_true: true },
+    ],
   };
-  assert.equal(findUsernameForSystem(status, 'sdd'), 'bob');
+  // 需 2 个系统，只有 1 个 → false
+  assert.equal(isFullyAuthenticated(status, 2), false);
 });
 
-test('findUsernameForSystem returns null on empty credentials', async () => {
-  const { findUsernameForSystem } = await import('../../hooks/lib/iam-cli.js');
-  assert.equal(findUsernameForSystem({ total: 0, credentials: [] }, 'sdd'), null);
+test('isFullyAuthenticated returns false when any credential not logged', async () => {
+  const { isFullyAuthenticated } = await import('../../hooks/lib/iam-cli.js');
+  const status = {
+    credentials: [
+      { username: 'deepus',  status: 'logged',    is_api_key_true: true  },
+      { username: 'gituser', status: 'expired',   is_api_key_true: false },
+    ],
+  };
+  assert.equal(isFullyAuthenticated(status, 2), false);
+});
+
+test('isFullyAuthenticated handles empty credentials', async () => {
+  const { isFullyAuthenticated } = await import('../../hooks/lib/iam-cli.js');
+  assert.equal(isFullyAuthenticated({ credentials: [] }, 2), false);
+  assert.equal(isFullyAuthenticated({}, 2), false);
+  assert.equal(isFullyAuthenticated(null, 2), false);
+});
+
+test('pickAnyLoggedUsername returns first logged username', async () => {
+  const { pickAnyLoggedUsername } = await import('../../hooks/lib/iam-cli.js');
+  const status = {
+    credentials: [
+      { username: 'deepus',  status: 'logged' },
+      { username: 'gituser', status: 'logged' },
+    ],
+  };
+  assert.equal(pickAnyLoggedUsername(status), 'deepus');
+});
+
+test('pickAnyLoggedUsername returns null when none logged', async () => {
+  const { pickAnyLoggedUsername } = await import('../../hooks/lib/iam-cli.js');
+  assert.equal(pickAnyLoggedUsername({ credentials: [] }), null);
+  assert.equal(pickAnyLoggedUsername({
+    credentials: [{ username: 'x', status: 'expired' }],
+  }), null);
 });

@@ -39,9 +39,11 @@ git add openspec/changes/<slug>/tasks.md
 git commit -m '[<change-id>] task: ring 3 refine - tasks细化'
 ```
 
-### 步骤 4：DOP 标记
+### 步骤 4：本地进度标记（不调 dop CLI）
 
-`dop change update <id> --status tasks-ready`；`.meta.json` 加 `"task_phase": "refined"`。
+真实 dop 没有 `change update`——进度记录到 `.meta.json`：
+
+`Edit("openspec/changes/<slug>/.meta.json")`：把 `dop_status` 设为 `"tasks-ready"`，加 `dop_status_at: <ISO timestamp>` 和 `"task_phase": "refined"`。
 
 ## 强制规则
 

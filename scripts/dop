@@ -1,25 +1,27 @@
 #!/usr/bin/env bash
-# scripts/dop — mock dop CLI 用于本地无 DOP 系统时跑通 SDD 流程
+# scripts/dop — mock 企业 dop CLI（对齐真实契约，2026-06-22 校准）
 #
-# 用法：
-#   ./scripts/dev-launch-claude.sh 启动 Claude Code（PATH 含 scripts/）
+# 真实契约（来自内网 `dop change --help`）：
+#   - dop change create / list / view  （只有这 3 个子命令，无 update）
+#   - 全局 flag：--endpoint string、-j/--json
+#   - 默认 endpoint：http://10.182.35.66
 #
-# 环境变量控制：
-#   OMS_MOCK_DOP_USER        用户名（默认 alice）
-#   OMS_MOCK_DOP_FAIL_GET    =1 时 change view 模拟失败（404）
-#   OMS_MOCK_DOP_FAIL_UPDATE =1 时 change update 模拟失败（500）
-#   OMS_MOCK_DOP_LOG         日志路径（默认 ~/.oh-my-sdd/logs/mock-dop.log）
+# 改造说明（2026-06-22，Q1=A 决策）：
+#   原 mock 的 `change update` 子命令已删除——真实 dop 不支持。
+#   skills 改为通过 .meta.json 本地记录进度，不再调 dop CLI 上报状态。
 #
 # 已知 change-id 测试数据：
-#   ARD123456  → "用户测试demo"（用户指定）
-#   ARD222222  → "信用卡积分兑换功能"（额外测试用例）
-#   其他 id    → 404 not found
+#   ARD123456  → "用户测试demo"
+#   ARD222222  → "信用卡积分兑换功能"
 
 set -euo pipefail
 
-VERSION="dop mock v0.0.1-dev"
+VERSION="dop mock v0.2.0-dev"
+DEFAULT_ENDPOINT="http://10.182.35.66"
 LOG_FILE="${OMS_MOCK_DOP_LOG:-$HOME/.oh-my-sdd/logs/mock-dop.log}"
 USER="${OMS_MOCK_DOP_USER:-alice}"
+ENDPOINT="$DEFAULT_ENDPOINT"
+JSON_MODE=0
 
 mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
 
@@ -27,19 +29,35 @@ log() {
   echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*" >> "$LOG_FILE"
 }
 
-# ============================================================
-# change view <id> — 返回变更详情
-# ============================================================
-change_view() {
-  local id="$1"
-  log "change view $id"
+change_list() {
+  log "change list (endpoint=$ENDPOINT json=$JSON_MODE)"
 
   if [[ "${OMS_MOCK_DOP_FAIL_GET:-0}" == "1" ]]; then
-    echo "❌ dop change view failed (forced, OMS_MOCK_DOP_FAIL_GET=1)" >&2
+    echo "❌ dop change list failed (forced)" >&2
     exit 1
   fi
 
-  # 按 id 返回特定测试数据。Agent 解析 JSON 输出提取字段。
+  cat <<EOF
+{
+  "user": "$USER",
+  "total": 2,
+  "changes": [
+    {"id": "ARD123456", "title": "用户测试demo", "status": "open", "type": "feature"},
+    {"id": "ARD222222", "title": "信用卡积分兑换功能", "status": "open", "type": "feature"}
+  ]
+}
+EOF
+}
+
+change_view() {
+  local id="$1"
+  log "change view $id (endpoint=$ENDPOINT json=$JSON_MODE)"
+
+  if [[ "${OMS_MOCK_DOP_FAIL_GET:-0}" == "1" ]]; then
+    echo "❌ dop change view failed (forced)" >&2
+    exit 1
+  fi
+
   case "$id" in
     ARD123456)
       cat <<EOF
@@ -85,110 +103,115 @@ EOF
   esac
 }
 
-# ============================================================
-# change update <id> --status <X> [--pr <URL>] — 标记状态
-# ============================================================
-change_update() {
-  local id="$1"
-  shift
-  local status=""
-  local pr=""
-
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --status) status="$2"; shift 2 ;;
-      --pr) pr="$2"; shift 2 ;;
-      *) shift ;;
-    esac
-  done
-
-  log "change update $id --status $status --pr ${pr:-N/A}"
+change_create() {
+  log "change create (endpoint=$ENDPOINT json=$JSON_MODE)"
 
   if [[ "${OMS_MOCK_DOP_FAIL_UPDATE:-0}" == "1" ]]; then
-    echo "❌ dop change update failed (forced, OMS_MOCK_DOP_FAIL_UPDATE=1)" >&2
+    echo "❌ dop change create failed (forced)" >&2
     exit 1
   fi
 
-  # 模拟成功响应（用 if/else 避免 bash 参数展开的转义陷阱）
-  local timestamp
-  timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  if [[ -n "$pr" ]]; then
-    cat <<EOF
-{
-  "id": "$id",
-  "status": "$status",
-  "pr_url": "$pr",
-  "updated_at": "$timestamp",
-  "updated_by": "$USER"
-}
-EOF
-  else
-    cat <<EOF
-{
-  "id": "$id",
-  "status": "$status",
-  "updated_at": "$timestamp",
-  "updated_by": "$USER"
-}
-EOF
-  fi
-}
-
-# ============================================================
-# change list — 列出当前用户名下所有可用变更
-# ============================================================
-change_list() {
-  log "change list"
-
-  if [[ "${OMS_MOCK_DOP_FAIL_GET:-0}" == "1" ]]; then
-    echo "❌ dop change list failed (forced)" >&2
-    exit 1
-  fi
-
-  # 返回当前用户的所有 open 状态 change（用于 /sdd-spec 让用户选）
+  # mock：生成新 change-id（格式 ARDdddddd）
+  local new_id="ARD$((100000 + RANDOM % 899999))"
   cat <<EOF
 {
-  "user": "$USER",
-  "total": 2,
-  "changes": [
-    {
-      "id": "ARD123456",
-      "title": "用户测试demo",
-      "status": "open",
-      "type": "feature"
-    },
-    {
-      "id": "ARD222222",
-      "title": "信用卡积分兑换功能",
-      "status": "open",
-      "type": "feature"
-    }
-  ]
+  "id": "$new_id",
+  "status": "open",
+  "type": "feature",
+  "owner": "$USER",
+  "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
+EOF
+}
+
+print_change_help() {
+  cat <<EOF
+Usage:
+  dop change [command]
+
+Available Commands:
+  create      Create a new system change
+  list        List system changes
+  view        View system change details
+
+Flags:
+  -h, --help   help for change
+
+Global Flags:
+      --endpoint string   API endpoint URL (overrides config) (default "$DEFAULT_ENDPOINT")
+  -j, --json             Enable JSON mode for request and response info.
+                        Force all output to valid JSON
+
+Use "dop change [command] --help" for more information about a command.
 EOF
 }
 
 # ============================================================
 # Main dispatch
 # ============================================================
-case "${1:-}" in
-  --version|-V)
-    echo "$VERSION"
+# 先解析全局 flag（原地修改 ENDPOINT 和 JSON_MODE），留下 subcmd 和它的参数
+REMAINING=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --endpoint)
+      ENDPOINT="$2"; shift 2 ;;
+    --endpoint=*)
+      ENDPOINT="${1#--endpoint=}"; shift ;;
+    -j|--json)
+      JSON_MODE=1; shift ;;
+    *)
+      REMAINING+=("$1"); shift ;;
+  esac
+done
+
+cmd="${REMAINING[0]:-}"
+subcmd="${REMAINING[1]:-}"
+
+case "$cmd" in
+  change)
+    case "$subcmd" in
+      list)   change_list ;;
+      view)   change_view "${REMAINING[2]:-}" ;;
+      create) change_create ;;
+      -h|--help|"") print_change_help ;;
+      *)
+        # 兼容已废弃的 update：明确告知用户
+        if [[ "$subcmd" == "update" ]]; then
+          cat >&2 <<EOF
+❌ dop change update 不存在。
+
+真实 dop CLI 只有 create / list / view 三个子命令（见 dop change --help）。
+oh-my-sdd 已迁移到 .meta.json 本地记录进度方案（Q1=A 决策）。
+
+如果你的 skill 还在调 change update，请更新到最新版本。
+EOF
+          exit 1
+        fi
+        echo "Error: unknown command \"dop change $subcmd\"" >&2
+        echo "Run 'dop change --help' for usage." >&2
+        exit 1
+        ;;
+    esac
     ;;
-  --help|-h)
+
+  -h|--help|"")
     cat <<EOF
-dop mock CLI — 模拟企业 DOP 系统的本地测试工具
+dop mock CLI v0.2.0-dev — 对齐企业真实契约（2026-06-22）
 
-Usage: dop <command> [options]
+Usage:
+  dop [command]
 
-Commands:
-  --version              显示版本
-  --help                 显示帮助
-  change list            列出当前用户名下所有 open 变更
-  change view <id>       查看变更详情
-  change update <id>     更新变更状态
-    --status <X>           spec-in-progress | plan-ready | tasks-ready | apply-done | review-done
-    --pr <URL>             关联 PR URL (可选)
+Available Commands:
+  change      Manage system changes (create / list / view)
+
+Flags:
+  -h, --help   help for dop
+
+Global Flags:
+      --endpoint string   API endpoint URL (default "$DEFAULT_ENDPOINT")
+  -j, --json             Enable JSON mode
+
+Use "dop [command] --help" for more information about a command.
 
 已知测试 change-id:
   ARD123456              "用户测试demo"
@@ -197,29 +220,16 @@ Commands:
 环境变量:
   OMS_MOCK_DOP_USER        用户名（默认 alice）
   OMS_MOCK_DOP_FAIL_GET    =1 时 change view/list 模拟失败
-  OMS_MOCK_DOP_FAIL_UPDATE =1 时 change update 模拟失败
+  OMS_MOCK_DOP_FAIL_UPDATE =1 时 change create 模拟失败
   OMS_MOCK_DOP_LOG         日志路径（默认 ~/.oh-my-sdd/logs/mock-dop.log）
 
-日志: $LOG_FILE
+注意: change update 子命令已被移除（对齐真实 dop）。
 EOF
     ;;
-  change)
-    shift
-    subcmd="${1:-}"
-    shift || true
-    case "$subcmd" in
-      list) change_list ;;
-      view) change_view "${1:-}" ;;
-      update) change_update "$@" ;;
-      *) echo "未知子命令: dop change $subcmd" >&2; exit 1 ;;
-    esac
-    ;;
-  "")
-    echo "dop mock: 缺少命令。运行 dop --help 查看用法。" >&2
-    exit 1
-    ;;
+
   *)
-    echo "dop mock: 未知命令 $1" >&2
+    echo "Error: unknown command \"$cmd\" for \"dop\"" >&2
+    echo "Run 'dop --help' for usage." >&2
     exit 1
     ;;
 esac
