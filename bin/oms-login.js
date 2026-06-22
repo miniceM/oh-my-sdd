@@ -79,7 +79,7 @@ async function main() {
       process.exit(1);
     }
 
-    // Q4 决策：oh-my-sdd-login 自动登录 devops + gitee 两个系统，不让用户选
+    // Q4 决策：oms-login 自动登录 devops + gitee 两个系统，不让用户选
     // Q3 决策：两个都必须登录，否则下次 session-start 会 NEED_LOGIN
     const systems = [
       { name: 'devops', critical: true  },

@@ -49,17 +49,16 @@ export function isIamInPath() {
   if (isWindows()) {
     // Windows: `where iam` 通常能查 PATHEXT 里的所有扩展名（.exe/.cmd/.bat）。
     // 但如果 PATHEXT 被改或 iam 是非标准扩展，显式多试几种更稳。
-    // 加 5s timeout 防 PATH 里 UNC/网络路径响应慢导致整体 hang。
     for (const name of ['iam', 'iam.exe', 'iam.cmd', 'iam.bat']) {
       try {
-        execFileSync('where', [name], { stdio: 'ignore', timeout: 5_000 });
+        execFileSync('where', [name], { stdio: 'ignore' });
         return true;
       } catch { /* try next */ }
     }
     return false;
   }
   try {
-    execFileSync('which', ['iam'], { stdio: 'ignore', timeout: 5_000 });
+    execFileSync('which', ['iam'], { stdio: 'ignore' });
     return true;
   } catch {
     return false;

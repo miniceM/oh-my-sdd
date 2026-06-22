@@ -156,7 +156,7 @@ async function main({ purge = false } = {}) {
     announce('');
     announce('✓ oh-my-sdd 已卸载');
     announce('  状态文件保留在 ~/.oh-my-sdd/，重装可复用');
-    announce('  彻底清理请运行：oh-my-sdd-uninstall --purge');
+    announce('  彻底清理请运行：oms-uninstall --purge');
   }
 }
 

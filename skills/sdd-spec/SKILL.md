@@ -13,7 +13,7 @@ argument-hint: [change-id 或变更描述，可选]
 
 ### 步骤 1：前置检查
 
-- **iam 校验**：`Bash("iam auth status --json")`。未授权（credentials 不足 2 个或非全 logged）→ 提示 `oh-my-sdd-login`，**停止**
+- **iam 校验**：`Bash("iam auth status --json")`。未授权（credentials 不足 2 个或非全 logged）→ 提示 `oms-login`，**停止**
 - **openspec 检查**：`Bash("openspec --version")`。未装 → **阻塞**
 - **dop 检查**：`Bash("dop change list")`。未装 → 警告（用自然语言模式）。dop 是**只读数据源**（真实 dop 无 update 子命令）
 - **gh 检查**：`Bash("gh --version")`。未装 → 警告（跳过 issue/分支）

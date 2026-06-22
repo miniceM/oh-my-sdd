@@ -104,22 +104,10 @@ export async function getAuthStatus({ timeoutMs } = {}) {
 }
 
 export async function login(username, password, system = 'devops') {
-  // 真实 iam auth login --help 输出（2026-06-22 校准）：
-  //   Flags:
-  //     -u, --user string        Username
-  //     -p, --password string    Password (default, optional)
-  //     -s, --system string      System to use (devops | gitee) (default "devops")
-  //   Examples:
-  //     iam auth login --user $USER
-  //
-  // 真实 iam 不传 --password 时进入交互式 prompt（default, optional）
-  // 我们通过 stdin 喂密码模拟用户输入——比 --password <value> 更安全
-  // （密码不出现在进程列表 / shell history）
-  //
-  // 注意：之前传 `-p -` 把字面 "-" 当密码，必须删掉
+  // stdin pipes password to avoid leaking in process list / shell history
   const result = await runIam(
-    ['auth', 'login', '--user', username, '--system', system],
-    { input: password + '\n', timeoutMs: 30_000 }
+    ['auth', 'login', '-u', username, '-p', '-', '--system', system],
+    { input: password + '\n' }
   );
   if (result.exitCode === 0) {
     return { ok: true };

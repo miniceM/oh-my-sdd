@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // bin/oms-welcome.js — oh-my-sdd 欢迎页渲染器
 //
-// 可被任何 CLI 调用显示欢迎页（当前由 oh-my-sdd-login 成功后调用）。
+// 可被任何 CLI 调用显示欢迎页（当前由 oms-login 成功后调用）。
 // 风格：openspec 极简直白——ASCII art Logo + 等宽字体 + 命令清单。
 //
 // Usage:

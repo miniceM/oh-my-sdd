@@ -3,7 +3,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { mkdir, access, constants, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 
 import { checkNodeVersion, getStateDir, isIamInPath } from './hooks/lib/platform.js';
@@ -21,18 +21,10 @@ const USER_CLAUDE_MD = path.join(os.homedir(), '.claude', 'CLAUDE.md');
 const BEGIN_MARKER = '<!-- BEGIN oh-my-sdd:enterprise-baseline -->';
 const END_MARKER = '<!-- END oh-my-sdd:enterprise-baseline -->';
 
-// announce writes progress to stdout.
-//
-// Why stdout (not stderr):
-//   - Windows PowerShell sometimes swallows child-process stderr
-//   - Direct CLI runs (oms-install) want stdout
-//   - npm postinstall historically swallowed stdout — modern npm (7+) shows it
-//     with `npm install --foreground-scripts`. README documents this.
-//
-// If a future npm version regresses and swallows stdout silently, users can
-// always run `node install.js` directly to see all output.
+// announce writes user-facing messages to stderr so npm postinstall doesn't
+// swallow them. npm hides postinstall stdout on success; stderr always shows.
 function announce(msg) {
-  process.stdout.write(msg + '\n');
+  process.stderr.write(msg + '\n');
 }
 
 async function preflight() {
@@ -47,7 +39,7 @@ async function preflight() {
   // openspec 是 spec 保鲜的核心——/sdd-review 归档阶段必须用它 merge delta
   const cmd = process.platform === 'win32' ? 'where' : 'which';
   try {
-    execFileSync(cmd, ['openspec'], { stdio: 'ignore', timeout: 5_000 });
+    execFileSync(cmd, ['openspec'], { stdio: 'ignore' });
   } catch {
     process.stderr.write('⚠️  未检测到 openspec CLI。可继续安装，但 /sdd-review 归档阶段会阻塞。\n');
     process.stderr.write('    安装：npm install -g @fission-ai/openspec\n');
@@ -56,18 +48,9 @@ async function preflight() {
 }
 
 function isClaudeInstalled() {
-  if (process.platform === 'win32') {
-    // Windows: claude 通常是 npm shim (.cmd)。多试几种扩展名，应对 PATHEXT 被改的情况。
-    for (const name of ['claude', 'claude.exe', 'claude.cmd', 'claude.bat']) {
-      try {
-        execFileSync('where', [name], { stdio: 'ignore', timeout: 5_000 });
-        return true;
-      } catch { /* try next */ }
-    }
-    return false;
-  }
+  const cmd = process.platform === 'win32' ? 'where' : 'which';
   try {
-    execFileSync('which', ['claude'], { stdio: 'ignore', timeout: 5_000 });
+    execFileSync(cmd, ['claude'], { stdio: 'ignore' });
     return true;
   } catch {
     return false;
@@ -76,45 +59,13 @@ function isClaudeInstalled() {
 
 function runClaude(args) {
   return new Promise((resolve) => {
-    const isWin = process.platform === 'win32';
-    // Windows: claude 是 npm shim (.cmd)，必须用 shell:true 让 cmd.exe 解析。
-    // Unix: 直接 spawn。
-    const child = spawn('claude', args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      shell: isWin,
-    });
+    const child = spawn('claude', args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
-    let settled = false;
     child.stdout.on('data', (c) => { stdout += c; });
     child.stderr.on('data', (c) => { stderr += c; });
-
-    // 30s timeout：claude plugin install 一般 < 10s，超时说明 hang 了。
-    // 超时后杀子进程，返回错误而不是让整个 install 永远卡住。
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      try { child.kill('SIGKILL'); } catch { /* noop */ }
-      resolve({
-        code: -1,
-        stdout,
-        stderr: stderr + `\n⏱ claude 命令超时 (30s)，已强制终止`,
-      });
-    }, 30_000);
-    timer.unref?.();
-
-    child.on('close', (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve({ code, stdout, stderr });
-    });
-    child.on('error', (err) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve({ code: -1, stdout, stderr: err.message });
-    });
+    child.on('close', (code) => resolve({ code, stdout, stderr }));
+    child.on('error', (err) => resolve({ code: -1, stdout: '', stderr: err.message }));
   });
 }
 
@@ -209,16 +160,13 @@ async function installPlugin() {
 }
 
 async function main() {
-  // 早输出：让用户立即知道程序启动了。如果后续步骤 hang，至少能看到"卡在哪一步"。
-  announce(`→ oh-my-sdd 安装开始（${process.platform}/${process.arch}，Node ${process.version}）`);
-
-  announce('→ 检查 Node 版本与 iam CLI');
   await preflight();
+  announce('→ 检查 Node 版本与 iam CLI');
 
   if (!isClaudeInstalled()) {
-    process.stdout.write('\n❌ 未检测到 claude CLI。请手动执行：\n');
-    process.stdout.write(`  claude plugin marketplace add ${PACKAGE_ROOT}\n`);
-    process.stdout.write(`  claude plugin install ${PLUGIN_NAME}@${MARKETPLACE_NAME}\n`);
+    process.stderr.write('\n❌ 未检测到 claude CLI。请手动执行：\n');
+    process.stderr.write(`  claude plugin marketplace add ${PACKAGE_ROOT}\n`);
+    process.stderr.write(`  claude plugin install ${PLUGIN_NAME}@${MARKETPLACE_NAME}\n`);
     process.exit(1);
   }
 
@@ -243,16 +191,8 @@ async function main() {
   announce('  3. 在新会话里使用 /sdd-spec 等命令');
 }
 
-// Only run main when invoked directly, not when imported.
-//
-// CRITICAL Windows fix: original `import.meta.url === \`file://${process.argv[1]}\``
-// never matched on Windows because process.argv[1] is "C:\path\to\install.js"
-// (backslashes, no file:// prefix) while import.meta.url is
-// "file:///C:/path/to/install.js" (forward slashes, file:// prefix).
-// This caused postinstall to silently no-op on Windows.
-//
-// pathToFileURL() normalizes both sides to the same URL format cross-platform.
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+// Only run main when invoked directly, not when imported
+if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch((err) => {
     process.stderr.write(`❌ 安装失败：${err.stack ?? err.message}\n`);
     process.exit(1);

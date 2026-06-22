@@ -15,7 +15,7 @@
 npm install -g --foreground-scripts @cli-tools/oh-my-sdd
 
 # 2. 完成 iam 身份认证（首次）
-oh-my-sdd-login
+oms-login
 
 # 3. 重启 Claude Code，开始使用
 #    /sdd-spec <change-name>
@@ -50,7 +50,7 @@ oh-my-sdd-login
 ```bash
 npm uninstall -g @cli-tools/oh-my-sdd
 # 或彻底清理：
-oh-my-sdd-uninstall --purge
+oms-uninstall --purge
 ```
 
 ## 设计文档
