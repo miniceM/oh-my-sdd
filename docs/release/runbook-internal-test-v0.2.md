@@ -18,7 +18,7 @@
 | **iam JSON 结构** | 删 `total` 字段；删 `system` 字段；加 `is_api_key_true` | 🔴 高 |
 | **iam 登录命令** | `iam login` → `iam auth login --system <X>` | 🟡 中（flag 名是猜的） |
 | **iam 判定逻辑** | "任意 logged" → "≥2 个且全 logged"（devops + gitee） | 🟡 中（依赖多账号语义） |
-| **oms-login** | 自动登 devops + gitee，不让用户选 | 🟢 低 |
+| **oh-my-sdd-login** | 自动登 devops + gitee，不让用户选 | 🟢 低 |
 | **dop `change update`** | **删除**（真实 dop 只有 create/list/view） | 🔴 高（skills 全改成写 .meta.json） |
 | **dop 全局 flag** | 加 `--endpoint` / `-j` | 🟢 低 |
 | **5 个 skill 进度上报** | `dop change update` → 写 `.meta.json` 的 `dop_status` 字段 | 🟡 中 |
@@ -78,23 +78,23 @@
 
 **分支 A3-2：`credentials.length === 0`（明明登录过）**
 - 检查是否登错系统（`iam auth status` 文本格式应显示已登系统名）
-- 重新 `oms-login`
+- 重新 `oh-my-sdd-login`
 
 **分支 A4-1：`--system` flag 不存在**
 - 看 `--help` 找等价 flag（如 `-s`、`--target`、`--subsystem`）
 - 改 `hooks/lib/iam-cli.js` 的 `login()` 函数：`['auth', 'login', '-u', ..., '--system', system]`
-- 改 `bin/oms-login.js`（如果改了 login 函数签名）
+- 改 `bin/oh-my-sdd-login.js`（如果改了 login 函数签名）
 
 ---
 
-### Phase B：oms-login 两系统自动登录（10 分钟）
+### Phase B：oh-my-sdd-login 两系统自动登录（10 分钟）
 
 **前置**：Phase A 通过。
 
 | 步骤 | 命令 | 期望 |
 |------|------|------|
 | B1 | `iam auth logout`（如有）| 清掉之前的凭据 |
-| B2 | `oms-login` | 提示"用户名:" |
+| B2 | `oh-my-sdd-login` | 提示"用户名:" |
 | B3 | 输入用户名，回车 | 提示"密码:"（隐藏输入） |
 | B4 | 输入密码，回车 | 看到 `✓ devops 系统登录成功` + `✓ gitee 系统登录成功` |
 | B5 | `iam auth status --json` | credentials 数组有 2 条 |
@@ -133,7 +133,7 @@
 **分支 C3-1：不含"企业 SDD Agent"**
 - baseline 没注入
 - 检查 `~/.claude/CLAUDE.md` 是否有 BEGIN/END 标记
-- 跑 `oms-install` 重新注入
+- 跑 `oh-my-sdd-install` 重新注入
 - 查 `~/.oh-my-sdd/sessions/` 看 session meta 的 `state` 字段
 
 ---

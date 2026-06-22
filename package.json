@@ -5,9 +5,9 @@
   "type": "module",
   "main": "install.js",
   "bin": {
-    "oms-install": "./bin/oms-install.js",
-    "oms-uninstall": "./bin/oms-uninstall.js",
-    "oms-login": "./bin/oms-login.js"
+    "oh-my-sdd-install": "./bin/oms-install.js",
+    "oh-my-sdd-uninstall": "./bin/oms-uninstall.js",
+    "oh-my-sdd-login": "./bin/oms-login.js"
   },
   "scripts": {
     "postinstall": "node install.js",

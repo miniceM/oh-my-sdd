@@ -26,7 +26,7 @@ const END_MARKER = '<!-- END oh-my-sdd:enterprise-baseline -->';
 // Why both:
 //   - npm postinstall swallows stdout on success → stderr carries the message
 //   - Windows PowerShell sometimes swallows child-process stderr → stdout carries it
-//   - Direct CLI runs (oms-install) → stdout is the natural stream
+//   - Direct CLI runs (oh-my-sdd-install) → stdout is the natural stream
 //
 // Duplication is intentional and harmless in all three scenarios. Users see
 // each message once in their terminal regardless of platform.
@@ -42,7 +42,7 @@ async function preflight() {
   }
   if (!(await isIamInPath())) {
     process.stderr.write('⚠️  未检测到 iam CLI。可继续安装，但首次会话将提示安装。\n');
-    process.stderr.write('    安装后请运行 oms-login 完成身份认证。\n');
+    process.stderr.write('    安装后请运行 oh-my-sdd-login 完成身份认证。\n');
   }
   // openspec 是 spec 保鲜的核心——/sdd-review 归档阶段必须用它 merge delta
   const cmd = process.platform === 'win32' ? 'where' : 'which';
@@ -52,6 +52,36 @@ async function preflight() {
     process.stderr.write('⚠️  未检测到 openspec CLI。可继续安装，但 /sdd-review 归档阶段会阻塞。\n');
     process.stderr.write('    安装：npm install -g @fission-ai/openspec\n');
     process.stderr.write('    作用：archive 时 merge delta 到 openspec/specs/，保持项目 specs 反映系统现状\n');
+  }
+}
+
+// 检测 PATH 里是否有同名企业 oms-* 工具。
+// 如果有，提示用户用 oh-my-sdd-* 新名字（避免 Windows PATH 撞车）。
+function detectNamingConflicts() {
+  const isWin = process.platform === 'win32';
+  const cmd = isWin ? 'where' : 'which';
+  const conflicts = [];
+  for (const name of ['oms-install', 'oms-login', 'oms-uninstall']) {
+    try {
+      const result = execFileSync(cmd, [name], { encoding: 'utf8', timeout: 5_000 });
+      const paths = result.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      // 过滤掉我们自己 npm 装的 shim
+      const external = paths.filter(p => !p.includes('oh-my-sdd') && !p.includes('@cli-tools'));
+      if (external.length > 0) {
+        conflicts.push({ name, paths: external });
+      }
+    } catch { /* not found, no conflict */ }
+  }
+  if (conflicts.length > 0) {
+    process.stderr.write('\n⚠️  检测到 PATH 里有同名企业工具（命名冲突）：\n');
+    for (const c of conflicts) {
+      process.stderr.write(`     • ${c.name} → ${c.paths[0]}\n`);
+    }
+    process.stderr.write('   这会导致 `oms-install` / `oms-login` 命令调到企业工具而非我们。\n');
+    process.stderr.write('   请改用新命令名：\n');
+    process.stderr.write('     • `oh-my-sdd-install` (替代 oms-install)\n');
+    process.stderr.write('     • `oh-my-sdd-login`    (替代 oms-login)\n');
+    process.stderr.write('     • `oh-my-sdd-uninstall` (替代 oms-uninstall)\n\n');
   }
 }
 
@@ -212,6 +242,10 @@ async function main() {
   await preflight();
   announce('→ 检查 Node 版本与 iam CLI');
 
+  // 检测 PATH 里是否有同名企业工具（oms-install/oms-login/oms-uninstall）
+  // 命名冲突会让用户跑错工具，我们主动提示用新名字 oh-my-sdd-*
+  detectNamingConflicts();
+
   if (!isClaudeInstalled()) {
     process.stderr.write('\n❌ 未检测到 claude CLI。请手动执行：\n');
     process.stderr.write(`  claude plugin marketplace add ${PACKAGE_ROOT}\n`);
@@ -235,7 +269,7 @@ async function main() {
   announce('✓ oh-my-sdd 安装完成');
   announce('');
   announce('下一步：');
-  announce('  1. 运行 `oms-login` 完成 iam 身份认证');
+  announce('  1. 运行 `oh-my-sdd-login` 完成 iam 身份认证');
   announce('  2. 重启 Claude Code (或 /reload-plugins)');
   announce('  3. 在新会话里使用 /sdd-spec 等命令');
 }

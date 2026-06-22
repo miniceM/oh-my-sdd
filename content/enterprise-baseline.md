@@ -46,4 +46,4 @@
 - **`skills/api-design`**：REST/RPC 接口设计、错误码、版本兼容规范
 - **`skills/security-check`**：输入验证、授权校验、数据加密、合规扫描、服务熔断
 - **`skills/doc-writer`**：API 文档、README、变更日志模板
-- 命令清单：`oms-login` 认证、`oms-install`/`oms-uninstall` 管理插件
+- 命令清单：`oh-my-sdd-login` 认证、`oh-my-sdd-install`/`oh-my-sdd-uninstall` 管理插件

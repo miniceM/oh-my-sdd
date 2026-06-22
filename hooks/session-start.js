@@ -92,7 +92,7 @@ async function buildAdditionalContext(authState) {
     case 'NEED_LOGIN':
       return await readContent('auth-required.md');
     case 'NO_CLI':
-      return `⚠️ **未检测到 iam CLI**\n\n请先安装 iam（企业统一身份认证 CLI），然后运行 \`oms-login\` 完成认证。`;
+      return `⚠️ **未检测到 iam CLI**\n\n请先安装 iam（企业统一身份认证 CLI），然后运行 \`oh-my-sdd-login\` 完成认证。`;
     case 'ERROR':
       return `⚠️ **iam 服务异常**\n\n${authState.err?.message ?? ''}\n\n联系企业管理员。`;
     default:

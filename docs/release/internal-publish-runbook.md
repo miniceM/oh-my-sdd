@@ -163,9 +163,9 @@ tar -tzf cli-tools-oh-my-sdd-0.1.0.tgz | sort
 package/.claude-plugin/marketplace.json
 package/.claude-plugin/plugin.json
 package/README.md
-package/bin/oms-install.js
-package/bin/oms-login.js
-package/bin/oms-uninstall.js
+package/bin/oh-my-sdd-install.js
+package/bin/oh-my-sdd-login.js
+package/bin/oh-my-sdd-uninstall.js
 package/commands/sdd-apply.md
 package/commands/sdd-plan.md
 package/commands/sdd-review.md
@@ -347,7 +347,7 @@ claude
 
 【新安装】
   npm install -g --foreground-scripts @cli-tools/oh-my-sdd
-  oms-login  # 用 iam 凭据登录
+  oh-my-sdd-login  # 用 iam 凭据登录
   # 重启 Claude Code
 
 【已安装用户】
@@ -423,7 +423,7 @@ npm unpublish @cli-tools/oh-my-sdd@0.1.0 --registry=https://npm.enterprise.com/
 让用户跑：
 ```bash
 # 诊断
-oms-doctor 2>&1 || node $(npm root -g)/@cli-tools/oh-my-sdd/bin/oms-install.js
+oms-doctor 2>&1 || node $(npm root -g)/@cli-tools/oh-my-sdd/bin/oh-my-sdd-install.js
 
 # 卸载重装
 npm uninstall -g @cli-tools/oh-my-sdd

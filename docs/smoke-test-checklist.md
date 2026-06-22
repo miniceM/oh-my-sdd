@@ -5,8 +5,8 @@
 ## 安装与认证
 
 - [ ] 1. `npm install -g @cli-tools/oh-my-sdd`（无报错）
-- [ ] 2. `oms-install` 在已装状态下重跑（升级场景）
-- [ ] 3. `oms-login` 交互式输入用户名密码，看到 "✓ 登录成功"
+- [ ] 2. `oh-my-sdd-install` 在已装状态下重跑（升级场景）
+- [ ] 3. `oh-my-sdd-login` 交互式输入用户名密码，看到 "✓ 登录成功"
 - [ ] 4. `iam auth status -json` 显示 credentials 含 sdd system
 
 ## Claude Code 会话

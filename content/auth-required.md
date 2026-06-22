@@ -5,7 +5,7 @@
 **完成认证：**
 
 ```bash
-oms-login
+oh-my-sdd-login
 # 或交互式：iam login -u <你的用户名> -p <你的密码>
 ```
 

@@ -6,7 +6,7 @@ REM   call scripts\set-mock-env.cmd
 REM
 REM 注入后可跑：
 REM   claude                                  REM 启动 Claude Code
-REM   node bin\oms-login.js                    REM 测试登录流程
+REM   node bin\oh-my-sdd-login.js                    REM 测试登录流程
 REM   iam auth status --json                   REM 直接调 mock iam
 REM   dop change view ARD123456                REM 直接调 mock dop
 

@@ -5,7 +5,7 @@
 **3 步开始：**
 
 1. 确认 `iam` CLI 已安装：`iam --version`
-2. 完成身份认证：`oms-login`（交互式输入用户名/密码）
+2. 完成身份认证：`oh-my-sdd-login`（交互式输入用户名/密码）
 3. 重启 Claude Code
 
 之后你将可以使用：
