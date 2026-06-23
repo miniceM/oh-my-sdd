@@ -13,7 +13,7 @@ argument-hint: [slug 或 change-id]
 
 **前置检查**：tasks.md 必须存在（先 /sdd-plan）。
 
-## 你的工作流
+## 工作流
 
 ### 步骤 1：前置检查 + 跳过判断
 
@@ -55,7 +55,7 @@ git commit -m '[<change-id>] task: ring 3 refine - tasks细化'
 - ❌ 禁止改 design.md / specs/*.md
 - ❌ 禁止 `git add -A`
 
-## 何时跳过此命令（绝大多数情况）
+## 何时不应使用
 
 - tasks.md 粒度合适 → 直接 `/sdd-apply`
 - 用户没明确要求细化 → 直接 `/sdd-apply`

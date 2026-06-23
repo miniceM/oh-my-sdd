@@ -9,7 +9,7 @@ argument-hint: [change-id 或变更描述，可选]
 **前置依赖**：`iam`（必需）、`openspec`（必需）、`dop`（只读）、`gh`（推荐）。
 **不调 `/opsx:propose`**——直调 openspec CLI 避免重复创建 change。
 
-## 你的工作流
+## 工作流
 
 ### 步骤 1：前置检查
 

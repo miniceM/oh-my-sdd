@@ -11,7 +11,7 @@ argument-hint: [slug 或 change-id]
 
 **前置检查**：`openspec/changes/<slug>/proposal.md` + `specs/*.md` 必须存在（先 /sdd-spec）。
 
-## 你的工作流
+## 工作流
 
 ### 步骤 1：前置检查
 
