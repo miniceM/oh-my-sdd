@@ -1,6 +1,6 @@
 ---
 name: sdd-plan
-description: 当用户在 SDD 流程中已完成 spec（proposal + delta specs）、需要交互式产 design + tasks 时使用。SDD Ring 2。委托 superpowers:brainstorming（会自动 chain 到 writing-plans）。
+description: 本 skill 在用户说"做 plan"/"写 design"/"拆任务"/"brainstorming"或已完成 spec 需要交互式产 design + tasks 时使用。SDD Ring 2——委托 superpowers:brainstorming（自动 chain 到 writing-plans）。
 argument-hint: [slug 或 change-id]
 ---
 

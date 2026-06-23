@@ -1,6 +1,6 @@
 ---
 name: api-design
-description: 设计 REST/gRPC API、写 OpenAPI spec、评审接口设计、选中间件（缓存/MQ/RPC）、规划项目结构时使用。金融行业强约束项目会优先加载统一报文规范。
+description: 本 skill 在用户说"设计 API"/"写 OpenAPI"/"评审接口"/"选中间件"/"规划项目结构"时使用。涵盖 REST/gRPC 设计、版本管理、错误码、统一报文规范、自研框架约束、中间件选型（缓存/MQ/RPC）。金融行业强约束项目优先加载统一报文/多库规范。
 ---
 
 # API 设计 Skill

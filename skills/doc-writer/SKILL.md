@@ -1,6 +1,6 @@
 ---
 name: doc-writer
-description: 企业文档写作规范。在写 README、API 文档、变更说明时主动使用。
+description: 本 skill 在用户说"写 README"/"写 API 文档"/"写变更日志"/"写 release notes"/"写用户指南"时使用。涵盖文档模板、措辞规范、受众适配（开发者/运维/最终用户）。
 ---
 
 # 企业文档写作 Skill

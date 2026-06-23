@@ -1,16 +1,15 @@
 ---
 name: sdd-task
-description: 极少使用——仅当 /sdd-plan 产出的 tasks.md 粒度过粗（每个 task > 30 分钟）时才用。SDD Ring 3 可选环节。99% 情况请直接 /sdd-apply。
+description: 本 skill 在 /sdd-plan 产出的 tasks.md 粒度过粗（单 task > 30 分钟）需要拆细时使用。SDD Ring 3 可选环节——粒度合适时直接用 /sdd-apply 即可，无需经过本环。
 argument-hint: [slug 或 change-id]
 ---
 
-# /sdd-task —— SDD 第 3 环：任务细化（可选，极少用）
+# /sdd-task —— SDD 第 3 环：任务细化（可选环节）
 
-> ⚠️ **99% 情况应跳过此命令**。
+> **默认跳过此命令**——/sdd-plan 已通过 brainstorming → writing-plans 链产出 tasks.md，粒度通常合适。
 >
-> /sdd-plan 已通过 brainstorming → writing-plans 链产出 tasks.md（粒度通常合适）。
-> 仅当 tasks.md 里某些 task 明显过大（> 30 分钟）且用户明确反馈"粒度不够细"时才用。
-> 否则 → 直接 `/sdd-apply <slug>`。
+> 仅当 tasks.md 里某些 task 明显过大（> 30 分钟）且用户明确反馈"粒度不够细"时才用本环。
+> 粒度合适时直接 `/sdd-apply <slug>`。
 
 **前置检查**：tasks.md 必须存在（先 /sdd-plan）。
 

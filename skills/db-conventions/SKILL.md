@@ -1,6 +1,6 @@
 ---
 name: db-conventions
-description: 涉及数据库、Schema、连接池、迁移、分库分表、SQL 优化、池化技术（线程池/连接池/缓存池）时使用。金融行业强约束项目会优先加载多库合并规范。
+description: 本 skill 在用户说"设计表"/"加索引"/"配连接池"/"SQL 优化"/"分库分表"/"线程池"时使用。涵盖数据库选型、Schema 设计、池化技术（线程池/连接池/缓存池）、金融行业多库规范（MySQL/Oracle/GaussDB/OceanBase/达梦）。
 ---
 
 # 数据库规范 Skill

@@ -1,6 +1,6 @@
 ---
 name: testing-strategy
-description: 涉及测试、单测、单元测试、覆盖率、TDD、测试分层、Mock、E2E 时使用。代码含业务逻辑时应主动加载——覆盖率是企业基线要求。
+description: 本 skill 在用户说"写测试"/"加单测"/"覆盖率"/"TDD"/"测试分层"/"E2E"/"Mock"时使用。代码含业务逻辑时应主动加载——覆盖率 ≥ 80% 是企业基线要求。
 ---
 
 # 测试策略 Skill

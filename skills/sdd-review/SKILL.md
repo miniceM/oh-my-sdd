@@ -1,6 +1,6 @@
 ---
 name: sdd-review
-description: 当用户在 SDD 流程中已完成实现、需要验证 + 创建 PR + 归档时使用。SDD Ring 5。两阶段——默认创建 PR，--finalize 在 PR merge 后做 openspec archive。委托 superpowers:requesting-code-review。
+description: 本 skill 在已完成实现、用户说"创建 PR"/"code review"/"归档"/"跑测试"/"finalize"或调用 /sdd-review 时使用。SDD Ring 5——两阶段：默认创建 PR，--finalize 在 PR merge 后做 openspec archive。委托 superpowers:requesting-code-review。
 argument-hint: [slug 或 change-id] 或 --finalize [slug 或 change-id]
 ---
 
