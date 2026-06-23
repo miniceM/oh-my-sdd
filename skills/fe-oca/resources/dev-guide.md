@@ -150,16 +150,14 @@ proxy: {
 ```
 
 ### 强制检查项
+
+> **红线规则**（禁止打印隐私、禁止硬编码密码/AK/SK、async/await try-catch、入参校验、防重复提交）详见 SKILL.md "核心规则"段——这里是完整 PR review 检查清单。
+
 - ✅ ESLint 配置（`eslint-config-zyfp-base`）
 - ✅ SonarQube 质量门禁
-- ✅ async/await 使用 try-catch
 - ✅ 日志控制（测试环境有，生产环境无）
-- ✅ 入参合法性校验
-- ✅ 防重复提交机制
 - ✅ 静态资源 CDN 加载
-- ❌ 禁止打印隐私信息（phone、card）
 - ❌ 禁止本地存储用户隐私数据
-- ❌ 禁止前端硬编码密码、AK/SK
 
 ### 命名规范
 
