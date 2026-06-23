@@ -42,8 +42,11 @@
 
 ## 参考
 
-详细规范按需查阅：
-- **`skills/api-design`**：REST/RPC 接口设计、错误码、版本兼容规范
-- **`skills/security-check`**：输入验证、授权校验、数据加密、合规扫描、服务熔断
-- **`skills/doc-writer`**：API 文档、README、变更日志模板
+详细规范按需查阅（用 Skill 工具触发对应 skill）：
+- **`api-design`**：REST/gRPC 接口设计、错误码、版本兼容、中间件选型、项目结构
+- **`security-check`**：OWASP Top 10、加密/TLS、金融行业错误码、密钥管理
+- **`db-conventions`**：数据库选型、Schema 设计、池化技术、金融行业多库规范
+- **`business-modeling`**：DDD、聚合根、领域事件、限界上下文
+- **`testing-strategy`**：测试金字塔、覆盖率、TDD、测试数据
+- **`doc-writer`**：API 文档、README、变更日志模板
 - 命令清单：`oms-login` 认证、`oms-install`/`oms-uninstall` 管理插件

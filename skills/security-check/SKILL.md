@@ -1,111 +1,51 @@
 ---
 name: security-check
-description: 企业安全审计规范。在写涉及用户输入、鉴权、密钥、网络的代码时主动使用。
+description: 写涉及用户输入、鉴权、密钥、网络、加密、错误码、合规的代码时使用。包含 OWASP Top 10 检查项 + 企业安全红线 + 金融行业错误码规范。
 ---
 
-# 企业安全审计 Skill
+# 安全审计 Skill
 
-写涉及用户输入、鉴权、密钥、网络的代码时，强制按本规范自检与互检。目标：在 PR 评审阶段拦截 80% 以上的常见安全缺陷，减少上线后被安全团队打回的概率。
+写涉及用户输入、鉴权、密钥、网络的代码时强制按本规范自检。
 
-## OWASP Top 10 检查项
+## 加载决策
+
+| 任务 | Read 这个 resource |
+|------|------------------|
+| 加密算法、TLS、会话超时、熔断、日志安全、漏洞修复 SLA、许可证合规 | `resources/security-conventions.md` |
+| **金融行业错误码格式**（15 位 `系统.模块.业务`，如 `NCM.CTM.BMN0001`）、流水号规范 | `resources/enterprise-business-rules.md` |
+
+## OWASP Top 10 快速自查（无需 Read resources）
 
 ### A01 失效的访问控制
-- 每个端点必须显式鉴权，不允许"默认放行 + 显式拦截"
-- 资源访问必须校验主体归属（`if resource.ownerId != ctx.userId → 403`），不能只校验登录
-- 越权测试：A 用户的 token 必须不能读/写 B 用户的资源（IDOR 漏洞）
-- 管理后台接口必须单独 role check，不能与普通接口共用一个中间件
+- 每个端点必须显式鉴权；资源访问必须校验归属（owner check）
+- 越权测试：A 的 token 必须不能读/写 B 的资源（IDOR）
 
 ### A02 加密失败
-- HTTP 对外必须强制 TLS 1.2+（禁用 TLS 1.0/1.1、SSLv3）
-- 内部服务间通信生产环境必须 mTLS
-- 密码必须用 bcrypt/scrypt/argon2，禁止 MD5/SHA1/裸 SHA256
-- 敏感字段（身份证、手机号）DB 层加密存储；日志输出必须脱敏（`138****1234`）
-- JWT 签名必须用 RS256/ES256，禁止 `alg: none`、禁止 HS256 + 弱密钥
+- HTTP 对外强制 TLS 1.2+；密码用 bcrypt/scrypt/argon2
+- 敏感字段（身份证、手机号）DB 加存储 + 日志脱敏（`138****1234`）
+- JWT 用 RS256/ES256，禁止 `alg: none` / HS256 + 弱密钥
 
 ### A03 注入
-- SQL：必须用参数化查询 / ORM prepared statement，禁止字符串拼接 SQL
-- 命令：必须用 `execFile(file, [args])` 形式，禁止 `exec("ls " + userInput)`
-- NoSQL：用户输入禁止直接作为查询条件对象（`{$gt: ""}` 注入）
-- LDAP/XML：禁用动态拼接，用库提供的转义接口
+- SQL 必须参数化；命令必须 `execFile(file, [args])`，禁止 `exec("ls " + userInput)`
 
 ### A04 不安全设计
-- 关键流程（注册、支付、找回密码）必须有 rate limit + 验证码 / 行为校验
-- 一次性 token（激活码、重置码）必须随机生成、单次有效、短 TTL（≤ 15 分钟）
-- 业务逻辑漏洞自检：负数转账、并发抢购、重复提交
+- 关键流程必须有 rate limit + 验证码；一次性 token 必须 random + 短 TTL（≤ 15 分钟）
 
 ### A05 安全配置错误
-- 默认账号 / 默认密码 / 默认密钥必须改（数据库、中间件、CI runner）
-- 错误页禁止返回 stack trace、SQL、内网路径（生产关闭 debug）
-- 目录列表、`.git`、`.env`、备份文件必须禁止访问
-- CORS：禁止 `Access-Control-Allow-Origin: *` 配合 `Allow-Credentials: true`
+- 默认账号/密码/密钥必须改；错误页禁返回 stack trace；CORS 禁 `*` + `Credentials: true`
 
-### A06 易受攻击的组件
-- `package-lock.json` / `requirements.txt` 必须固定版本
-- CI 跑 `npm audit` / `pip-audit` / `snyk`，Critical/High 必须修
-- 引入新依赖前查 license 与维护状态（star/最近 commit/已知 CVE）
+### A06-A10
+- 依赖固定版本 + `npm audit`；登录失败锁定；反序列化关 default typing；audit log；SSRF 防护（解析→白名单→IP 校验）
 
-### A07 身份认证失败
-- 登录失败 5 次锁定 15 分钟，锁定后不暴露"用户存在"信号
-- 密码重置链接一次性 + IP 校验 + 短 TTL
-- Session/JWT 必须支持吊销（黑名单或 jti + 状态表）
-- 多因素：高权限操作（资金、密钥管理）强制 MFA
+## 密钥管理（红线）
 
-### A08 软件与数据完整性失败
-- 反序列化（Java Jackson/Python pickle）必须关 `default typing` / 禁用 pickle
-- CI/CD 流水线产物必须签名验证（SBOM + sigstore）
-- 第三方 webhook 必须验签
+- ❌ 禁止硬编码密钥（包括"临时调试"）
+- ❌ 禁止把密钥 commit 进 git（`.env` 必须在 `.gitignore`）
+- ❌ 禁止把密钥打印到日志、错误响应
+- ✅ 统一从 KMS / Vault / Secrets Manager 读取
+- ✅ 轮换机制（≤ 90 天）+ dev/staging/prod 隔离
 
-### A09 日志与监控失败
-- 登录、鉴权失败、敏感操作、配置变更必须打 audit log
-- 日志禁止打印密码、token、身份证、卡号（即使 debug 级也不行）
-- 日志必须含 `traceId`、`userId`、`ip`、`userAgent`
+## 何时不应使用
 
-### A10 服务端请求伪造（SSRF）
-- 用户输入的 URL 抓取必须先解析 → 解析后域名白名单 → 解析后 IP 检查（拒绝 `127.0.0.1`、`169.254.x`、内网段、`0.0.0.0`、十进制 IP）
-- 二次 DNS 绑定攻击防护：解析后再发请求前再校验一次实际 IP
-
-## 密钥管理
-
-- ❌ 禁止把密钥/Token 写死在代码里（包括"临时调试"）
-- ❌ 禁止把密钥 commit 进 git（`.env` 必须 `.gitignore`，预提交 hook 跑 `gitleaks`/`detect-secrets`）
-- ❌ 禁止把密钥打印到日志、错误响应、debug 信息
-- ✅ 密钥统一从 KMS / Vault / AWS Secrets Manager / Doppler 读取
-- ✅ 密钥必须有轮换机制（默认 ≤ 90 天），代码不直接持有密钥，运行时拉取
-- ✅ 不同环境（dev/staging/prod）必须用不同密钥集，禁止共享
-- ✅ 密钥泄露应急预案：1 小时内吊销 + 重新签发 + 全量审计调用日志
-
-## 网络安全
-
-### TLS / 证书
-- 对外服务必须 TLS 1.2+，证书有效期 ≤ 90 天（自动续期），过期告警
-- 客户端（脚本/SDK）必须开启证书校验，禁止 `verify=false` / `INSECURE_SKIP_VERIFY`
-- 内部 mTLS：所有跨服务调用强制双向证书，证书由内部 CA 签发
-
-### 超时与限流
-- 所有 HTTP 调用必须设 connect timeout ≤ 5s、read timeout ≤ 30s，禁止默认无限等
-- 入口网关必须配 rate limit（按 IP / userId / API），关键接口更严
-- 调用下游必须有熔断（Hystrix/Resilience4j），失败率 > 50% 触发降级
-
-### 输入校验
-- 所有外部输入（path/query/body/header）必须在边界层做 schema 校验（joi/zod/pydantic）
-- 字符串长度、数字范围、枚举集合必须显式约束，禁止"传啥就用啥"
-- 文件上传必须校验 magic number + 大小 + 类型白名单，不能只看扩展名
-- 富文本/HTML 入库前必须消毒（DOMPurify / bleach），输出必须转义
-
-## 权限边界
-
-- 最小权限原则：服务账号只申请必需的 scope，禁止 `*:*`
-- DB 账号读写分离，应用账号禁止 DDL（`CREATE/ALTER/DROP`）
-- CI/CD runner 不持有 prod 凭证，部署通过临时 OIDC token
-- 凡是访问其他用户数据的操作，必须走"授权委托"表，不能默认全权代理
-
-## 自检清单（PR 前必过）
-
-- [ ] 没有把密钥/Token 写进代码或日志
-- [ ] 所有外部输入都过了 schema 校验
-- [ ] 所有 SQL/命令都用了参数化
-- [ ] 所有写接口都做了 owner check
-- [ ] 所有 HTTP 调用都设了超时
-- [ ] 所有密码 / 敏感字段都做了加密或脱敏
-- [ ] 新增依赖没有 Critical/High CVE
-- [ ] 错误响应不泄露内部信息
+- 纯前端表单校验（产品需求，不是安全规范）
+- UI 权限展示（前端组件，不是后端授权）
