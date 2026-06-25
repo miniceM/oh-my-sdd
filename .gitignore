@@ -7,3 +7,5 @@ dist/
 coverage/
 .oh-my-sdd/
 *.tgz
+__pycache__/
+*.pyc
