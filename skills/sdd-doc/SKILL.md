@@ -2,6 +2,7 @@
 name: sdd-doc
 description: 把 openspec spec 产物（proposal + delta specs）转成符合企业格式的 Word 需求规格说明书（.docx，含封面/信息表/修订记录表/目录/正文 + 页眉页脚页码）。当用户提到"生成 Word/导出文档/出需求规格说明书/转 Word/归档 spec/spec 转 Word/出评审材料/打印需求文档/规格书导出"等需求时使用——即使用户没明确说"Word"，只要意图是把 spec 阶段产出变成可评审/归档/流转的正式文档就应触发。
 argument-hint: [change-slug，可选；缺省自动推断唯一未归档 change]
+allowed-tools: Bash(python3 *)
 ---
 
 # /sdd-doc —— SDD 规格文档导出（spec → 企业格式 Word）
@@ -31,7 +32,7 @@ argument-hint: [change-slug，可选；缺省自动推断唯一未归档 change]
 ### 步骤 2：执行生成
 
 ```bash
-python3 skills/sdd-doc/sdd_doc.py <slug> [--project "项目标题"] [--capability-names "auth=认证,user=用户管理"]
+python3 ${CLAUDE_SKILL_DIR}/sdd_doc.py <slug> [--project "项目标题"] [--capability-names "auth=认证,user=用户管理"]
 ```
 
 脚本自动完成：
