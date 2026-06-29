@@ -53,6 +53,85 @@ npm uninstall -g @cli-tools/oh-my-sdd
 oms-uninstall --purge
 ```
 
+## 强制约束体系（洋葱模型）
+
+oh-my-sdd 采用 **7 层洋葱模型** 实现强制约束，借鉴自 spec-kit 的 Constitution 体系。每一层从外到内逐步收紧，核心原则是"安全 > 合规 > 稳定 > 效率"。
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Layer 7: CI gate                                   │ ← 测试守护 baseline 完整性
+│  (constitution-integrity.test.js + lint)            │
+├─────────────────────────────────────────────────────┤
+│  Layer 6: Amendment 治理                            │ ← /sdd-constitution SemVer 修订流程
+│  (sdd-constitution skill + Sync Impact Report)      │
+├─────────────────────────────────────────────────────┤
+│  Layer 5: Mandatory hooks                           │ ← PreToolUse hard gate (真正阻断)
+│  (pre-tool-use.js: HARD deny / SOFT warn)           │
+├─────────────────────────────────────────────────────┤
+│  Layer 4: Analyze CRITICAL                          │ ← /sdd-review 自动升级 HARD_RULE 违反
+│  (sdd-review skill + OVERRIDE 扫描)                 │
+├─────────────────────────────────────────────────────┤
+│  Layer 3: Plan gate                                 │ ← /sdd-plan 强制 Constitution Check 节
+│  (sdd-plan skill + design.md 必须含规则清单)         │
+├─────────────────────────────────────────────────────┤
+│  Layer 2: 注入层                                    │ ← system prompt 注入 baseline
+│  (wrapper --append-system-prompt-file)              │
+├─────────────────────────────────────────────────────┤
+│  Layer 1: 数据层                                    │ ← 版本化治理文档
+│  (enterprise-baseline.md + frontmatter)             │
+└─────────────────────────────────────────────────────┘
+```
+
+### 各层详解
+
+**Layer 1: 数据层**
+- 文件：`content/enterprise-baseline.md`
+- 格式：YAML frontmatter（`oms_version` / `ratified` / `last_amended`）+ Sync Impact Report + 正文
+- 版本化：SemVer bump 流程（MAJOR=原则重定义，MINOR=新原则，PATCH=措辞）
+- Token 预算：正文 ≤ 1000 token（`scripts/check-baseline-tokens.mjs` 校验）
+
+**Layer 2: 注入层**
+- 路径：`wrappers/claude.sh` / `wrappers/claude.ps1` → `claude` 命令入口
+- 机制：通过 `--append-system-prompt-file` 参数自动注入 `rules/enterprise-baseline.md`
+- 安装：npm postinstall 自动安装 wrapper 到 `~/.local/bin/`（无需管理员权限）
+- 绕过：`claude --no-enterprise` 可临时跳过企业约束
+
+**Layer 3: Plan gate**
+- Skill：`/sdd-plan`
+- 强制：`design.md` 必须含 `## Constitution Check` 节
+- 内容：列出本 change 触发的 HARD_RULE / SOFT_RULE + 合规策略
+
+**Layer 4: Analyze CRITICAL**
+- Skill：`/sdd-review`
+- 规则：HARD_RULE 违反自动标 Critical，SOFT_RULE 标 Important
+- 逃生舱：PR 描述写 `[OVERRIDE] <规则名>: <理由>` 可降级
+
+**Layer 5: Mandatory hooks**
+- 钩子：`hooks/pre-tool-use.js`（PreToolUse，工具执行前）
+- 硬阻断：`permissionDecision: "deny"` 阻止违规 Edit/Write 落盘
+- 规则集：5 HARD（AK/SK 硬编码、`rm -rf /`、`git push --force` 到 main、`.env` 直编）+ 2 SOFT（README 缺 Quick Start、公共 API 缺 docstring）
+- Fail-safe：规则引擎异常时 deny（而非绕过）
+
+**Layer 6: Amendment 治理**
+- Skill：`/sdd-constitution`
+- 流程：8 步修订（读 baseline → 收集变更 → SemVer bump → 更新 frontmatter → Sync Report → 一致性检查 → 写回 → lint）
+- 留痕：每次修订更新 `last_amended` + Sync Impact Report
+
+**Layer 7: CI gate**
+- 测试：`__tests__/integration/constitution-integrity.test.js`
+- 校验：frontmatter 字段齐全 + 正文 ≤ 1000 token + marker 幂等
+
+### 安全优先级
+
+遇到规则冲突时按此排序裁决：**安全 > 合规 > 稳定 > 效率**
+
+- **HARD_RULE**（不可覆盖）：违反会被 PreToolUse hook 阻断或 `/sdd-review` 标 Critical
+- **SOFT_RULE**（可显式覆盖）：违反时须在 PR 写 `[OVERRIDE] <规则名>: <理由>`
+
+### Spike 验证记录
+
+PostToolUse 的 `permissionDecision: "deny"` 经 spike 验证无法阻断落盘（文件已写入）。PreToolUse 是正确的阻断机制。详见 `docs/spike-posttooluse-deny.md`。
+
 ## 设计文档
 
 完整设计见 `docs/superpowers/specs/2026-06-18-oh-my-sdd-design.md`。
