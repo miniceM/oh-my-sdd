@@ -8,6 +8,7 @@ import os from 'node:os';
 
 import { checkNodeVersion, getStateDir, isIamInPath } from './hooks/lib/platform.js';
 import { saveConfig, DEFAULT_CONFIG } from './hooks/lib/config.js';
+import { getBodyForInjection } from './hooks/lib/constitution.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = __dirname;
@@ -83,6 +84,12 @@ async function ensureStateDir() {
 // broken (Anthropic bug #16538), so this is the only reliable path.
 // Idempotent: replaces content between BEGIN/END markers; preserves user's
 // other CLAUDE.md content.
+//
+// The baseline file carries YAML frontmatter (oms_version/ratified/last_amended)
+// and a Sync Impact Report HTML comment for governance. Both are STRIPPED before
+// injection — frontmatter is metadata for parsers (check-baseline-tokens.mjs,
+// hooks/lib/constitution.js), not for the model. Injecting them would waste
+// system-prompt tokens and leak governance metadata into the conversation.
 async function injectBaseline() {
   const baselinePath = path.join(PACKAGE_ROOT, 'content', 'enterprise-baseline.md');
   let baseline;
@@ -94,7 +101,8 @@ async function injectBaseline() {
     return;
   }
 
-  const section = `${BEGIN_MARKER}\n${baseline.trim()}\n${END_MARKER}\n`;
+  const injectedBody = getBodyForInjection(baseline);
+  const section = `${BEGIN_MARKER}\n${injectedBody}\n${END_MARKER}\n`;
 
   let existing = '';
   if (existsSync(USER_CLAUDE_MD)) {

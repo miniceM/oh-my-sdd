@@ -19,6 +19,36 @@ argument-hint: [slug 或 change-id]
 - **读上游**（`Read`）：proposal.md、specs/*.md、`.meta.json`（change_id、delta_capabilities）
 - **读项目现状**：对每个 delta_capability，`Read("openspec/specs/<capability>/spec.md")`（如存在）
 
+### 步骤 1.5：Constitution Check（设计前 gate）
+
+> 本节是 design 阶段的合规门，**必须**在设计探索开始前完成，并在设计末尾再评估一次。
+
+- **加载 baseline**：调用 `loadBaseline("content/enterprise-baseline.md")`（hooks/lib/constitution.js），取 `body` 扫描 HARD_RULE/SOFT_RULE 清单
+- **规则触发判定**：根据 proposal.md + specs/*.md 的内容关键词匹配本 change 触发的规则。示例：
+  - spec 涉及凭据/AK/SK/token/密码/`.env`/私钥 → 触发"安全与合规底线 §1 密钥与凭据"HARD_RULE
+  - spec 涉及 `rm -rf`/`git push --force`/`drop database`/破坏性运维 → 触发"安全与合规底线 §5 越权命令"HARD_RULE
+  - spec 涉及新 commit/分支策略 → 触发"提交规范"HARD_RULE
+  - spec 涉及新 SDD 阶段流转/斜杠命令编排 → 触发"工具使用规范"SOFT_RULE
+  - spec 涉及异步/HTTP/数据库/公共 API/README → 触发"推荐架构实践"SOFT_RULE
+  - spec 涉及身份/能力/对外定位问答 → 触发"身份声明"HARD_RULE
+- **写 design.md 顶部 Constitution Check 节**（**强制**，照搬 spec-kit `templates/plan-template.md:39-43` 结构）：
+
+  ```markdown
+  ## Constitution Check
+  *GATE: Must pass before design phase. Re-check after design complete.*
+
+  **Triggered HARD_RULEs**:
+  - [列出本 change 触发的 HARD_RULE，引用 baseline 行号，如 "安全与合规底线 §1 密钥与凭据 (enterprise-baseline.md:36)"]
+
+  **Triggered SOFT_RULEs**:
+  - [列出本 change 触发的 SOFT_RULE，引用 baseline 行号]
+
+  **Compliance Plan**:
+  - [每条规则的合规策略，说明 design 如何满足或在 PR 中给出 [OVERRIDE] 理由]
+  ```
+
+- **未触发任何规则的兜底**：仍必须写 Constitution Check 节，明示 "No HARD_RULE/SOFT_RULE triggered by this change"，不得省略
+
 ### 步骤 2：格式约束（避免后续冲突）
 
 > **不要强行让 superpowers 用 openspec 模板**——会导致 /sdd-apply 阶段 task-brief 脚本找不到 task。
@@ -70,6 +100,15 @@ change-id 从 `.meta.json` 读。
 
 `Edit("openspec/changes/<slug>/.meta.json")`：把 `dop_status` 设为 `"plan-ready"`，加 `dop_status_at: <ISO timestamp>`。
 
+### 步骤 5.5：Constitution Check 再评估（设计后 gate）
+
+> 设计阶段完成后，再次扫描 design.md + tasks.md 的实际内容，捕捉 brainstorming 探索过程中新触发的规则。
+
+- 重新读 `content/enterprise-baseline.md`（`loadBaseline()`），对照 design.md 与 tasks.md 的关键词
+- 任何**新触发**的 HARD_RULE/SOFT_RULE 必须追加到 design.md 的 Constitution Check 节，并在 Compliance Plan 列补充合规策略
+- 若 design 期间有规则的合规策略发生变化（例如选择 `[OVERRIDE]`），同步更新
+- 若无新触发且无变更：在 design.md Constitution Check 节末尾追加一行 "Re-check at design complete: no new rules triggered"，明示已做二次校验
+
 ## 强制规则
 
 - ✅ iam 校验通过
@@ -78,6 +117,7 @@ change-id 从 `.meta.json` 读。
 - ✅ design.md + tasks.md 写到 `openspec/changes/<slug>/`
 - ✅ tasks.md 用 `### Task N:` + `- [ ]` checkbox
 - ✅ 步骤 4c 自动修正 commit message 格式
+- ✅ design.md 必须含 `## Constitution Check` 节（缺失则 plan 失败）
 - ❌ 禁止写到 `docs/superpowers/`
 - ❌ 禁止跳过 brainstorming 的用户 approve 步骤
 - ❌ 禁止改 specs/*.md / proposal.md（都是 input）

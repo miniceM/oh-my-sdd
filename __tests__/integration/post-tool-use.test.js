@@ -93,3 +93,23 @@ test('post-tool-use ignores non-edit tools', async (t) => {
   const meta = JSON.parse(readFileSync(path.join(tmpHome, '.oh-my-sdd', 'sessions', 's3.json'), 'utf8'));
   assert.equal(Object.keys(meta.files_touched).length, 0); // unchanged
 });
+
+test('post-tool-use returns {} when session meta missing (short-circuit)', async (t) => {
+  const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ptu-'));
+  t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
+  // No session meta created — hook should short-circuit to {} without error
+  mkdirSync(path.join(tmpHome, '.oh-my-sdd', 'sessions'), { recursive: true });
+
+  const result = await runHook(
+    {
+      session_id: 'no-meta',
+      cwd: '/tmp',
+      tool_name: 'Edit',
+      tool_input: { file_path: '/tmp/whatever.ts' },
+    },
+    { HOME: tmpHome, USERPROFILE: tmpHome }
+  );
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stdout.trim(), '{}');
+});

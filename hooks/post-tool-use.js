@@ -1,4 +1,11 @@
 #!/usr/bin/env node
+// PostToolUse session meta counter — runs AFTER the tool executes to record
+// which files were touched. Rules checking has been moved to pre-tool-use.js
+// (PreToolUse hook), which can actually block writes before they happen.
+//
+// This hook's job is now purely telemetry: increment files_touched counter
+// in session meta for DOP reporting and session-end analysis.
+
 import { readFile, writeFile } from 'node:fs/promises';
 
 import { sessionMetaPath } from './lib/platform.js';
@@ -44,6 +51,8 @@ async function main() {
     meta = JSON.parse(await readFile(p, 'utf8'));
   } catch (err) {
     if (err.code === 'ENOENT') {
+      // Session meta doesn't exist yet (e.g. auth failed, SessionStart skipped).
+      // Don't block; just return {} and let pre-tool-use handle rules independently.
       process.stdout.write('{}');
       return;
     }
@@ -59,6 +68,7 @@ async function main() {
   } catch (err) {
     warn(`写入 session meta 失败: ${err.message}`);
   }
+
   process.stdout.write('{}');
 }
 

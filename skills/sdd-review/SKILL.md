@@ -21,9 +21,37 @@ argument-hint: [slug 或 change-id] 或 --finalize [slug 或 change-id]
 - iam 校验；读 tasks.md（全勾选）+ .meta.json（change_id、分支名）
 - git status 干净；测试覆盖率 ≥ 80%
 
+### 步骤 1.5：Constitution Authority（委托 review 前置）
+
+**baseline 在本次 review 范围内不可协商。**违反 HARD_RULE 自动 CRITICAL，违反 SOFT_RULE 自动 Important。
+
+读 `content/enterprise-baseline.md`（可用 `hooks/lib/constitution.js` 的 `loadBaseline()` 解析 frontmatter/body/syncReport）。把每条规则翻译成 reviewer 的触发条件：
+
+- **HARD_RULE 清单**（自动 CRITICAL 触发条件）：
+  - 身份声明——代码/commit/PR 自称 "Claude"/"Claude Code"/"通用 AI 助手" 或仅以模型名（如 glm-5）作身份 → CRITICAL
+  - 安全与合规底线——硬编码 AK/SK/token/密码/`.env`/私钥；`.gitignore` 未排除 `*.key`/`*.pem`；日志/错误/DOP 输出敏感值未脱敏；跳过 `/sdd-review`；禁用 DOP 埋点；`rm -rf /`、`git push --force` 到 main、`drop database` 等破坏性操作未先确认范围 → CRITICAL
+  - 提交规范——commit 缺 change-id；type 不属 `feat`/`fix`/`docs`/`refactor`/`test`/`chore`/`spec`/`plan`/`task`/`review` → CRITICAL
+- **SOFT_RULE 清单**（自动 Important 触发条件）：
+  - 工具使用规范——进入 SDD 阶段未用对应斜杠命令（`/sdd-spec` → `/sdd-plan` → `/sdd-task` → `/sdd-apply` → `/sdd-review`）；用户说"开始做 X"未先 `/sdd-spec`；单次回复跑两个阶段命令 → Important
+  - 推荐架构实践——同步阻塞 I/O 误用；循环内 I/O；公共 API 缺文档注释；README 缺项目简介/快速开始/配置说明/使用示例 → Important
+
+把这些触发条件连同派给 code-reviewer 的范围一并传递。**Constitution 冲突 always CRITICAL**，不得降级、重新解释或静默忽略——若原则本身需要变更，须在独立的 baseline 更新 PR 处理，不在本 change 内协商。
+
 ### 步骤 2：委托 superpowers:requesting-code-review
 
 派 code-reviewer 审整支分支（main → 当前分支）。收集 findings（Critical/Important/Minor）。**Critical/Important 未修 → 停止，提示先 `/sdd-apply` 继续**。
+
+### 步骤 2.5：OVERRIDE 扫描（委托 review 之后）
+
+读本 change 关联的 PR 描述与所有 commit message（PR 通常由步骤 4 创建；若尚未创建，扫分支上 `git log main..HEAD --format=%B%n%b` 的 commit body + PR template 草稿）。查找 `[OVERRIDE] <规则名>: <理由>` 标记。规则：
+
+- **有 HARD_RULE 违反，但 PR/commit 无对应 `[OVERRIDE]` 标记** → 直接 **Critical**（不得降级，不得合并）
+- **有 `[OVERRIDE]` 标记但理由模糊（< 20 字或泛泛如"业务需要"/"临时方案"）** → 降为 **Important**，要求补全理由或撤回违反
+- **有 `[OVERRIDE]` 标记且理由清晰（≥ 20 字，含具体场景与权衡）** → 降为 **Minor**，在 review 报告中记录"已留痕"，仍需 maintainer 知情
+
+**严重级别优先级**：Constitution violations always CRITICAL（与 spec-kit `analyze.md:248` 对齐），除非有合规的 OVERRIDE 留痕。OVERRIDE 不豁免规则——只是把级别降档并写入审计轨迹；baseline 本身的更新仍须独立 PR。
+
+将扫描结果合并进步骤 2 的 findings 列表后再决定是否阻断。
 
 ### 步骤 3：openspec validate
 
@@ -115,6 +143,8 @@ git push origin main
 - ✅ PR body 含 change-id 关联
 - ✅ DOP 标记（change-id 模式）
 - ✅ 测试覆盖率 ≥ 80%
+- ✅ review 必须读 baseline 的 HARD_RULE/SOFT_RULE 清单作为额外 Critical/Important 触发条件
+- ✅ review 必须扫描 PR 描述与 commit message 的 `[OVERRIDE]` 标记，无标记的 HARD_RULE 违反直接 Critical
 - ✅ 阶段 1 不做 archive；阶段 2 验证 PR merged 才 archive
 - ✅ archive 用 openspec archive（merge delta，保鲜生效）
 - ✅ 阶段 2 写 archive_done_at
