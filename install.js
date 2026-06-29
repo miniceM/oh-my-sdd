@@ -1,26 +1,17 @@
 #!/usr/bin/env node
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdir, access, constants, readFile, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { mkdir, access, constants } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import os from 'node:os';
 
 import { checkNodeVersion, getStateDir, isIamInPath } from './hooks/lib/platform.js';
 import { saveConfig, DEFAULT_CONFIG } from './hooks/lib/config.js';
-import { getBodyForInjection } from './hooks/lib/constitution.js';
+import { installWrapper, findClaudeOriginal } from './hooks/lib/wrapper.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = __dirname;
 const MARKETPLACE_NAME = 'oh-my-sdd';
 const PLUGIN_NAME = 'oh-my-sdd';
-
-// CLAUDE.md baseline injection — plugin's own CLAUDE.md is NOT auto-loaded,
-// and plugin SessionStart hook additionalContext is silently dropped (Anthropic
-// bug #16538). The only reliable always-load path is the user-level CLAUDE.md.
-const USER_CLAUDE_MD = path.join(os.homedir(), '.claude', 'CLAUDE.md');
-const BEGIN_MARKER = '<!-- BEGIN oh-my-sdd:enterprise-baseline -->';
-const END_MARKER = '<!-- END oh-my-sdd:enterprise-baseline -->';
 
 // announce writes user-facing messages to stderr so npm postinstall doesn't
 // swallow them. npm hides postinstall stdout on success; stderr always shows.
@@ -33,7 +24,7 @@ async function preflight() {
     process.stderr.write(`❌ Node 版本过低。需要 >= 18.0.0，当前 ${process.version}\n`);
     process.exit(1);
   }
-  if (!(await isIamInPath())) {
+  if (!isIamInPath()) {
     process.stderr.write('⚠️  未检测到 iam CLI。可继续安装，但首次会话将提示安装。\n');
     process.stderr.write('    安装后请运行 oms-login 完成身份认证。\n');
   }
@@ -77,59 +68,6 @@ async function ensureStateDir() {
   } catch {
     await saveConfig(DEFAULT_CONFIG);
   }
-}
-
-// Inject baseline into ~/.claude/CLAUDE.md so it's auto-loaded into every
-// session's system prompt. Plugin SessionStart hook additionalContext is
-// broken (Anthropic bug #16538), so this is the only reliable path.
-// Idempotent: replaces content between BEGIN/END markers; preserves user's
-// other CLAUDE.md content.
-//
-// The baseline file carries YAML frontmatter (oms_version/ratified/last_amended)
-// and a Sync Impact Report HTML comment for governance. Both are STRIPPED before
-// injection — frontmatter is metadata for parsers (check-baseline-tokens.mjs,
-// hooks/lib/constitution.js), not for the model. Injecting them would waste
-// system-prompt tokens and leak governance metadata into the conversation.
-async function injectBaseline() {
-  const baselinePath = path.join(PACKAGE_ROOT, 'content', 'enterprise-baseline.md');
-  let baseline;
-  try {
-    baseline = await readFile(baselinePath, 'utf8');
-  } catch (err) {
-    process.stderr.write(`⚠️  读取 baseline 失败: ${err.message}\n`);
-    process.stderr.write('    CLAUDE.md 未注入。请检查 package 是否完整。\n');
-    return;
-  }
-
-  const injectedBody = getBodyForInjection(baseline);
-  const section = `${BEGIN_MARKER}\n${injectedBody}\n${END_MARKER}\n`;
-
-  let existing = '';
-  if (existsSync(USER_CLAUDE_MD)) {
-    try {
-      existing = await readFile(USER_CLAUDE_MD, 'utf8');
-    } catch (err) {
-      process.stderr.write(`⚠️  读取 ${USER_CLAUDE_MD} 失败: ${err.message}\n`);
-      return;
-    }
-  }
-
-  const beginIdx = existing.indexOf(BEGIN_MARKER);
-  const endIdx = existing.indexOf(END_MARKER);
-  let updated;
-  if (beginIdx >= 0 && endIdx > beginIdx) {
-    // Replace existing section (upgrade path)
-    const before = existing.slice(0, beginIdx);
-    const after = existing.slice(endIdx + END_MARKER.length);
-    updated = before + section + after;
-  } else {
-    // Append (new install)
-    updated = existing + (existing.endsWith('\n') || existing === '' ? '' : '\n') + '\n' + section;
-  }
-
-  await mkdir(path.dirname(USER_CLAUDE_MD), { recursive: true });
-  await writeFile(USER_CLAUDE_MD, updated);
-  announce(`  ✓ 已注入 baseline 到 ${USER_CLAUDE_MD}`);
 }
 
 async function registerMarketplace() {
@@ -187,16 +125,26 @@ async function main() {
   announce('→ 安装 plugin');
   await installPlugin();
 
-  announce('→ 注入 baseline 到 ~/.claude/CLAUDE.md');
-  await injectBaseline();
+  // 安装 Claude wrapper（自动注入企业规则）
+  const originalClaude = findClaudeOriginal();
+  if (originalClaude) {
+    announce('→ 安装 Claude CLI wrapper（企业规则自动注入）');
+    await installWrapper(PACKAGE_ROOT, announce);
+  } else {
+    announce('⚠️  Claude CLI wrapper 未安装（未找到原 Claude）');
+    announce('    安装 Claude CLI 后，运行 npm reinstall @cli-tools/oh-my-sdd');
+  }
 
   announce('');
   announce('✓ oh-my-sdd 安装完成');
   announce('');
   announce('下一步：');
-  announce('  1. 运行 `oms-login` 完成 iam 身份认证');
-  announce('  2. 重启 Claude Code (或 /reload-plugins)');
-  announce('  3. 在新会话里使用 /sdd-spec 等命令');
+  announce('  1. 重启终端（使 PATH 生效）');
+  announce('  2. 运行 `oms-login` 完成 iam 身份认证');
+  announce('  3. 重启 Claude Code (或 /reload-plugins)');
+  announce('  4. 测试企业约束: claude "你的身份是什么？"');
+  announce('');
+  announce('绕过企业约束: claude --no-enterprise ...');
 }
 
 // Only run main when invoked directly, not when imported

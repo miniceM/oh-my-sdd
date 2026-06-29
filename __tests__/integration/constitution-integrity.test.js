@@ -1,8 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -71,7 +70,7 @@ test('baseline body does not exceed 1000 token budget', async () => {
   console.log(`  body tokens: ${tokens} / 1000`);
 });
 
-// ---------- injection contract ----------
+// ---------- injection contract (for wrapper) ----------
 
 test('getBodyForInjection strips frontmatter + Sync Report', () => {
   const body = getBodyForInjection(readFileSync(BASELINE_PATH, 'utf8'));
@@ -80,46 +79,6 @@ test('getBodyForInjection strips frontmatter + Sync Report', () => {
   assert.match(body, /^# 企业 SDD Agent 基线/, 'injected body must start with heading');
   // Must not contain a YAML frontmatter block (---\n...\n---\n)
   assert.ok(!body.match(/^---[\s\S]*?\n---\n/), 'injected body must not contain YAML frontmatter block');
-});
-
-// ---------- install.js marker idempotency ----------
-
-const BEGIN_MARKER = '<!-- BEGIN oh-my-sdd:enterprise-baseline -->';
-const END_MARKER = '<!-- END oh-my-sdd:enterprise-baseline -->';
-
-test('install.js marker section is idempotent (double run does not duplicate)', async (t) => {
-  const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-integrity-'));
-  t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
-  mkdirSync(path.join(tmpHome, '.claude'), { recursive: true });
-
-  const baselineContent = readFileSync(BASELINE_PATH, 'utf8');
-  const injectedBody = getBodyForInjection(baselineContent);
-  const section = `${BEGIN_MARKER}\n${injectedBody}\n${END_MARKER}\n`;
-
-  const claudeMd = path.join(tmpHome, '.claude', 'CLAUDE.md');
-
-  // First install — section written
-  writeFileSync(claudeMd, '--- existing user content ---\n');
-  const existing = readFileSync(claudeMd, 'utf8');
-  // No markers yet
-  assert.ok(!existing.includes(BEGIN_MARKER));
-  const updated1 = existing + '\n' + section;
-  writeFileSync(claudeMd, updated1);
-
-  // Second install — section replaced, not duplicated
-  const existing2 = readFileSync(claudeMd, 'utf8');
-  const beginIdx2 = existing2.indexOf(BEGIN_MARKER);
-  const endIdx2 = existing2.indexOf(END_MARKER);
-  assert.ok(beginIdx2 >= 0 && endIdx2 > beginIdx2, 'markers must be found on second run');
-  const before = existing2.slice(0, beginIdx2);
-  const after = existing2.slice(endIdx2 + END_MARKER.length);
-  const updated2 = before + section + after;
-  writeFileSync(claudeMd, updated2);
-
-  // Count marker appearances — should be exactly 1
-  const final = readFileSync(claudeMd, 'utf8');
-  const count = final.split(BEGIN_MARKER).length - 1;
-  assert.equal(count, 1, 'double install must not duplicate marker section');
 });
 
 // ---------- lint script integration ----------
