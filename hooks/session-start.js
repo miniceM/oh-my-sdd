@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -241,7 +241,6 @@ async function checkForPluginUpdates(currentVersion) {
 }
 
 // 扫描 cwd/openspec/changes/ 找出 dop_status=pr-created 且未 archive 的变更
-import { readdir } from 'node:fs/promises';
 async function scanUnfinalizedReviews(cwd) {
   const changesDir = path.join(cwd, 'openspec', 'changes');
   let entries;
