@@ -7,7 +7,7 @@ import { findClaudeOriginal } from '../hooks/lib/wrapper.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, '..');
-const PLUGIN_NAME = 'oh-my-sdd';
+const PLUGIN_NAME = 'oh-my-sdd@oh-my-sdd';
 
 // 超时配置
 const NPM_TIMEOUT_MS = 60_000;  // npm install 可能较慢
