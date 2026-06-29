@@ -9,6 +9,7 @@ import { reportOrEnqueue, flush, shouldSkipTelemetry } from './lib/dop-client.js
 import { loadConfig } from './lib/config.js';
 import { debug, warn, error } from './lib/log.js';
 import { getStateDir, sessionMetaPath } from './lib/platform.js';
+import { checkForUpdates, buildUpdateNotification } from './lib/update-check.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT ?? path.resolve(__dirname, '..');
@@ -155,13 +156,25 @@ async function main() {
   if (!stdin.cwd) stdin.cwd = process.cwd();
   if (!stdin.session_id) stdin.session_id = `oms-${Date.now()}`;
 
-  const authState = await getAuthState();
+  const pluginVersion = await readPluginVersion();
+
+  // 并行执行认证检查和更新检测（非阻塞）
+  const [authState, updateInfo] = await Promise.all([
+    getAuthState(),
+    checkForPluginUpdates(pluginVersion),
+  ]);
+
   const additionalContext = await buildAdditionalContext(authState);
 
   debug(`session-start 认证状态: ${authState.state}`);
 
   if (authState.state !== 'OK') {
     process.stderr.write(`⚠️ oh-my-sdd: 认证状态 ${authState.state}\n`);
+  }
+
+  // 输出更新通知
+  if (updateInfo?.hasUpdate) {
+    process.stderr.write(updateInfo.stderr);
   }
 
   if (authState.state === 'OK') {
@@ -194,13 +207,37 @@ async function main() {
     }
   }
 
+  // 构建最终 additionalContext
+  let finalContext = additionalContext;
+  if (updateInfo?.hasUpdate) {
+    finalContext += updateInfo.additionalContext;
+  }
+  if (unfinalizedReminder) {
+    finalContext += `\n\n---\n${unfinalizedReminder}`;
+  }
+
   const output = {
-    additionalContext: unfinalizedReminder
-      ? `${additionalContext}\n\n---\n${unfinalizedReminder}`
-      : additionalContext,
+    additionalContext: finalContext,
     hookSpecificOutput: { hookEventName: 'SessionStart' },
   };
   process.stdout.write(JSON.stringify(output));
+}
+
+// 更新检测（非阻塞）
+async function checkForPluginUpdates(currentVersion) {
+  try {
+    const result = await checkForUpdates({ currentVersion });
+    if (result.hasUpdate && result.latestVersion && result.bump) {
+      return buildUpdateNotification({
+        currentVersion: result.currentVersion,
+        latestVersion: result.latestVersion,
+        bump: result.bump,
+      });
+    }
+  } catch (err) {
+    debug(`更新检测错误（非阻塞）: ${err.message}`);
+  }
+  return null;
 }
 
 // 扫描 cwd/openspec/changes/ 找出 dop_status=pr-created 且未 archive 的变更

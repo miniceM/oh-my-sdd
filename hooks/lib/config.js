@@ -7,6 +7,10 @@ export const DEFAULT_CONFIG = {
   required_systems: 2,  // devops + gitee（Q3 决策：两个都必须登录）
   log_level: 'info',
   telemetry_disabled: false,
+  // 更新检测配置
+  npm_registry: 'https://npm.enterprise.com',
+  update_check_interval_days: 1,  // 每天检测一次
+  update_check_disabled: false,
 };
 
 function configPath() {
