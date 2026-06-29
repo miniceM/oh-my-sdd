@@ -7,8 +7,11 @@ import { findClaudeOriginal } from '../hooks/lib/wrapper.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, '..');
-const MARKETPLACE_NAME = 'oh-my-sdd';
 const PLUGIN_NAME = 'oh-my-sdd';
+
+// 超时配置
+const NPM_TIMEOUT_MS = 60_000;  // npm install 可能较慢
+const CLAUDE_TIMEOUT_MS = 30_000;
 
 // announce 输出到 stderr
 function announce(msg) {
@@ -23,30 +26,45 @@ function success(msg) {
   process.stderr.write(`✓ ${msg}\n`);
 }
 
-// 运行 Claude 命令
-function runClaude(args) {
+// 运行命令（带超时）
+function runCommand(cmd, args, timeoutMs) {
   return new Promise((resolve) => {
-    const child = spawn('claude', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    timer.unref?.();
+
+    const child = spawn(cmd, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      signal: controller.signal,
+    });
+
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (c) => { stdout += c; });
     child.stderr.on('data', (c) => { stderr += c; });
-    child.on('close', (code) => resolve({ code, stdout, stderr }));
-    child.on('error', (err) => resolve({ code: -1, stdout: '', stderr: err.message }));
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr });
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      if (err.name === 'AbortError') {
+        resolve({ code: -1, stdout: '', stderr: `超时 (${timeoutMs}ms)` });
+      } else {
+        resolve({ code: -1, stdout: '', stderr: err.message });
+      }
+    });
   });
 }
 
-// 运行 npm 命令
+function runClaude(args) {
+  return runCommand('claude', args, CLAUDE_TIMEOUT_MS);
+}
+
 function runNpm(args) {
-  return new Promise((resolve) => {
-    const child = spawn('npm', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (c) => { stdout += c; });
-    child.stderr.on('data', (c) => { stderr += c; });
-    child.on('close', (code) => resolve({ code, stdout, stderr }));
-    child.on('error', (err) => resolve({ code: -1, stdout: '', stderr: err.message }));
-  });
+  return runCommand('npm', args, NPM_TIMEOUT_MS);
 }
 
 // 步骤 1: npm install 更新包
@@ -62,50 +80,28 @@ async function updateNpmPackage() {
   return true;
 }
 
-// 步骤 2: 卸载旧 plugin
-async function uninstallPlugin() {
-  announce('→ 卸载旧 plugin');
-  const result = await runClaude(['plugin', 'uninstall', `${PLUGIN_NAME}@${MARKETPLACE_NAME}`]);
+// 步骤 2: 更新 plugin（使用 claude plugin update）
+async function updatePlugin() {
+  announce('→ 更新 plugin');
+  const result = await runClaude(['plugin', 'update', PLUGIN_NAME]);
   if (result.code !== 0) {
     const out = (result.stderr + result.stdout).toLowerCase();
     if (out.includes('not installed') || out.includes('not found')) {
-      announce('  (plugin 未安装，跳过)');
+      // plugin 未安装，尝试安装
+      announce('  (plugin 未安装，尝试安装)');
+      const installResult = await runClaude(['plugin', 'install', `${PLUGIN_NAME}@${PACKAGE_ROOT}`]);
+      if (installResult.code !== 0) {
+        warn(`plugin install 失败 (exit ${installResult.code})`);
+        return false;
+      }
+      success('plugin 已安装');
       return true;
     }
-    warn(`plugin uninstall 失败 (exit ${result.code})`);
-    return false;
-  }
-  success('旧 plugin 已卸载');
-  return true;
-}
-
-// 步骤 3: 重新注册 marketplace
-async function registerMarketplace() {
-  announce('→ 注册 marketplace');
-  const result = await runClaude(['plugin', 'marketplace', 'add', PACKAGE_ROOT]);
-  if (result.code !== 0) {
-    const out = (result.stderr + result.stdout).toLowerCase();
-    if (out.includes('already') || out.includes('exists') || out.includes('replace')) {
-      announce('  (marketplace 已注册)');
-      return true;
-    }
-    warn(`marketplace add 失败 (exit ${result.code})`);
-    return false;
-  }
-  success('marketplace 已注册');
-  return true;
-}
-
-// 步骤 4: 安装新 plugin
-async function installPlugin() {
-  announce('→ 安装新 plugin');
-  const result = await runClaude(['plugin', 'install', `${PLUGIN_NAME}@${MARKETPLACE_NAME}`]);
-  if (result.code !== 0) {
-    warn(`plugin install 失败 (exit ${result.code})`);
+    warn(`plugin update 失败 (exit ${result.code})`);
     warn(result.stderr || result.stdout || '(no output)');
     return false;
   }
-  success('新 plugin 已安装');
+  success('plugin 已更新');
   return true;
 }
 
@@ -122,31 +118,17 @@ async function main() {
     process.exit(1);
   }
 
-  // 执行更新流程
-  const steps = [
-    { name: 'npm', fn: updateNpmPackage },
-    { name: 'uninstall', fn: uninstallPlugin },
-    { name: 'marketplace', fn: registerMarketplace },
-    { name: 'install', fn: installPlugin },
-  ];
-
-  let failed = false;
-  for (const step of steps) {
-    const ok = await step.fn();
-    if (!ok && step.name !== 'uninstall') {
-      // uninstall 失败可继续（可能未安装）
-      failed = true;
-    }
-  }
+  // 执行更新流程（简化版）
+  const npmOk = await updateNpmPackage();
+  const pluginOk = await updatePlugin();
 
   announce('');
-  if (failed) {
+  if (!npmOk || !pluginOk) {
     warn('部分步骤失败，请手动检查');
     announce('');
     announce('手动更新命令:');
     announce('  npm install -g @cli-tools/oh-my-sdd');
-    announce(`  claude plugin marketplace add ${PACKAGE_ROOT}`);
-    announce(`  claude plugin install ${PLUGIN_NAME}@${MARKETPLACE_NAME}`);
+    announce(`  claude plugin update ${PLUGIN_NAME}`);
     process.exit(1);
   }
 

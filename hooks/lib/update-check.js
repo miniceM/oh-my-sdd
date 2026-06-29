@@ -164,7 +164,17 @@ export async function fetchLatestVersion(packageName, registryUrl, timeoutMs = D
     if (err?.name === 'AbortError') {
       throw new UpdateCheckError(`Registry 查询超时 (${timeoutMs}ms)`);
     }
-    throw err;
+    // 网络错误细分处理
+    if (err.code === 'ENOTFOUND') {
+      throw new UpdateCheckError(`Registry 地址无法解析: ${registryUrl}`, { cause: err });
+    }
+    if (err.code === 'ECONNREFUSED') {
+      throw new UpdateCheckError(`Registry 连接被拒绝: ${registryUrl}`, { cause: err });
+    }
+    if (err.code === 'ETIMEDOUT') {
+      throw new UpdateCheckError(`Registry 连接超时: ${registryUrl}`, { cause: err });
+    }
+    throw new UpdateCheckError(`Registry 请求失败: ${err.message}`, { cause: err });
   } finally {
     clearTimeout(timer);
   }
@@ -177,19 +187,25 @@ export async function checkForUpdates({
   currentVersion,
   registryUrl,
   timeoutMs = DEFAULT_TIMEOUT_MS,
-  checkIntervalDays = DEFAULT_CHECK_INTERVAL_DAYS,
+  checkIntervalDays,
 } = {}) {
-  // 加载配置获取 registry URL
-  if (!registryUrl) {
-    const cfg = await loadConfig();
-    registryUrl = cfg.npm_registry || 'https://npm.enterprise.com';
-  }
+  // 加载配置（只加载一次）
+  const cfg = await loadConfig();
 
   // 检查是否禁用更新检测
-  const cfg = await loadConfig();
   if (cfg.update_check_disabled) {
     debug('更新检测已禁用');
     return { hasUpdate: false, currentVersion, disabled: true };
+  }
+
+  // 使用配置或参数中的 registry URL
+  if (!registryUrl) {
+    registryUrl = cfg.npm_registry || 'https://npm.enterprise.com';
+  }
+
+  // 使用配置或参数中的检测间隔
+  if (!checkIntervalDays) {
+    checkIntervalDays = cfg.update_check_interval_days || DEFAULT_CHECK_INTERVAL_DAYS;
   }
 
   // 加载缓存
@@ -277,8 +293,8 @@ export function buildUpdateNotification({ currentVersion, latestVersion, bump })
                  `   运行 oms-update 自动更新\n`;
 
   const additionalContext = `\n---\n**${emoji} oh-my-sdd 更新提醒**\n\n` +
-    `当前版本: \` ${currentVersion}\`\n` +
-    `最新版本: \` ${latestVersion}\` (${label})\n\n` +
+    `当前版本: \`${currentVersion}\`\n` +
+    `最新版本: \`${latestVersion}\` (${label})\n\n` +
     `更新后请 **reload Claude Code 或重启终端** 以激活新功能。\n\n` +
     `运行 \`oms-update\` 或执行：\n` +
     `\`\`\`bash\noms-update\n\`\`\`\n`;
