@@ -34,12 +34,15 @@ jobs:
         with:
           node-version: 22
       - run: |
+          set +e  # 关闭 errexit，本步骤的 install.js 可能因无 claude 而 exit 1
           TESTHOME=$(mktemp -d)
           # CI runner 上未安装 claude CLI 是正常情况（smoke-check 测的是 install
           # 流程本身，不是测真实环境部署）。install.js 在检测不到 claude 时
-          # 会输出引导但 exit 1，加 || true 防止 set -e 终止脚本。
-          OUT=$(HOME=$TESTHOME USERPROFILE=$TESTHOME node install.js 2>&1 || true)
+          # 会输出引导但 exit 1，smoke-check 改为验证引导输出存在即可。
+          OUT=$(HOME=$TESTHOME USERPROFILE=$TESTHOME node install.js 2>&1)
+          EXIT_CODE=$?
           echo "$OUT"
+          echo "(install.js exit code: $EXIT_CODE — non-zero is expected without claude CLI)"
           # 无论 claude 是否存在，install.js 都应创建 ~/.oh-my-sdd/config.json
           test -f $TESTHOME/.oh-my-sdd/config.json
           HOME=$TESTHOME USERPROFILE=$TESTHOME node uninstall.js
