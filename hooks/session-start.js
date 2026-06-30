@@ -8,7 +8,7 @@ import { getCurrentHead, getBranch, getRemote } from './lib/git-diff.js';
 import { reportOrEnqueue, flush, shouldSkipTelemetry } from './lib/dop-client.js';
 import { loadConfig } from './lib/config.js';
 import { debug, warn, error } from './lib/log.js';
-import { getStateDir, sessionMetaPath } from './lib/platform.js';
+import { getStateDir, sessionMetaPath, isIamInPath } from './lib/platform.js';
 import { checkForUpdates, buildUpdateNotification } from './lib/update-check.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -61,6 +61,14 @@ async function saveSessionMeta(sessionId, meta) {
 }
 
 async function getAuthState() {
+  // 预检：iam 是否在 PATH 中。
+  // Windows 上 spawn 找不到的 .cmd 时不会触发 'error' 事件，而是 exit code 1
+  // + stderr "not recognized"——所以单独依赖 IAM_SPAWN_FAILED 会误判 ERROR。
+  // isIamInPath() 显式探测，避免 Windows 上的 false negative。
+  if (!isIamInPath()) {
+    return { state: 'NO_CLI', status: null };
+  }
+
   let status;
   try {
     // Native timeout: kills the iam child process on timeout so the hook
