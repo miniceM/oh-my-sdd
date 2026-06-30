@@ -6,15 +6,26 @@ import path from 'node:path';
 
 function makeStubIam(output, exitCode = 0) {
   const dir = mkdtempSync(path.join(tmpdir(), 'iam-stub-'));
-  const cmdPath = path.join(dir, 'iam');
-  const cmdPathWin = path.join(dir, 'iam.cmd');
-  const script = process.platform === 'win32'
-    ? `@echo off\r\necho ${output.replace(/"/g, '""')}\r\nexit /b ${exitCode}\r\n`
-    : `#!/bin/bash\necho '${output}'\nexit ${exitCode}\n`;
-  writeFileSync(cmdPath, script);
-  chmodSync(cmdPath, 0o755);
   if (process.platform === 'win32') {
-    writeFileSync(cmdPathWin, script);
+    // Windows: 用 node 脚本 + .cmd shim，避开 CMD echo 的元字符问题。
+    const jsPath = path.join(dir, 'iam.js');
+    const jsScript = [
+      '#!/usr/bin/env node',
+      'if (process.argv[2] === "auth" && process.argv[3] === "status") {',
+      '  process.stdout.write(' + JSON.stringify(output) + ' + "\\n");',
+      '  process.exit(' + exitCode + ');',
+      '}',
+      'process.exit(0);',
+    ].join('\n');
+    writeFileSync(jsPath, jsScript);
+    const cmdPath = path.join(dir, 'iam.cmd');
+    const shim = `@echo off\r\nnode "%~dp0iam.js" %*\r\nexit /b %ERRORLEVEL%\r\n`;
+    writeFileSync(cmdPath, shim);
+  } else {
+    const cmd = path.join(dir, 'iam');
+    const script = `#!/bin/bash\nif [ "$1" = "auth" ] && [ "$2" = "status" ]; then\n  echo '${output}'\n  exit ${exitCode}\nfi\nexit 0\n`;
+    writeFileSync(cmd, script);
+    chmodSync(cmd, 0o755);
   }
   return dir;
 }
