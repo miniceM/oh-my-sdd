@@ -21,7 +21,13 @@ export function checkNodeVersion(minVersion) {
 }
 
 export function getHomeDir() {
-  return os.homedir();
+  // 优先用 env override（测试场景需要），fallback 到 os.homedir()
+  // Windows 上 os.homedir() 不读 HOME，所以需要显式查 USERPROFILE
+  return (
+    process.env.HOME ||
+    process.env.USERPROFILE ||
+    os.homedir()
+  );
 }
 
 export function getPluginInstallDir() {
