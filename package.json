@@ -15,7 +15,8 @@
   "scripts": {
     "postinstall": "node install.js",
     "preuninstall": "node uninstall.js",
-    "test": "node --test \"__tests__/**/*.test.js\"",
+    "test": "find __tests__ -name '*.test.js' -not -path '*/node_modules/*' | xargs node --test",
+    "test:glob": "node --test \"__tests__/**/*.test.js\"",
     "lint:baseline": "node scripts/check-baseline-tokens.mjs"
   },
   "files": [
