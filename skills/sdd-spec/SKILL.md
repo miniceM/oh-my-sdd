@@ -61,6 +61,22 @@ git add openspec/changes/<slug>/proposal.md openspec/changes/<slug>/specs/ opens
 git commit -m '[<change-id>] spec: ring 1 freeze - proposal + delta specs'
 ```
 
+### 步骤 5.6：推荐首次项目安装 git hooks（混合模式）
+
+如果是该项目第一次使用 oh-my-sdd，推荐启用 git hook 校验，把企业约束扩展到开发者工作流：
+
+```bash
+oms-git-hooks install
+```
+
+启用后该项目的 git 提交/推送会受 4 层 hook 校验：
+- **pre-commit**：staged 文件安全扫描（复用 SDD 规则引擎，拦截硬编码密钥/破坏性命令）
+- **pre-push**：禁止 force push 到 main/master
+- **commit-msg**：强制 commit 消息格式 `[<change-id>] <type>: <subject>`
+- **prepare-commit-msg**：commit 编辑器注入格式模板提示
+
+已安装到该项目的其他自定义 git hook 会被自动备份（`<type>.oms-backup`），卸载时恢复。紧急绕过：在 commit body 写 `[OVERRIDE] <规则名>: <理由>`，或 pre-commit 用环境变量 `OMS_OVERRIDE_RULES=<rule_id>`。
+
 ### 步骤 6：gh 创建 issue + 分支（如有 gh）
 
 > **执行顺序**：先按下面 body 模板填好，再 `gh issue create` 一次成型。**禁止** create 后再 edit。

@@ -9,7 +9,8 @@
     "oms-uninstall": "./bin/oms-uninstall.js",
     "oms-login": "./bin/oms-login.js",
     "oms-wrapper-verify": "./bin/oms-wrapper-verify.js",
-    "oms-update": "./bin/oms-update.js"
+    "oms-update": "./bin/oms-update.js",
+    "oms-git-hooks": "./bin/oms-git-hooks.js"
   },
   "scripts": {
     "postinstall": "node install.js",
