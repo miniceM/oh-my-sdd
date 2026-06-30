@@ -1,0 +1,11 @@
+# 强制文本文件保持 LF 换行符（避免 Windows 检出自动转 CRLF）
+# 这是 oh-my-sdd 跨平台一致性的关键：baseline.md 等文本文件
+# 跨平台读取时换行符必须一致，否则 constitution.js 的正则匹配会失败。
+* text=auto eol=lf
+
+# 显式声明 shell 脚本必须 LF
+*.sh text eol=lf
+*.ps1 text eol=lf
+
+# Windows 用户如果想贡献，可在本地配置 core.autocrlf=false
+# 见 docs/ 下的开发者文档

@@ -1,6 +1,8 @@
 import { readFile } from 'node:fs/promises';
 
-const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n/;
+// 容忍 UTF-8 BOM（Windows 工具偶尔会添加）和 CRLF/LF 换行符。
+// 归一化为 LF 再匹配，避免跨平台差异导致的 false negative。
+const FRONTMATTER_RE = /^﻿?---\r?\n([\s\S]*?)\r?\n---\r?\n/;
 const SYNC_REPORT_RE =
   /<!-- BEGIN sync-impact-report[\s\S]*?END sync-impact-report -->\n?/;
 
@@ -26,7 +28,7 @@ function parseFrontmatter(text) {
   }
   const raw = m[1];
   const frontmatter = {};
-  for (const line of raw.split('\n')) {
+  for (const line of raw.split(/\r?\n/)) {
     const mm = line.match(/^([a-z_]+):\s*(.*)$/);
     if (mm) frontmatter[mm[1]] = mm[2].trim();
   }
