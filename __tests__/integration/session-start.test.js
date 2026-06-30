@@ -79,7 +79,8 @@ function runHook(stdinPayload, env = {}) {
     // Always ensure node is findable even if the test clobbered PATH.
     const finalEnv = { ...process.env, ...env };
     if (!finalEnv.PATH || !finalEnv.PATH.includes(NODE_BIN_DIR)) {
-      finalEnv.PATH = `${NODE_BIN_DIR}:${finalEnv.PATH ?? ''}`;
+      // 跨平台 PATH 分隔符：Windows 是 ;，POSIX 是 :
+      finalEnv.PATH = `${NODE_BIN_DIR}${path.delimiter}${finalEnv.PATH ?? ''}`;
     }
     const child = spawn('node', [HOOK_PATH], {
       env: finalEnv,
