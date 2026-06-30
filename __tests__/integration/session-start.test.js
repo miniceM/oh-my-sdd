@@ -24,12 +24,29 @@ const NODE_BIN_DIR = (() => {
 
 function makeStubIam(jsonOutput) {
   const dir = mkdtempSync(path.join(tmpdir(), 'iam-stub-'));
-  const jsonStr = JSON.stringify(jsonOutput).replace(/"/g, '""');  // cmd.exe 转义
+  const jsonStr = JSON.stringify(jsonOutput);
   if (process.platform === 'win32') {
-    // Windows: 写 iam.cmd 让 where/spawn 能找到
+    // Windows: 写 iam.cmd (shim) + iam.js (node stub)。
+    // 用 node 脚本而不是纯 cmd，避免 CMD 嵌套 if 链的兼容性问题。
+    const jsPath = path.join(dir, 'iam.js');
+    const jsScript = [
+      '#!/usr/bin/env node',
+      '// Stub iam CLI for tests. Outputs fixed JSON on auth status --json.',
+      'const argv = process.argv;',
+      'if (argv[2] === "auth" && argv[3] === "status" &&',
+      '    (argv[4] === "--json" || argv[4] === "-json")) {',
+      '  process.stdout.write(' + JSON.stringify(jsonStr) + ' + "\\n");',
+      '  process.exit(0);',
+      '}',
+      'process.exit(0);',
+      '',
+    ].join('\n');
+    writeFileSync(jsPath, jsScript);
+
+    // .cmd shim: 调用 node 跑 iam.js
     const cmdPath = path.join(dir, 'iam.cmd');
-    const script = `@echo off\r\nif "%~1"=="auth" if "%~2"=="status" if "%~3"=="--json" (\r\n  echo ${jsonStr}\r\n) else if "%~1"=="auth" if "%~2"=="status" if "%~3"=="-json" (\r\n  echo ${jsonStr}\r\n)\r\nexit /b 0\r\n`;
-    writeFileSync(cmdPath, script);
+    const shimScript = `@echo off\r\nnode "%~dp0iam.js" %*\r\nexit /b %ERRORLEVEL%\r\n`;
+    writeFileSync(cmdPath, shimScript);
   } else {
     const cmd = path.join(dir, 'iam');
     const script = `#!/bin/bash\nif [ "$1" = "auth" ] && [ "$2" = "status" ] && { [ "$3" = "--json" ] || [ "$3" = "-json" ]; }; then\n  echo '${JSON.stringify(jsonOutput)}'\nfi\n`;
@@ -43,9 +60,11 @@ function makeStubIam(jsonOutput) {
 function makeHangingIam() {
   const dir = mkdtempSync(path.join(tmpdir(), 'iam-hang-'));
   if (process.platform === 'win32') {
-    // Windows: ping -n 60 127.0.0.1 >nul 模拟 sleep 60
+    // Windows: node 脚本 sleep 60
+    const jsPath = path.join(dir, 'iam.js');
+    writeFileSync(jsPath, '#!/usr/bin/env node\nconst end = Date.now() + 60000;\nwhile (Date.now() < end) {}\n');
     const cmdPath = path.join(dir, 'iam.cmd');
-    writeFileSync(cmdPath, '@echo off\r\nping -n 60 127.0.0.1 >nul\r\n');
+    writeFileSync(cmdPath, `@echo off\r\nnode "%~dp0iam.js" %*\r\nexit /b %ERRORLEVEL%\r\n`);
     return dir;
   }
   const cmd = path.join(dir, 'iam');
