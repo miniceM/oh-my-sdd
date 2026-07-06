@@ -56,6 +56,13 @@ for (const key of REQUIRED_FRONTMATTER_FIELDS) {
   }
 }
 
+// Sanity check: frontmatter should not exceed reasonable size
+const frontmatterSize = baseline.raw.length - baseline.body.length;
+if (frontmatterSize > 1000) {
+  fail(`baseline frontmatter + sync report 过大: ${frontmatterSize} chars > 1000 limit`);
+  console.error('   请精简 Sync Impact Report 或保持 frontmatter 简洁。');
+}
+
 const tokens = estimateTokens(baseline.body);
 if (tokens > MAX_TOKENS) {
   fail(`baseline body token 估算超限: ${tokens} > ${MAX_TOKENS}`);

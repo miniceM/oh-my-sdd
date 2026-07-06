@@ -54,7 +54,7 @@ $ARGUMENTS
 
 5. **一致性传播检查**：
    - 若修订新增/修改了 HARD_RULE，确认 `hooks/lib/rules.js` 中是否需要新增/修改对应规则匹配。
-   - 若涉及 PostToolUse 阻断规则（HARD_RULE #6），确认 `hooks/pre-tool-use.js` 的 deny reason 措辞同步。
+   - 若涉及 PreToolUse 阻断规则（HARD_RULE #6），确认 `hooks/pre-tool-use.js` 的 deny reason 措辞同步。
    - 若修订影响 `.github/PULL_REQUEST_TEMPLATE.md` 的 `[OVERRIDE]` 槽位，提示用户同步更新。
    - 检查 `hooks/post-tool-use.js`（计数）和 `hooks/session-end.js`（DOP 上报）是否受规则变更影响。
 
