@@ -113,6 +113,9 @@ async function main() {
     process.stderr.write('\n❌ 未检测到 claude CLI。请手动执行：\n');
     process.stderr.write(`  claude plugin marketplace add ${PACKAGE_ROOT}\n`);
     process.stderr.write(`  claude plugin install ${PLUGIN_NAME}@${MARKETPLACE_NAME}\n`);
+    // 先创建 state dir + config，再退出。smoke-check 依赖此副作用存在性
+    // 验证 install 流程走到了初始化阶段，而不管 claude CLI 是否存在。
+    await ensureStateDir();
     process.exit(1);
   }
 
