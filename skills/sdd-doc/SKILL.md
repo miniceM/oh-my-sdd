@@ -223,10 +223,8 @@ output_path = openspec/changes/<slug>/<slug>-需求规格说明书.md
 **3.5.2 调用 sdd_doc.py 检测状态**
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/sdd_doc.py --check-overwrite <output_path>
+python3 scripts/sdd_doc.py --check-overwrite <output_path>
 ```
-
-> `${CLAUDE_SKILL_DIR}` 是 Claude Code 官方 skill 运行时注入的 env var，指向当前 skill 所在目录——脚本与 SKILL.md 同目录。其他声称"无缝读取 Claude Code skills"的 AI 工具应在其运行时提供等价 env var（或绝对路径解析），不在本 skill 层兜底。
 
 返回 JSON（结构见 sdd_doc.py `_check_overwrite_safety` 函数 docstring）：
 
@@ -279,10 +277,8 @@ python3 ${CLAUDE_SKILL_DIR}/sdd_doc.py --check-overwrite <output_path>
 ### 步骤 4：执行渲染
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/sdd_doc.py <slug> --data-json <.sdd-doc-data.json路径> [--capability-names "auth=认证,user=用户管理"]
+python3 scripts/sdd_doc.py <slug> --data-json <.sdd-doc-data.json路径> [--capability-names "auth=认证,user=用户管理"]
 ```
-
-> 与 3.5.2 同一约定：`${CLAUDE_SKILL_DIR}` 由 Claude Code 官方 skill 运行时注入。脚本与 SKILL.md 同目录，故 `${CLAUDE_SKILL_DIR}/sdd_doc.py` 即定位准确。
 
 脚本完成：
 1. 加载 JSON 数据
