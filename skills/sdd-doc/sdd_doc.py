@@ -177,6 +177,7 @@ def extract_metadata(change_dir: Path, meta: dict, data: dict | None) -> dict:
         "release_code": dm.get("releaseCode") or "{{releaseCode}}",
         "release_name": dm.get("releaseName") or "{{releaseName}}",
         "system_code": dm.get("systemCode") or "{{systemCode}}",
+        "system_flag": dm.get("systemFlag") or "{{systemFlag}}",
     }
 
 
@@ -201,6 +202,7 @@ def build(
     rc = meta.get("release_code", "{{releaseCode}}")
     rn = meta.get("release_name", "{{releaseName}}")
     sc = meta.get("system_code", "{{systemCode}}")
+    sf = meta.get("system_flag", "{{systemFlag}}")
 
     # ═══════ 标题 ═══════
     L.append(f"# XX公司_{pt}项目_{sn}系统 软件需求规格说明书")
@@ -244,6 +246,7 @@ def build(
         ["**排期名称**", rn],
         ["**系统标识**", sc],
         ["**系统名称**", sn],
+        ["**系统标志**", sf],
     ])
 
     # 1.2 功能列表

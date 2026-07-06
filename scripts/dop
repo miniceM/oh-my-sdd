@@ -1,18 +1,30 @@
 #!/usr/bin/env bash
-# scripts/dop — mock 企业 dop CLI（对齐真实契约，2026-06-22 校准）
+# scripts/dop — mock 企业 dop CLI（对齐真实契约，2026-07-06 校准）
 #
 # 真实契约（来自内网 `dop change --help`）：
 #   - dop change create / list / view  （只有这 3 个子命令，无 update）
 #   - 全局 flag：--endpoint string、-j/--json
 #   - 默认 endpoint：http://10.182.35.66
+#   - change view JSON 字段契约（2026-07-06 校准，对齐 sdd-doc 排期信息章节需求）：
+#       id, title, status, type, owner, description, acceptance_criteria, created_at
+#     + sub_systems:        [{code, name}]      # 子系统列表
+#     + user_stories:       [{                  # 用户故事（一个 change 可有多个）
+#         id, code, title, type, state, stage, team, assignee, business_owner,
+#         release_info: {                      # ← 排期信息（sdd-doc 1.1 排期信息章节用）
+#           release_num,                       # 排期编号（如 R20260508012）
+#           release_name,                      # 排期名称
+#           release_date,                      # 排期日期
+#           release_stage                      # 排期阶段
+#         }
+#       }]
 #
 # 改造说明（2026-06-22，Q1=A 决策）：
 #   原 mock 的 `change update` 子命令已删除——真实 dop 不支持。
 #   skills 改为通过 .meta.json 本地记录进度，不再调 dop CLI 上报状态。
 #
 # 已知 change-id 测试数据：
-#   ARD123456  → "用户测试demo"
-#   ARD222222  → "信用卡积分兑换功能"
+#   ARD123456  → "用户测试demo"  → 1 个 user_story，含 release_info
+#   ARD222222  → "信用卡积分兑换功能" → 2 个 user_story，首个 release_info 为空（验证"取首个非空"逻辑）
 
 set -euo pipefail
 
@@ -73,7 +85,29 @@ change_view() {
     "openspec/specs/ 被 archive merge 更新",
     "gh issue + PR 自动关联"
   ],
-  "created_at": "2026-06-20T00:00:00Z"
+  "created_at": "2026-06-20T00:00:00Z",
+  "sub_systems": [
+    {"code": "ARD.ard-sdk", "name": "智能研发平台.AI原生框架套件"}
+  ],
+  "user_stories": [
+    {
+      "id": "c7fe4770a27841a48dd26d20c49da8b",
+      "code": "US-95376",
+      "title": "用户测试 demo 故事",
+      "type": "主动故事",
+      "state": "正常",
+      "stage": "已上线",
+      "team": "统一开发平台",
+      "assignee": "$USER",
+      "business_owner": "$USER",
+      "release_info": {
+        "release_num": "R20260620001",
+        "release_name": "用户测试 demo 排期",
+        "release_date": "2026-06-25T00:00:00Z",
+        "release_stage": "投产实施"
+      }
+    }
+  ]
 }
 EOF
       ;;
@@ -91,7 +125,41 @@ EOF
     "可选择商品兑换",
     "兑换成功后扣减积分"
   ],
-  "created_at": "2026-06-20T00:00:00Z"
+  "created_at": "2026-06-20T00:00:00Z",
+  "sub_systems": [
+    {"code": "CARD.points-mall", "name": "信用卡中心.积分商城子系统"}
+  ],
+  "user_stories": [
+    {
+      "id": "a1b2c3d4e5f6789012345abcdef67890",
+      "code": "US-10001",
+      "title": "积分余额查询",
+      "type": "主动故事",
+      "state": "正常",
+      "stage": "已上线",
+      "team": "信用卡中心",
+      "assignee": "$USER",
+      "business_owner": "$USER",
+      "release_info": null
+    },
+    {
+      "id": "b2c3d4e5f6789012345abcdef67890a",
+      "code": "US-10002",
+      "title": "积分兑换商品",
+      "type": "主动故事",
+      "state": "正常",
+      "stage": "已上线",
+      "team": "信用卡中心",
+      "assignee": "$USER",
+      "business_owner": "$USER",
+      "release_info": {
+        "release_num": "R20260620002",
+        "release_name": "积分商城首期上线",
+        "release_date": "2026-07-10T00:00:00Z",
+        "release_stage": "投产实施"
+      }
+    }
+  ]
 }
 EOF
       ;;
