@@ -210,6 +210,70 @@ JSON 必须符合以下 Schema（完整示例见下文"JSON Schema 参考"）：
 }
 ```
 
+### 步骤 3.5：输出文件安全检查（覆盖前确认）
+
+> **目的**：防止已评审/已归档的 `<slug>-需求规格说明书.md` 被无声覆盖。`sdd_doc.py generate()` 内部已默认拒绝覆盖已 git 跟踪的文件，本步骤负责在用户侧触发 AskUserQuestion 二次确认。
+
+**3.5.1 计算输出路径**
+
+```
+output_path = openspec/changes/<slug>/<slug>-需求规格说明书.md
+```
+
+**3.5.2 调用 sdd_doc.py 检测状态**
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/sdd_doc.py --check-overwrite <output_path>
+```
+
+返回 JSON（结构见 sdd_doc.py `_check_overwrite_safety` 函数 docstring）：
+
+```json
+{
+  "exists": true,
+  "tracked": true,
+  "modified": false,
+  "size_bytes": 12345,
+  "last_modified": "2026-07-04T10:30:45"
+}
+```
+
+**3.5.3 按检测结果分支处理**
+
+| `exists` | `tracked` | 处理 |
+|----------|-----------|------|
+| `false`  | *         | 直接进入步骤 4（无文件可覆盖） |
+| `true`   | `false`   | 终端打印 `⚠ 输出文件未跟踪（<size> 字节），将直接覆盖` 后进入步骤 4 |
+| `true`   | `true`    | **触发 AskUserQuestion 二次确认**（见 3.5.4） |
+
+**3.5.4 AskUserQuestion 模板（tracked=true 时必走）**
+
+```
+问题：输出文件已存在且被 git 跟踪
+
+  路径：<output_path>
+  大小：<size_bytes> 字节
+  最后修改：<last_modified>
+  本地有未提交修改：<是/否>
+
+请选择处理方式：
+```
+
+**3 个选项**（其余通过 Other 让用户自定义，比如"覆盖到不同文件名"）：
+
+1. **覆盖** —— 直接重写文件。已 review 过的版本在 `git log <file>` 中可恢复。
+2. **备份后覆盖** —— 先 `cp <output_path> <output_path>.bak-$(date +%Y%m%d-%H%M%S)`，再进入步骤 4。原版本本地有 `.bak` 备份 + git 历史双保险。
+3. **取消** —— 终止本次 `/sdd-doc`，不修改任何文件。打印 `✗ 已取消，未修改文件。`，删除步骤 3 生成的 `.sdd-doc-data.json`（同步骤 5）。
+
+**3.5.5 后续动作**
+
+- 选 1 或 2 → 进入步骤 4 正常渲染（无需 `--force`：`tracked=true` 已被本次 AskUserQuestion 授权）
+- 选 3 → 删除 `.sdd-doc-data.json` 临时文件并结束
+
+> **设计原则**：sdd_doc.py 的 `tracked=true` 默认拒绝是"硬闸"，SKILL.md 的 AskUserQuestion 是"软闸"。两者串联：人确认后才放行，机器兜底防误操作。
+>
+> **关于 modified=true**：本地有未提交改动通常意味着用户正在手工调整文档。无论选哪个选项都应先提醒用户"你的本地未提交改动会一并被覆盖/备份"——这需要在 AskUserQuestion 的描述里明确提示，不另设独立选项。
+
 ### 步骤 4：执行渲染
 
 ```bash
@@ -223,7 +287,8 @@ python3 ${CLAUDE_SKILL_DIR}/sdd_doc.py <slug> --data-json <.sdd-doc-data.json路
    - §1 总体说明（排期信息表格 + 功能列表表格）
    - §2 功能详细分析及设计（每个 capability 9 个固定子章节）
    - §3 非功能需求分析（客户群体/性能/访问集中度/软硬件兼容性/安全/可扩展）
-3. 输出：`openspec/changes/<slug>/<slug>-需求规格说明书.md`
+3. 内部调用 `_check_overwrite_safety` 做覆盖前安全门（见步骤 3.5），**默认拒绝覆盖已 git 跟踪的文件**
+4. 输出：`openspec/changes/<slug>/<slug>-需求规格说明书.md`
 
 ### 步骤 5：清理临时文件
 

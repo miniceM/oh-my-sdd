@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -524,6 +525,58 @@ def build(
 
 
 # ============================================================
+# 覆盖前安全检查
+# ============================================================
+
+def _check_overwrite_safety(out_path: Path) -> dict:
+    """
+    检查输出路径的覆盖安全状态，供 /sdd-doc 工作流在渲染前做安全门。
+
+    返回字段（全部必填，缺值用空串/False/0）：
+      exists       (bool)  文件是否已存在
+      tracked      (bool)  是否被 git 跟踪（git ls-files 返回非空）
+      modified     (bool)  是否有未提交的本地改动
+      size_bytes   (int)   文件大小（不存在则为 0）
+      last_modified (str)  ISO 8601 时间戳（不存在则空字符串）
+
+    边界情况（必须以"未跟踪"处理，不能抛异常）：
+      - out_path 不在 git 仓库中（git 命令非零退出）
+      - git 命令缺失 / 超时
+      - 文件不存在
+
+    用途：SKILL.md 步骤 3.5 用此函数的结果驱动 AskUserQuestion；
+         sdd_doc.py generate() 用 tracked 字段决定是否拒绝覆盖。
+    """
+    exists = out_path.exists()
+    if exists:
+        st = out_path.stat()
+        size_bytes = st.st_size
+        last_modified = datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds")
+    else:
+        size_bytes = 0
+        last_modified = ""
+
+    def _git_truthy(args: list[str]) -> bool:
+        try:
+            r = subprocess.run(
+                ["git", *args, "--", str(out_path)],
+                capture_output=True, text=True, check=False, timeout=5,
+            )
+            return r.returncode == 0 and bool(r.stdout.strip())
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            return False
+
+    tracked = _git_truthy(["ls-files"])
+    return {
+        "exists": exists,
+        "tracked": tracked,
+        "modified": _git_truthy(["status", "--porcelain"]) and tracked,
+        "size_bytes": size_bytes,
+        "last_modified": last_modified,
+    }
+
+
+# ============================================================
 # 主流程
 # ============================================================
 
@@ -532,11 +585,30 @@ def generate(
     cap_names_arg: str | None,
     data_json_path: str | None = None,
     no_design: bool = False,
+    force: bool = False,
 ) -> Path:
     root = Path.cwd()
     change_dir = resolve_change_dir(slug or "", root)
     meta = read_meta(change_dir)
     cap_names = load_capability_names(root, cap_names_arg)
+
+    # ═══════ 覆盖前安全检查（最便宜的检查先做，避免渲染后才发现被拒）═══════
+    out_slug = slug or change_dir.name
+    out_path = change_dir / f"{out_slug}-需求规格说明书.md"
+    safety = _check_overwrite_safety(out_path)
+    if safety["exists"] and safety["tracked"]:
+        if not force:
+            raise SddDocError(
+                f"输出文件已被 git 跟踪，拒绝覆盖：\n"
+                f"  路径：{out_path}\n"
+                f"  大小：{safety['size_bytes']} 字节\n"
+                f"  最后修改：{safety['last_modified'] or '(未知)'}\n"
+                f"  本地有未提交修改：{'是' if safety['modified'] else '否'}\n"
+                f"如确认要覆盖，请使用 --force，或先在 /sdd-doc 工作流中通过 AskUserQuestion 确认。"
+            )
+        print(f"⚠ --force 模式：覆盖已跟踪文件 {out_path}", file=sys.stderr)
+    elif safety["exists"] and not safety["tracked"]:
+        print(f"⚠ 输出文件未跟踪（{safety['size_bytes']} 字节），将直接覆盖", file=sys.stderr)
 
     # 加载结构化数据
     data = None
@@ -586,11 +658,20 @@ def generate(
           f"capability：{len(capabilities)}")
 
     md = build(md_meta, capabilities, cap_names, data, no_design=no_design)
-    out_slug = slug or change_dir.name
-    out_path = change_dir / f"{out_slug}-需求规格说明书.md"
     out_path.write_text(md, encoding="utf-8")
     print(f"      完成：{out_path}")
     return out_path
+
+
+# ============================================================
+# CLI 入口
+# ============================================================
+
+def check_overwrite_cli(path: str) -> int:
+    """--check-overwrite 模式：仅返回 JSON 状态，不渲染文档。供 SKILL.md 步骤 3.5 调用。"""
+    safety = _check_overwrite_safety(Path(path))
+    print(json.dumps(safety, ensure_ascii=False, indent=2))
+    return 0
 
 
 def main() -> int:
@@ -604,10 +685,17 @@ def main() -> int:
                    help="跳过所有设计相关章节，输出纯占位符")
     p.add_argument("--capability-names", default=None,
                    help='capability 显示名映射，格式 "auth=认证,user=用户管理"（逗号分隔）')
+    p.add_argument("--force", action="store_true",
+                   help="强制覆盖已 git 跟踪的输出文件（默认拒绝，触发 SddDocError）")
+    p.add_argument("--check-overwrite", metavar="PATH", default=None,
+                   help="仅检查指定路径的覆盖安全状态（输出 JSON），不渲染文档。供 /sdd-doc 工作流步骤 3.5 调用。")
     args = p.parse_args()
 
+    if args.check_overwrite:
+        return check_overwrite_cli(args.check_overwrite)
+
     try:
-        out = generate(args.slug, args.capability_names, args.data_json, args.no_design)
+        out = generate(args.slug, args.capability_names, args.data_json, args.no_design, args.force)
     except SddDocError as e:
         print(f"❌ {e}", file=sys.stderr)
         return 1
