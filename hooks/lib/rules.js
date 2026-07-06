@@ -91,17 +91,23 @@ const ENV_FILE_EDIT = {
  * SOFT: README.md without any "Quick Start" / "快速开始" heading.
  * Triggers on README.md (any case) lacking all of: "Quick Start",
  * "快速开始", "quickstart" (case-insensitive).
+ *
+ * Best-effort limitation: under Edit/MultiEdit, only sees new_string fragment,
+ * not full file. May false-positive if fragment lacks heading but full file
+ * has it. For Write (full content), check is accurate.
  */
 const README_MISSING_QUICKSTART = {
   rule_id: 'readme-missing-quickstart',
   severity: 'soft',
   filePattern: BASE_NAME_RE(/(^|\/)README\.md$/i),
   check(content) {
+    // Best-effort: under Edit/MultiEdit only sees new_string fragment, not full file.
+    // May false-positive if fragment lacks heading but full file has it.
     if (/(quick[ _-]?start|快速开始)/i.test(content)) return null;
     return [{
       rule_id: 'readme-missing-quickstart',
       severity: 'soft',
-      message: 'README.md 缺少 "Quick Start" / "快速开始" 章节 (SOFT_RULE)',
+      message: 'README.md 缺少 "Quick Start" / "快速开始" 章节 (SOFT_RULE, best-effort for Edit)',
     }];
   },
 };
@@ -120,7 +126,8 @@ const PUBLIC_API_MISSING_DOCSTRING = {
     const lines = content.split('\n');
     const matches = [];
     const isExport = (l) => /^\s*export\s+(?:async\s+)?(?:function|const|class)\b/.test(l)
-      || /^\s*export\s+default\s+(?:async\s+)?function\b/.test(l);
+      || /^\s*export\s+default\s+(?:async\s+)?function\b/.test(l)
+      || /^\s*export\s+const\s+\w+\s*=\s*(?:async\s+)?(?:\(|[(<])/.test(l); // 箭头函数: export const foo = () =>
     const isDef = (l) => /^\s*def\s+\w+/.test(l);
     const isDocLine = (l) => /^\s*(\/\/|\/\*\*?|\*|"""|#\s)/.test(l)
       || /\/\*\*/.test(l);
