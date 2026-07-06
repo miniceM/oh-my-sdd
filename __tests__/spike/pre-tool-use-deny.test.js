@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { runHook } from '../helpers/spawn-hook.js';
 
 /**
  * Spike contract tests for PreToolUse hard gate.
@@ -18,21 +19,6 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK_PATH = path.resolve(__dirname, '..', '..', 'hooks', 'pre-tool-use.js');
-
-function runHook(stdinPayload, env = {}) {
-  return new Promise((resolve) => {
-    const child = spawn('node', [HOOK_PATH], {
-      env: { ...process.env, ...env },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (c) => { stdout += c; });
-    child.stderr.on('data', (c) => { stderr += c; });
-    child.on('close', (exitCode) => resolve({ exitCode, stdout, stderr }));
-    child.stdin.end(JSON.stringify(stdinPayload));
-  });
-}
 
 const FIXTURES = {
   awsAk: { file_path: 'leak.js', content: 'const AWS_KEY = "AKIAIOSFODNN7EXAMPLE";\n' },
@@ -54,7 +40,7 @@ async function runWithFixture(fixture, toolName = 'Write') {
       ? { file_path: fixture.file_path, new_string: fixture.content }
       : { file_path: fixture.file_path, edits: [{ new_string: fixture.content }] };
 
-  return runHook({
+  return runHook(HOOK_PATH, {
     session_id: 'spike',
     tool_name: toolName,
     tool_input: toolInput,
@@ -169,7 +155,7 @@ test('spike/contract: hook never writes anything but JSON to stdout', async () =
 });
 
 test('spike/contract: non-edit tool (e.g. Read) returns {}', async () => {
-  const result = await runHook({
+  const result = await runHook(HOOK_PATH, {
     session_id: 'spike',
     tool_name: 'Read',
     tool_input: { file_path: '/tmp/foo.txt' },

@@ -1,30 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { runHook } from '../helpers/spawn-hook.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK_PATH = path.resolve(__dirname, '..', '..', 'hooks', 'pre-tool-use.js');
 
-function runHook(stdinPayload, env = {}) {
-  return new Promise((resolve) => {
-    const child = spawn('node', [HOOK_PATH], {
-      env: { ...process.env, ...env },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    let stdout = '', stderr = '';
-    child.stdout.on('data', (c) => { stdout += c; });
-    child.stderr.on('data', (c) => { stderr += c; });
-    child.on('close', (exitCode) => resolve({ exitCode, stdout, stderr }));
-    child.stdin.end(JSON.stringify(stdinPayload));
-  });
-}
-
 // ---------- HARD rule denies ----------
 
 test('pre-tool-use denies Write with hardcoded AWS Access Key', async () => {
-  const result = await runHook({
+  const result = await runHook(HOOK_PATH, {
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
@@ -40,7 +27,7 @@ test('pre-tool-use denies Write with hardcoded AWS Access Key', async () => {
 });
 
 test('pre-tool-use denies Edit with hardcoded OpenAI SK', async () => {
-  const result = await runHook({
+  const result = await runHook(HOOK_PATH, {
     session_id: 'test',
     tool_name: 'Edit',
     tool_input: {
@@ -57,7 +44,7 @@ test('pre-tool-use denies Edit with hardcoded OpenAI SK', async () => {
 });
 
 test('pre-tool-use denies MultiEdit with rm -rf / in any edit', async () => {
-  const result = await runHook({
+  const result = await runHook(HOOK_PATH, {
     session_id: 'test',
     tool_name: 'MultiEdit',
     tool_input: {
@@ -76,7 +63,7 @@ test('pre-tool-use denies MultiEdit with rm -rf / in any edit', async () => {
 });
 
 test('pre-tool-use denies direct .env file edit (filePattern only)', async () => {
-  const result = await runHook({
+  const result = await runHook(HOOK_PATH, {
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
@@ -92,7 +79,7 @@ test('pre-tool-use denies direct .env file edit (filePattern only)', async () =>
 });
 
 test('pre-tool-use allows .env.example (filePattern negative)', async () => {
-  const result = await runHook({
+  const result = await runHook(HOOK_PATH, {
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
@@ -108,7 +95,7 @@ test('pre-tool-use allows .env.example (filePattern negative)', async () => {
 });
 
 test('pre-tool-use lists multiple HARD rules in deny reason', async () => {
-  const result = await runHook({
+  const result = await runHook(HOOK_PATH, {
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
@@ -127,7 +114,7 @@ test('pre-tool-use lists multiple HARD rules in deny reason', async () => {
 // ---------- SOFT rule warns ----------
 
 test('pre-tool-use warns on README.md missing Quick Start (Write)', async () => {
-  const result = await runHook({
+  const result = await runHook(HOOK_PATH, {
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
@@ -143,7 +130,7 @@ test('pre-tool-use warns on README.md missing Quick Start (Write)', async () => 
 });
 
 test('pre-tool-use does not warn on README.md with Quick Start', async () => {
-  const result = await runHook({
+  const result = await runHook(HOOK_PATH, {
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
@@ -159,7 +146,7 @@ test('pre-tool-use does not warn on README.md with Quick Start', async () => {
 // ---------- Clean paths ----------
 
 test('pre-tool-use clean path: plain .md returns {}', async () => {
-  const result = await runHook({
+  const result = await runHook(HOOK_PATH, {
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
@@ -173,7 +160,7 @@ test('pre-tool-use clean path: plain .md returns {}', async () => {
 });
 
 test('pre-tool-use ignores non-edit tools', async () => {
-  const result = await runHook({
+  const result = await runHook(HOOK_PATH, {
     session_id: 'test',
     tool_name: 'Read',
     tool_input: { file_path: '/tmp/x.ts' },
@@ -188,7 +175,7 @@ test('pre-tool-use ignores non-edit tools', async () => {
 test('pre-tool-use works WITHOUT session meta (stateless rules check)', async () => {
   // This is the key fix from spike 2026-06-29: pre-tool-use does NOT depend
   // on session meta existing. Rules are a pure function of (content, filePath).
-  const result = await runHook({
+  const result = await runHook(HOOK_PATH, {
     session_id: 'no-meta-session',
     tool_name: 'Write',
     tool_input: {
@@ -207,7 +194,7 @@ test('pre-tool-use works WITHOUT session meta (stateless rules check)', async ()
 // ---------- JSON contract ----------
 
 test('pre-tool-use deny JSON keys match Claude Code documented schema', async () => {
-  const result = await runHook({
+  const result = await runHook(HOOK_PATH, {
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
@@ -234,7 +221,7 @@ test('pre-tool-use deny JSON keys match Claude Code documented schema', async ()
 });
 
 test('pre-tool-use warn JSON keys match expected schema', async () => {
-  const result = await runHook({
+  const result = await runHook(HOOK_PATH, {
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
