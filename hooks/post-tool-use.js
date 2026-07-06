@@ -1,7 +1,13 @@
 #!/usr/bin/env node
-// PostToolUse session meta counter — runs AFTER the tool executes to record
-// which files were touched. Rules checking has been moved to pre-tool-use.js
-// (PreToolUse hook), which can actually block writes before they happen.
+// PostToolUse session meta counter — runs AFTER the tool executes.
+//
+// NOTE: Rule checking (HARD/SOFT gates) has been moved to pre-tool-use.js
+// (PreToolUse hook) which runs BEFORE the tool and can actually block writes.
+// This hook only records telemetry for DOP reporting and session analysis.
+//
+// This separation was necessary because PostToolUse fires after the file is
+// already on disk, making `permissionDecision: "deny"` ineffective (spike
+// 2026-06-29 confirmed this). PreToolUse is the correct mechanism for blocking.
 //
 // This hook's job is now purely telemetry: increment files_touched counter
 // in session meta for DOP reporting and session-end analysis.

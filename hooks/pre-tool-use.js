@@ -22,18 +22,25 @@
 // rules to session meta caused hard-gate short-circuit when auth failed.
 
 import { matchRules } from './lib/rules.js';
-import { error, warn } from './lib/log.js';
+import { error } from './lib/log.js';
 
 const TRACKED_TOOLS = new Set(['Edit', 'Write', 'MultiEdit']);
-const STDIN_TIMEOUT_MS = 1_000;
+const STDIN_TIMEOUT_MS = 5_000; // 增大超时,避免大型 payload 竞争
 
 async function readStdin() {
   return new Promise((resolve) => {
     let data = '';
+    let resolved = false;
     process.stdin.setEncoding('utf8');
     process.stdin.on('data', (c) => { data += c; });
-    process.stdin.on('end', () => resolve(data));
-    const timer = setTimeout(() => resolve(data), STDIN_TIMEOUT_MS);
+    process.stdin.on('end', () => {
+      resolved = true;
+      resolve(data);
+    });
+    // Fallback timeout only if stdin never closes (防止挂起)
+    const timer = setTimeout(() => {
+      if (!resolved) resolve(data);
+    }, STDIN_TIMEOUT_MS);
     timer.unref?.();
   });
 }
@@ -85,8 +92,18 @@ async function main() {
   try {
     ruleResult = matchRules(content, filePath);
   } catch (err) {
-    warn(`pre-tool-use 规则匹配异常: ${err.message}`);
-    process.stdout.write('{}');
+    // Fail-safe: 规则引擎异常时阻断写入,避免绕过 HARD gate
+    // 记录到 stderr 供 DOP 或日志收集
+    error(`pre-tool-use 规则匹配异常, fail-safe deny: ${err.message}`);
+    const reason = `HARD gate 内部错误(规则引擎异常),fail-safe deny。\n错误: ${err.message}\n紧急绕过需在 PR 描述写 [OVERRIDE] <规则名>: <理由>。`;
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: reason,
+      },
+      systemMessage: reason,
+    }));
     return;
   }
 
@@ -124,7 +141,18 @@ async function main() {
 }
 
 main().catch((err) => {
-  error(`pre-tool-use 致命错误: ${err.stack ?? err.message}`);
-  try { process.stdout.write('{}'); } catch { /* last-ditch */ }
+  // Fail-safe: 未捕获异常时阻断写入,避免绕过 HARD gate
+  error(`pre-tool-use 致命错误, fail-safe deny: ${err.stack ?? err.message}`);
+  const reason = `HARD gate 内部错误(致命异常),fail-safe deny。\n错误: ${err.message}\n紧急绕过需在 PR 描述写 [OVERRIDE] <规则名>: <理由>。`;
+  try {
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: reason,
+      },
+      systemMessage: reason,
+    }));
+  } catch { /* last-ditch */ }
   process.exit(0);
 });
