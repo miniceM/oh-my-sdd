@@ -1,26 +1,26 @@
 ---
 name: sdd-doc
-description: 把 openspec spec 产物（proposal + delta specs）转成符合企业格式的 Word 需求规格说明书（.docx，含封面/信息表/修订记录表/目录/正文 + 页眉页脚页码）。当用户提到"生成 Word/导出文档/出需求规格说明书/转 Word/归档 spec/spec 转 Word/出评审材料/打印需求文档/规格书导出"等需求时使用——即使用户没明确说"Word"，只要意图是把 spec 阶段产出变成可评审/归档/流转的正式文档就应触发。
+description: 把 openspec 的 spec + plan 产物（proposal + delta specs + design.md）转成符合企业模版的 Markdown 需求规格说明书。当用户提到"生成需求文档/出需求规格说明书/出文档/归档 spec/出评审材料"等需求时使用。触发时机：/sdd-plan 完成后。
 argument-hint: [change-slug，可选；缺省自动推断唯一未归档 change]
-allowed-tools: Bash(python3 *)
+allowed-tools: Bash, Read, Write
 ---
 
-# /sdd-doc —— SDD 规格文档导出（spec → 企业格式 Word）
+# /sdd-doc —— SDD 需求文档导出（spec + plan → 企业 Markdown 模版）
 
-**前置依赖**：`pandoc`（必需，系统二进制）、`python3` + `python-docx` + `lxml`（必需）、企业 Word 模板（可选，缺省用 plugin 内置）。
-**触发时机**：`/sdd-spec` 完成、spec 已 commit 之后。本命令是 spec 阶段的**可选收尾**，不阻断后续 `/sdd-plan`。
+**前置依赖**：python3（标准库，无第三方依赖）。
+**触发时机**：`/sdd-plan` 完成后。本命令是 plan 阶段的收尾，用于将 spec + design 产物整合输出为企业格式 MD 文档。
 
 ## 何时使用
 
-- spec 阶段完成后，需向评审会/项目经理/归档系统提交 Word 格式需求规格说明书
-- spec 内容有变更，需重新生成最新版 Word
-- 跨团队流转、打印、签批场景需要 .docx 而非 markdown
+- `/sdd-plan` 完成后，需向评审会/需求平台/归档系统提交 Markdown 格式需求规格说明书
+- spec 或 design 内容有变更，需重新生成最新版文档
+- 跨团队流转、线上平台导入场景需要 .md 格式
 
 ## 何时不应使用
 
-- spec 未完成（proposal/specs 未写或未 commit）——生成会得到大量未填充表格
-- 仅内部协作且团队接受 markdown —— 不必导出
-- 需要 plan/design/tasks/review 阶段的 Word —— 当前仅支持 spec 阶段
+- spec 未完成（proposal/specs 未写）—— 生成会得到大量未填充表格
+- plan/design 未完成（design.md 未写）—— 接口设计/数据库设计/影响范围分析等章节将输出占位符；若仅需 spec 阶段内容，可用 `--no-design` 跳过
+- 需要 Word 格式 —— 请使用其他工具将 .md 转 .docx，本命令不再直接输出 Word
 
 ## 工作流
 
@@ -29,92 +29,192 @@ allowed-tools: Bash(python3 *)
 - **`$ARGUMENTS` 非空**：用作 slug，校验 `openspec/changes/<slug>/` 存在
 - **`$ARGUMENTS` 为空**：扫 `openspec/changes/*/`，唯一目录则自动推断；多个则提示用户指定
 
-### 步骤 2：执行生成
+### 步骤 2：语义理解（Claude 分析源文件）
 
-```bash
-python3 ${CLAUDE_SKILL_DIR}/sdd_doc.py <slug> [--project "项目标题"] [--capability-names "auth=认证,user=用户管理"]
+使用 Read 工具读取以下文件：
+- `openspec/changes/<slug>/.meta.json` — 项目元数据（项目名称、版本、作者、部门等）
+- `openspec/changes/<slug>/proposal.md` — 提案背景、范围、验收标准
+- `openspec/changes/<slug>/specs/<capability>/spec.md` — 每个 capability 的需求规格（Requirement/Scenario/WHEN-THEN）
+- `openspec/changes/<slug>/design.md` — 设计方案（如提供 `--no-design` 则跳过此文件）
+
+**理解内容，识别**：
+1. 每个 capability 对应的功能块和变更类型
+2. design.md 中的 API 接口设计、数据库设计、影响范围分析、非功能需求分别属于哪个 capability
+3. 根据变更类型推断规则确定每个 capability 的 changeTypes 数组
+
+### 步骤 3：生成结构化 JSON
+
+使用 Write 工具将理解结果写入 `openspec/changes/<slug>/.sdd-doc-data.json`。
+
+JSON 必须符合以下 Schema（完整示例见下文"JSON Schema 参考"）：
+
+```json
+{
+  "metadata": {
+    "projectTitle": "项目名称",
+    "systemName": "系统名称",
+    "releaseCode": "排期编号",
+    "releaseName": "排期名称",
+    "systemCode": "系统标识",
+    "version": "V0.1",
+    "author": "编写人",
+    "date": "2026-07-03",
+    "department": "制定部门"
+  },
+  "proposal": {
+    "title": "提案标题",
+    "background": "背景/目标描述（Markdown 原文或摘要）",
+    "scope": "范围描述",
+    "acceptance": "验收标准"
+  },
+  "capabilities": [
+    {
+      "name": "capability-slug",
+      "displayName": "功能块标题",
+      "description": "功能一句话描述",
+      "changeTypes": ["服务接口新增或变更", "数据库相关新增或变更"],
+      "requirements": [
+        {
+          "name": "Requirement 名称",
+          "desc": "Requirement 描述",
+          "scenarios": [
+            {
+              "name": "Scenario 名称",
+              "steps": [
+                {"type": "WHEN", "text": "前置条件"},
+                {"type": "THEN", "text": "预期结果"}
+              ]
+            }
+          ]
+        }
+      ],
+      "interfaceDesign": {
+        "changeType": "新增",
+        "apiGovernance": "是",
+        "table": {
+          "headers": ["功能", "接口名称", "接口地址", "接口变更类型", "API治理平台", "是否已完成相关设计"],
+          "rows": [["", "接口名称", "/api/v1/endpoint", "新增", "是", ""]]
+        }
+      },
+      "databaseDesign": {
+        "tables": [
+          {
+            "headers": ["列名1", "列名2", "类型", "说明"],
+            "rows": [["id", "主键", "bigint", "自增"]]
+          }
+        ]
+      },
+      "impactAnalysis": {
+        "table": {
+          "headers": ["序号", "影响系统分类", "影响系统名称", "影响功能/交易/接口", "具体影响内容分析", "备注"],
+          "rows": [["1", "本系统", "其他功能", "XX功能", "简述影响", ""]]
+        }
+      },
+      "errorCodes": {
+        "table": {
+          "headers": ["序号", "错误码编码", "业务错误提示信息", "备注"],
+          "rows": [["1", "XXX.XXX.XXXXXXX", "错误描述", ""]]
+        }
+      }
+    }
+  ],
+  "nonFunctional": {
+    "customerGroup": {
+      "type": "全行客户",
+      "scale": "百万级"
+    },
+    "performance": {
+      "concurrency": "最高500并发，平均100并发",
+      "throughput": "高峰1000TPS，平均200TPS",
+      "latency": "TP95=200ms，TP99=5000ms"
+    },
+    "visitDistribution": "访问集中度描述",
+    "hardwareCompatibility": {
+      "chipAndOS": "芯片及操作系统支持要求",
+      "languageRuntime": "语言运行时要求",
+      "database": "数据库软件要求",
+      "middleware": "中间件要求",
+      "browser": "浏览器兼容性要求",
+      "other": "其他需求"
+    },
+    "security": {
+      "userStories": [{"id": "SEC001", "name": "安全用户故事"}]
+    },
+    "additional": "其他非功能需求描述"
+  }
+}
 ```
 
-脚本自动完成：
-1. **前置检查**：pandoc、python-docx（缺失按 OS 给安装命令）
-2. **解析 spec 产物**：
-   - `proposal.md` 按 `##` 标题分块（背景/范围/验收）
-   - `specs/<capability>/spec.md` 解析 openspec delta（Requirement/Scenario/WHEN-THEN）
-3. **python-docx 填模板**（对象级，模板保持完整）：
-   - 封面：项目标题、版本号
-   - 信息表：编写人、发布日期、控制级别、制定部门
-   - 修订记录表：初始创建行
-4. **章节映射填充**（核心）：
-   - 生成"1 总体说明" + 1.1 项目信息 / 1.2 功能列表 / 1.3 验收标准（填 proposal）
-   - 每个 capability **deepcopy 完整功能块（含全部 11 类表格）**，填功能概述表（功能名称/说明）+ 处理逻辑表（scenario），**其余表格保留模板示例数据**作填写指引
-   - 非功能区无内容子章节填"（待补充）"
-5. **输出**：`openspec/changes/<slug>/<slug>-需求规格说明书.docx`
+### 步骤 4：执行渲染
 
-> 映射规则与技术路线细节见 `references/mapping-details.md`（维护者参考，执行无需读取）。
+```bash
+python3 ${CLAUDE_SKILL_DIR}/sdd_doc.py <slug> --data-json <.sdd-doc-data.json路径> [--capability-names "auth=认证,user=用户管理"]
+```
 
-### 步骤 3：提示用户
+脚本完成：
+1. 加载 JSON 数据
+2. 按企业模版输出：
+   - 文档信息、修订记录、目录
+   - §1 总体说明（排期信息表格 + 功能列表表格）
+   - §2 功能详细分析及设计（每个 capability 9 个固定子章节）
+   - §3 非功能需求分析（客户群体/性能/访问集中度/软硬件兼容性/安全/可扩展）
+3. 输出：`openspec/changes/<slug>/<slug>-需求规格说明书.md`
 
-- 打开生成的 .docx 检查格式
-- Word/WPS 打开时若提示"更新域"，点击以刷新目录（脚本已设 `updateFields=true`，多数查看器自动更新）
-- 修订记录仅含初始行，后续变更手动追加
-- **接口设计/会计核算/影响范围等表格保留的是模板示例数据**，需人工替换为真实数据（spec 阶段产不出这些设计字段）
+### 步骤 5：清理临时文件
+
+```bash
+rm openspec/changes/<slug>/.sdd-doc-data.json
+```
 
 ## 参数
 
 | 参数 | 说明 |
 |------|------|
 | `slug` | change slug；缺省时自动推断唯一未归档 change |
-| `--project` | 封面项目标题，覆盖 .meta.json |
+| `--data-json` | Claude 生成的结构化 JSON 文件路径（C 方案核心输入） |
+| `--no-design` | 跳过设计相关章节（接口/数据库/影响范围/非功能），输出纯占位符 |
 | `--capability-names` | capability 显示名映射，格式 `"auth=认证授权,user=用户管理"`（逗号分隔）；也可写在项目根 `.sdd-doc-names` 文件 |
-| `--stage` | 预留扩展（当前仅 `spec`） |
-
-## 模板查找优先级（三层）
-
-1. **change 本地覆盖**：`openspec/changes/<slug>/reference.docx`（单 change 定制）
-2. **项目级配置**：`<project-root>/.sdd-doc-template`（单行文件，内容为模板路径，绝对或相对项目根）
-3. **plugin 内置默认**：`skills/sdd-doc/templates/reference.docx`（脱敏通用版）
-
-企业真实模板含内部标识，**不应进开源仓库**。推荐做法：各项目用第 1 层或第 2 层放置真实模板。
 
 ## capability 显示名
 
-specs 目录名是英文 slug（如 `auth`），模板功能块标题期望可读名称。两种配置方式：
+specs 目录名是英文 slug（如 `auth`），模版功能块标题期望可读名称。两种配置方式：
 
 - **命令行**：`--capability-names "auth=认证授权,user=用户管理"`
 - **项目配置**：项目根 `.sdd-doc-names` 文件，内容如 `auth=认证授权,user=用户管理`
 
 缺省时用 slug 原文作标题。
 
+## 变更类型推断规则
+
+写入 JSON 时，根据以下规则推断每个 capability 的 `changeTypes` 数组：
+
+| 条件 | 勾选 |
+|------|------|
+| design.md 中有接口/API 设计内容 | `[x] 服务接口新增或变更` |
+| design.md 中有数据库表/DDL/Schema 变更 | `[x] 数据库相关新增或变更` |
+| spec 中提到 UI/页面/前端/界面变更 | `[x] 用户界面新增或变更` |
+| design.md/spec 涉及批处理/定时任务/Cron/Job | `[x] 批处理任务新增或变更` |
+| design.md/spec 涉及网络/防火墙/端口/域名 | `[x] 网络变更` |
+| design.md/spec 涉及基础设施/部署/容器/配置中心 | `[x] 其他基础设施变更` |
+| design.md/spec 涉及报表/BI/统计报表 | `[x] 报表新增或变更` |
+| design.md/spec 涉及模型/AI/算法/特征工程 | `[x] 模型新增或变更` |
+| 无任何匹配时 | 全部 `[ ]`（不强行猜测） |
+
 ## 强制规则
 
-- ✅ pandoc 与 python-docx 前置检查通过后再生成
-- ✅ 内置模板脱敏（不含企业具体标识）
-- ✅ 输出文件名固定 `<slug>-需求规格说明书.docx`
-- ✅ 功能块表格全部保留，不删除（只填 spec 能对上的两处）
-- ❌ 禁止凭空捏造元数据（缺值留空或用占位符，让用户手填）
-- ❌ 禁止覆盖用户已有的 `.meta.json` 修订记录（当前版本仅读不写）
-
-> 技术实现约束（如"为何不做 XML 字符串拼接"）见 `references/mapping-details.md`，属维护者关注、执行无关。
-
-## 故障排查
-
-| 现象 | 原因与处理 |
-|------|-----------|
-| `未找到 pandoc` | 按 OS 安装：mac `brew install pandoc` / win `winget install JohnMacFarlane.Pandoc` / linux `apt install pandoc` |
-| `缺少 python-docx` | `pip install python-docx lxml` |
-| `未找到 change 目录` | slug 错误，或先用 `/sdd-spec` 创建 |
-| `未找到 Word 模板` | 检查三层查找路径是否放置了模板 |
-| `模板未找到功能块作为模板源` | 模板功能区无 heading2 功能块，检查模板结构（详见 references/mapping-details.md"自定义模板适配要求"） |
-| 目录页空白或显示旧文本 | Word/WPS 打开时点"更新域"（脚本已设自动更新，但部分查看器需手动） |
-| 章节编号/标题异常 | 模板 heading1 需为"功能详细分析及设计""非功能需求分析"；自定义模板需匹配这些关键词 |
+- ✅ 严格按企业模版固定结构输出，不可删减任何章节
+- ✅ 文档信息/修订记录从 JSON 元数据自动填充
+- ✅ 变更类型复选框根据 `changeTypes` 数组渲染（`[x]` 表示勾选）
+- ✅ 所有模版固定格式（引用块指引、表格结构、章节编号）必须保留
+- ❌ 禁止凭空捏造元数据（缺值用占位符）
+- ❌ 禁止省略模版中的任何必选章节
+- ❌ 禁止修改 JSON Schema 结构（字段可省略但不可改名）
 
 ## 输出
 
-> ✓ 文档已生成：`openspec/changes/<slug>/<slug>-需求规格说明书.docx`
-> ✓ 套用模板：`<内置/本地/配置>` | capability：`<N>` 个 → 功能块 `<N>` 份
-> ✓ 封面、信息表、修订记录表、目录、正文已按模板章节结构填充（表格全保留）
+> ✓ 文档已生成：`openspec/changes/<slug>/<slug>-需求规格说明书.md`
+> ✓ capability：`<N>` 个 → 功能小节 `<N>` 份
+> ✓ 变更类型：`[x]` 已根据设计内容自动勾选
 >
-> 打开文档检查格式；Word/WPS 提示"更新域"时点击刷新目录。
-> 接口/会计/影响范围等表格保留的是模板示例数据，需人工替换为真实数据。
-> 修订记录仅含初始行，后续变更手动追加。
-> 可重新运行 `/sdd-doc` 覆盖更新；运行 `/sdd-plan <slug>` 进入 Ring 2（设计 + 任务）。
+> 设计阶段未产出的章节以占位符输出，需人工补充。
+> 可重新运行 `/sdd-doc` 覆盖更新。
