@@ -1,0 +1,37 @@
+{
+  "_comment": "oh-my-sdd hook 配置模板。安装时 install.js 会把 <PLUGIN_ROOT> 替换为绝对路径，把整个对象深度合并到 ~/.lingma/settings.json 中。卸载时仅删除 oh-my-sdd 注入的 4 个事件，保留用户其他配置。",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "node \"<PLUGIN_ROOT>/hooks/user-prompt-submit.js\"" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "node \"<PLUGIN_ROOT>/hooks/pre-tool-use.js\"" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "node \"<PLUGIN_ROOT>/hooks/post-tool-use.js\"" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "node \"<PLUGIN_ROOT>/hooks/session-end.js\"" }
+        ]
+      }
+    ]
+  }
+}

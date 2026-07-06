@@ -169,6 +169,45 @@ openspec init --tools claude
 
 **操作系统**：Windows 10/11、macOS、Linux（x64/arm64）
 
+## 多工具兼容
+
+oh-my-sdd v0.2+ 支持在多种 AI 编程工具中加载。skills + hooks + HARD_RULE 安全门禁跨工具复用。
+
+| 工具 | 状态 | 安装命令 | Skill 路径 | Hook 机制 |
+|------|------|---------|-----------|-----------|
+| **Claude Code** | ✅ 完整支持（默认） | `npm install -g @cli-tools/oh-my-sdd` | `~/.claude/skills/` | JSON hooks + wrapper |
+| **OpenCode** | ✅ 完整支持 | `oms-install --tool opencode` | `~/.config/opencode/skills/` | TS plugin（事件名映射） |
+| **通义灵码 Qoder CN** | ✅ 完整支持（基于文档解读） | `oms-install --tool qoder` | `~/.lingma/skills/` | JSON hooks（与 Claude Code 同构） |
+| **KiloCode** | ❌ 暂不支持 | — | — | 无 hook 机制，HARD_RULE 无法强制 |
+| **Cursor** | 📋 v0.3 路线 | — | — | — |
+| **Windsurf** | 📋 v0.3 路线 | — | — | — |
+
+**自动检测**：不传 `--tool` 时，install.js 按 `which claude > which opencode > which lingma` 顺序检测。检测到哪个就装哪个。
+
+**多工具并存**：同一台机器可同时为多个工具装 oh-my-sdd。卸载时用 `--tool <name>` 精准卸载单一工具，不影响其他。
+
+### 工具特定说明
+
+**OpenCode**：
+- 安装时自动尝试编译 `opencode/src/plugin.ts`（需 `npx tsc`）
+- 编译失败不影响 skills 安装——`~/.config/opencode/skills/` 仍可用，只是 hooks 不工作
+- OpenCode plugin 把小写工具名（`write`/`edit`/`apply_patch`）映射到大写（`Write`/`Edit`/`MultiEdit`），复用 `hooks/pre-tool-use.js`
+- 阻断方式：`throw new Error`（OpenCode plugin 协议）vs Claude Code 的 `permissionDecision: deny`
+
+**通义灵码 Qoder CN**：
+- 工具名**与 Claude Code 完全一致**（大写），`hooks/*.js` 零修改
+- baseline 注入到 `~/.lingma/rules/oh-my-sdd.md`（Always 类型规则自动生效）
+- 卸载时从 `~/.lingma/settings.json` 精准删除 4 个 oms hook 事件，保留用户其他 hook
+- ⚠️ 适配基于 `help.aliyun.com/zh/lingma/qoder-cn` 文档解读，未在真实 lingma 上做完整 e2e 验证
+
+**为什么 hooks/*.js 能在多工具共用**：它们按 **stdin/stdout JSON 协议** 实现，本身工具无关。Claude Code / 通义灵码的事件名和工具名一致所以零修改；OpenCode 通过薄 TS 包装做事件名 + 工具名映射 + child_process.spawn 调用。
+
+### 已知风险
+
+1. **OpenCode plugin API 不稳定性**：`session.created`/`tool.execute.before` 等事件名可能在 OpenCode 升级时改名。plugin.ts 当前 lock `opencode: ^1.0.0`。
+2. **用户级安装的副作用**：skills 装到 `~/.config/opencode/skills/` 后对所有项目可见。用户的非企业项目也会加载企业 skill。SKILL.md 的 description 已尽量精确，但仍可能误触发。如需隔离，非企业项目下手动 `rm -rf ~/.config/opencode/skills/{sdd-*,security-check,api-design}`。
+3. **通义灵码 docs 部分未官方验证**：`Stop` 事件与 session-end 的等价关系是文档解读推测，需在 v0.3 实机验证。
+
 ## 许可
 
 UNLICENSED（企业内部使用）

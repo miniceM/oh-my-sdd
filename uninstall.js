@@ -106,7 +106,7 @@ async function cleanupLegacyFiles() {
   }
 }
 
-async function main({ purge = false } = {}) {
+async function uninstallForClaude({ announce }) {
   announce('→ 卸载 plugin');
   await uninstallPlugin();
 
@@ -119,6 +119,38 @@ async function main({ purge = false } = {}) {
 
   announce('→ 卸载 Claude CLI wrapper');
   await uninstallWrapper(announce);
+}
+
+async function main({ purge = false, tool } = {}) {
+  // 1. 卸载指定工具的钩子/配置（如果指定了 tool）
+  if (tool) {
+    if (tool === 'opencode') {
+      const { uninstallForOpenCode: fn } = await import('./hooks/lib/install-opencode.js');
+      await fn();
+      return;
+    }
+    if (tool === 'qoder') {
+      const { uninstallForQoder: fn } = await import('./hooks/lib/install-qoder.js');
+      await fn();
+      return;
+    }
+    if (tool !== 'claude') {
+      process.stderr.write(`❌ 未知工具: ${tool}\n`);
+      process.exit(1);
+    }
+    // tool === 'claude' 走下面的 Claude 卸载路径
+  }
+
+  // 2. 默认：完整卸载 Claude Code 路径
+  await uninstallForClaude({ announce });
+
+  // 3. 工具未指定时，也清理 OpenCode/Qoder（如果装过）
+  if (!tool) {
+    const { uninstallForOpenCode: fn1 } = await import('./hooks/lib/install-opencode.js');
+    const { uninstallForQoder: fn2 } = await import('./hooks/lib/install-qoder.js');
+    await fn1();
+    await fn2();
+  }
 
   if (purge) {
     announce('→ --purge: 同时移除 ~/.oh-my-sdd/ 状态目录');
@@ -132,11 +164,15 @@ async function main({ purge = false } = {}) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const purge = process.argv.includes('--purge');
-  main({ purge }).catch((err) => {
+  const args = process.argv.slice(2);
+  const purge = args.includes('--purge');
+  const toolIdx = args.indexOf('--tool');
+  const tool = toolIdx !== -1 ? args[toolIdx + 1] : null;
+  main({ purge, tool }).catch((err) => {
     process.stderr.write(`❌ 卸载失败：${err.stack ?? err.message}\n`);
     process.exit(1);
   });
 }
 
-export { main, uninstallPlugin, removeMarketplace, cleanupLegacyFiles, cleanupLegacySettings };
+export { main, uninstallPlugin, removeMarketplace, cleanupLegacyFiles, cleanupLegacySettings,
+         uninstallForClaude };

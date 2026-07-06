@@ -1,0 +1,15 @@
+{
+  "name": "oh-my-sdd-opencode-plugin",
+  "version": "0.1.0",
+  "description": "OpenCode TS plugin adapter for oh-my-sdd — bridges OpenCode events to existing hooks/*.js",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.0.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.5.0"
+  }
+}
