@@ -222,8 +222,28 @@ output_path = openspec/changes/<slug>/<slug>-需求规格说明书.md
 
 **3.5.2 调用 sdd_doc.py 检测状态**
 
+> 跨 AI 工具兼容：以下 `SDD_DOC_SCRIPT` 查找块**必须**在 `python3` 命令之前执行。`CLAUDE_SKILL_DIR` 是 Claude Code 特有的环境变量，OpenCode / 通义灵码不设置——查找链按已知安装位置依次兜底。
+
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/sdd_doc.py --check-overwrite <output_path>
+# 跨 AI 工具兼容：定位 sdd_doc.py
+# 优先级：CLAUDE_PLUGIN_ROOT (Claude marketplace + OpenCode 适配器)
+#         > CLAUDE_SKILL_DIR (Claude 旧版兼容)
+#         > 各工具默认安装路径
+SDD_DOC_SCRIPT=""
+for _cand in \
+  "${CLAUDE_PLUGIN_ROOT:-}/skills/sdd-doc/sdd_doc.py" \
+  "${CLAUDE_SKILL_DIR:-}/sdd_doc.py" \
+  "$HOME/.claude/skills/oh-my-sdd/sdd-doc/sdd_doc.py" \
+  "$HOME/.config/opencode/skills/sdd-doc/sdd_doc.py" \
+  "$HOME/.lingma/skills/sdd-doc/sdd_doc.py" \
+  ; do
+  [ -f "$_cand" ] && SDD_DOC_SCRIPT="$_cand" && break
+done
+if [ -z "$SDD_DOC_SCRIPT" ]; then
+  echo "❌ 找不到 sdd_doc.py。请运行 oms-install 重新安装插件。" >&2
+  exit 1
+fi
+python3 "$SDD_DOC_SCRIPT" --check-overwrite <output_path>
 ```
 
 返回 JSON（结构见 sdd_doc.py `_check_overwrite_safety` 函数 docstring）：
@@ -276,8 +296,25 @@ python3 ${CLAUDE_SKILL_DIR}/sdd_doc.py --check-overwrite <output_path>
 
 ### 步骤 4：执行渲染
 
+> 跨 AI 工具兼容：`SDD_DOC_SCRIPT` 查找块与 3.5.2 完全一致（Claude Code / OpenCode / 通义灵码通用），必须先于 `python3` 执行。
+
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/sdd_doc.py <slug> --data-json <.sdd-doc-data.json路径> [--capability-names "auth=认证,user=用户管理"]
+# 跨 AI 工具兼容：定位 sdd_doc.py（详见 3.5.2）
+SDD_DOC_SCRIPT=""
+for _cand in \
+  "${CLAUDE_PLUGIN_ROOT:-}/skills/sdd-doc/sdd_doc.py" \
+  "${CLAUDE_SKILL_DIR:-}/sdd_doc.py" \
+  "$HOME/.claude/skills/oh-my-sdd/sdd-doc/sdd_doc.py" \
+  "$HOME/.config/opencode/skills/sdd-doc/sdd_doc.py" \
+  "$HOME/.lingma/skills/sdd-doc/sdd_doc.py" \
+  ; do
+  [ -f "$_cand" ] && SDD_DOC_SCRIPT="$_cand" && break
+done
+if [ -z "$SDD_DOC_SCRIPT" ]; then
+  echo "❌ 找不到 sdd_doc.py。请运行 oms-install 重新安装插件。" >&2
+  exit 1
+fi
+python3 "$SDD_DOC_SCRIPT" <slug> --data-json <.sdd-doc-data.json路径> [--capability-names "auth=认证,user=用户管理"]
 ```
 
 脚本完成：
