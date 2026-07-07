@@ -160,8 +160,8 @@ export async function installWrapper(packageRoot, announce = console.log) {
     announce(`  ✓ 已安装 wrapper: ${wrapperPath}`);
   }
 
-  // 安装规则文件
-  const rulesSource = path.join(packageRoot, 'rules', 'enterprise-baseline.md');
+  // 安装规则文件（content/ 是单一源，与 session-start.js 注入路径一致）
+  const rulesSource = path.join(packageRoot, 'content', 'enterprise-baseline.md');
   if (existsSync(rulesSource)) {
     await copyFile(rulesSource, rulesPath);
     announce(`  ✓ 已安装规则: ${rulesPath}`);

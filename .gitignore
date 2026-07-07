@@ -9,3 +9,4 @@ coverage/
 *.tgz
 __pycache__/
 *.pyc
+.claude/settings.local.json

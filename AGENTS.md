@@ -107,7 +107,7 @@ Soft rules (warn but allow):
 
 1. **Plugin cache**: After changing hooks/skills, run `./scripts/dev-reinstall.sh` — `npm install` alone won't refresh Claude Code's cache.
 
-2. **Hook injection**: SessionStart hook's `additionalContext` is silently dropped (Anthropic bug #16538). Install.js works around this by injecting baseline into user-level `~/.claude/CLAUDE.md` instead.
+2. **Hook injection**: SessionStart hook's `additionalContext` is silently dropped (Anthropic bug #16538). Workaround: `wrappers/claude.sh` (and `.ps1`) injects baseline via `--append-system-prompt-file` flag. The wrapper copies `content/enterprise-baseline.md` to `~/.config/claude-enterprise/baseline.md` (POSIX) or `~/AppData/Roaming/ClaudeEnterprise/baseline.md` (Windows) at install time.
 
 3. **PreToolUse is the real gate**: PostToolUse can't block writes. All security enforcement must be in `pre-tool-use.js`.
 

@@ -67,14 +67,14 @@ test('wrappers directory contains required scripts', () => {
   assert.ok(existsSync(path.join(wrappersDir, 'claude.bat')), 'claude.bat must exist');
 });
 
-// ---------- rules 目录存在性 ----------
+// ---------- content/ baseline 存在性（content/ 是唯一源，session-start + wrapper 共享）----------
 
-test('rules directory contains enterprise-baseline.md', () => {
-  const rulesDir = path.join(PROJECT_ROOT, 'rules');
-  assert.ok(existsSync(rulesDir), 'rules directory must exist');
+test('content directory contains enterprise-baseline.md (single source of truth)', () => {
+  const contentDir = path.join(PROJECT_ROOT, 'content');
+  assert.ok(existsSync(contentDir), 'content directory must exist');
 
-  const baseline = path.join(rulesDir, 'enterprise-baseline.md');
-  assert.ok(existsSync(baseline), 'enterprise-baseline.md must exist');
+  const baseline = path.join(contentDir, 'enterprise-baseline.md');
+  assert.ok(existsSync(baseline), 'enterprise-baseline.md must exist in content/');
 });
 
 // ---------- wrapper script 内容验证 ----------

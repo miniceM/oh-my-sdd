@@ -25,7 +25,6 @@
     "uninstall.js",
     "bin/",
     "wrappers/",
-    "rules/",
     "skills/",
     "content/",
     "hooks/",
