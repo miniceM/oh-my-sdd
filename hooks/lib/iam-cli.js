@@ -106,8 +106,8 @@ export async function getAuthStatus({ timeoutMs } = {}) {
 export async function login(username, password, system = 'devops') {
   // stdin pipes password to avoid leaking in process list / shell history
   const result = await runIam(
-    ['auth', 'login', '-u', username, '-p', '-', '--system', system],
-    { input: password + '\n' }
+    ['auth', 'login', '--username', username, '--password', password, '--system', system],
+    { timeoutMs: 30_000 }
   );
   if (result.exitCode === 0) {
     return { ok: true };
