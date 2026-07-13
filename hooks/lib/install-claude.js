@@ -91,8 +91,7 @@ async function installPlugin() {
  * @returns {Promise<void>}
  */
 export async function installForClaude({ PACKAGE_ROOT }) {
-  announce('→ 检查 Node 版本与 iam CLI');
-  // preflight 由 main() 调度器统一调用，此处不重复
+  // preflight 由 main() 调度器统一调用（preflightFor('claude')），此处不重复
 
   if (!isClaudeInstalled()) {
     process.stderr.write('\n❌ 未检测到 claude CLI。请手动执行：\n');
@@ -119,8 +118,9 @@ export async function installForClaude({ PACKAGE_ROOT }) {
     announce('→ 安装 Claude CLI wrapper（企业规则自动注入）');
     await installWrapper(PACKAGE_ROOT, announce);
   } else {
-    announce('⚠️  Claude CLI wrapper 未安装（未找到原 Claude）');
-    announce('    安装 Claude CLI 后，运行 npm reinstall @cli-tools/oh-my-sdd');
+    announce('⚠️  Claude CLI wrapper 未安装（未找到原 claude 二进制）');
+    announce('    1) 安装 Claude Code: https://claude.com/download');
+    announce('    2) 运行: npm reinstall @cli-tools/oh-my-sdd（重新触发 wrapper 安装）');
   }
 
   announce('');

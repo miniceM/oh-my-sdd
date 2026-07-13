@@ -102,7 +102,7 @@ async function generateLingmaSettings(packageRoot, announce) {
 // ============================================
 // 安装主入口
 // ============================================
-export async function installForQoder({ PACKAGE_ROOT }) {
+export async function installForQoder({ PACKAGE_ROOT, announce }) {
   if (isHomeDir(process.cwd())) {
     announce('⚠️  当前目录是 HOME 目录，建议 cd 到项目目录后再装');
   }
@@ -115,7 +115,14 @@ export async function installForQoder({ PACKAGE_ROOT }) {
 
   announce('');
   announce('✓ oh-my-sdd (通义灵码) 安装完成');
-  announce('  重启通义灵码 IDE 即可加载 skills + 规则门禁');
+  announce('');
+  announce('下一步：');
+  announce('  1. 重启通义灵码 IDE（加载新 skills + rules）');
+  announce('  2. baseline 已写入 ~/.lingma/rules/oh-my-sdd.md（Always 类型规则自动生效）');
+  announce('  3. hooks 已合并到 ~/.lingma/settings.json（保留你的其他 hook 事件）');
+  announce('  4. 测试企业约束：问 "你的身份是什么？"，应回复"企业 SDD Agent"');
+  announce('');
+  announce('卸载：npm uninstall -g @cli-tools/oh-my-sdd && node uninstall.js --tool qoder');
 }
 
 // ============================================

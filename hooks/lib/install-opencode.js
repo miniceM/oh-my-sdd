@@ -146,7 +146,7 @@ async function installOpenCodePluginToHome(packageRoot, announce) {
 // ============================================
 // 安装主入口
 // ============================================
-export async function installForOpenCode({ PACKAGE_ROOT }) {
+export async function installForOpenCode({ PACKAGE_ROOT, announce }) {
   if (isHomeDir(process.cwd())) {
     announce('⚠️  当前目录是 HOME 目录，建议 cd 到项目目录后再装（继续执行但会有副作用）');
   }
@@ -160,7 +160,13 @@ export async function installForOpenCode({ PACKAGE_ROOT }) {
 
   announce('');
   announce('✓ oh-my-sdd (OpenCode) 安装完成');
-  announce('  重启 OpenCode 即可加载 skills + 规则门禁');
+  announce('');
+  announce('下一步：');
+  announce('  1. 重启 OpenCode（加载新 skills + plugin）');
+  announce('  2. 在项目目录打开 OpenCode，baseline 规则已注入 ~/.config/opencode/AGENTS.md');
+  announce('  3. 测试企业约束：问 "你的身份是什么？"，应回复"企业 SDD Agent"');
+  announce('');
+  announce('卸载：npm uninstall -g @cli-tools/oh-my-sdd && node uninstall.js --tool opencode');
 }
 
 // ============================================
