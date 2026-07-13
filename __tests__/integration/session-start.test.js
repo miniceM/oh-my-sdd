@@ -26,27 +26,30 @@ function makeStubIam(jsonOutput) {
   const dir = mkdtempSync(path.join(tmpdir(), 'iam-stub-'));
   const jsonStr = JSON.stringify(jsonOutput);
   if (process.platform === 'win32') {
-    // Windows: 写 iam.cmd (shim) + iam.js (node stub)。
-    // 用 node 脚本而不是纯 cmd，避免 CMD 嵌套 if 链的兼容性问题。
-    const jsPath = path.join(dir, 'iam.js');
-    const jsScript = [
-      '#!/usr/bin/env node',
-      '// Stub iam CLI for tests. Outputs fixed JSON on auth status --json.',
-      'const argv = process.argv;',
-      'if (argv[2] === "auth" && argv[3] === "status" &&',
-      '    (argv[4] === "--json" || argv[4] === "-json")) {',
-      '  process.stdout.write(' + JSON.stringify(jsonStr) + ' + "\\n");',
-      '  process.exit(0);',
-      '}',
-      'process.exit(0);',
-      '',
-    ].join('\n');
-    writeFileSync(jsPath, jsScript);
-
-    // .cmd shim: 调用 node 跑 iam.js
-    const cmdPath = path.join(dir, 'iam.cmd');
-    const shimScript = `@echo off\r\nnode "%~dp0iam.js" %*\r\nexit /b %ERRORLEVEL%\r\n`;
-    writeFileSync(cmdPath, shimScript);
+    // Windows: 单层 iam.bat stub。
+    // 关键约束：
+    //   1. 不能用 cmd→cmd→node→js 链路（企业 Windows node 启动 + AV 扫描
+    //      常超 5s，命中 hook 的 IAM_AUTH_TIMEOUT_MS）。
+    //   2. 不能直接用 `echo {json}`（CMD 的 echo 对引号/转义处理有 quirk，
+    //      JSON 中 `"` 会被吞或重排，导致 hook 端 JSON.parse 失败）。
+    // 解法：把 JSON 写到独立 .json 文件，.bat 用 `type` 字面量输出。
+    // type 不解释内容，原样 byte-for-byte 写出，可靠。
+    const jsonPath = path.join(dir, 'iam.json');
+    writeFileSync(jsonPath, jsonStr + '\n');
+    const batPath = path.join(dir, 'iam.bat');
+    // 条件：auth status --json / -json。任一不满足直接 exit /b 0（静默成功，
+    // 避免 hook 把成功调用误判为失败）。
+    const batScript =
+      '@echo off\r\n' +
+      'if not "%~1"=="auth" exit /b 0\r\n' +
+      'if not "%~2"=="status" exit /b 0\r\n' +
+      'if "%~3"=="--json" goto :emit\r\n' +
+      'if "%~3"=="-json" goto :emit\r\n' +
+      'exit /b 0\r\n' +
+      ':emit\r\n' +
+      'type "%~dp0iam.json"\r\n' +
+      'exit /b 0\r\n';
+    writeFileSync(batPath, batScript);
   } else {
     const cmd = path.join(dir, 'iam');
     const script = `#!/bin/bash\nif [ "$1" = "auth" ] && [ "$2" = "status" ] && { [ "$3" = "--json" ] || [ "$3" = "-json" ]; }; then\n  echo '${JSON.stringify(jsonOutput)}'\nfi\n`;

@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -81,7 +80,7 @@ test('content directory contains enterprise-baseline.md (single source of truth)
 
 test('claude.sh references baseline.md', () => {
   const shPath = path.join(PROJECT_ROOT, 'wrappers', 'claude.sh');
-  const content = execFileSync('cat', [shPath], { encoding: 'utf8' });
+  const content = readFileSync(shPath, 'utf8');
   assert.ok(content.includes('baseline.md'), 'must reference baseline.md');
   assert.ok(content.includes('CLAUDE_ENTERPRISE_RULES'), 'must support env override');
   assert.ok(content.includes('--no-enterprise'), 'must support bypass option');
@@ -89,7 +88,7 @@ test('claude.sh references baseline.md', () => {
 
 test('claude.ps1 references baseline.md', () => {
   const ps1Path = path.join(PROJECT_ROOT, 'wrappers', 'claude.ps1');
-  const content = execFileSync('cat', [ps1Path], { encoding: 'utf8' });
+  const content = readFileSync(ps1Path, 'utf8');
   assert.ok(content.includes('baseline.md'), 'must reference baseline.md');
   assert.ok(content.includes('CLAUDE_ENTERPRISE_RULES'), 'must support env override');
   assert.ok(content.includes('--no-enterprise'), 'must support bypass option');
