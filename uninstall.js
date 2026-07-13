@@ -129,8 +129,8 @@ async function main({ purge = false, tool } = {}) {
       await fn();
       return;
     }
-    if (tool === 'qoder') {
-      const { uninstallForQoder: fn } = await import('./hooks/lib/install-qoder.js');
+    if (tool === 'lingma') {
+      const { uninstallForLingma: fn } = await import('./hooks/lib/install-lingma.js');
       await fn();
       return;
     }
@@ -144,10 +144,10 @@ async function main({ purge = false, tool } = {}) {
   // 2. 默认：完整卸载 Claude Code 路径
   await uninstallForClaude({ announce });
 
-  // 3. 工具未指定时，也清理 OpenCode/Qoder（如果装过）
+  // 3. 工具未指定时，也清理 OpenCode/Lingma（如果装过）
   if (!tool) {
     const { uninstallForOpenCode: fn1 } = await import('./hooks/lib/install-opencode.js');
-    const { uninstallForQoder: fn2 } = await import('./hooks/lib/install-qoder.js');
+    const { uninstallForLingma: fn2 } = await import('./hooks/lib/install-lingma.js');
     await fn1();
     await fn2();
   }

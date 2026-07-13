@@ -1,6 +1,6 @@
 // install-opencode.js — OpenCode 工具的安装/卸载实现。
 //
-// 与 install-claude.js / install-qoder.js 对称：每个工具一个独立模块。
+// 与 install-claude.js / install-lingma.js 对称：每个工具一个独立模块。
 //
 // OpenCode 路径特有逻辑：
 //   1. skills 复制到 ~/.config/opencode/skills/

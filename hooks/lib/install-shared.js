@@ -1,6 +1,6 @@
-// install-shared.js — OpenCode 和通义灵码 Qoder CN 安装/卸载的共享 utilities。
+// install-shared.js — OpenCode 和通义灵码 lingma 安装/卸载的共享 utilities。
 //
-// 为何独立成文件：避免 install-opencode.js 和 install-qoder.js 重复同样的工具代码。
+// 为何独立成文件：避免 install-opencode.js 和 install-lingma.js 重复同样的工具代码。
 // 这些 utilities 100% 跨工具复用——剥离它们让两个工具模块只保留"工具特定"逻辑。
 //
 // 包含：
@@ -10,7 +10,7 @@
 //
 // 不包含：
 //   - 路径常量（每个工具有自己的 ~/.config/opencode 或 ~/.lingma）
-//   - baseline 注入逻辑（OpenCode 哨兵块追加 vs Qoder 整体覆盖，机制不同不共享）
+//   - baseline 注入逻辑（OpenCode 哨兵块追加 vs lingma 整体覆盖，机制不同不共享）
 //   - 工具特定 plugin 编译/settings.json 生成
 
 import { readFile, writeFile, mkdir, readdir, copyFile } from 'node:fs/promises';

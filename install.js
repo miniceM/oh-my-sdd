@@ -5,13 +5,13 @@
 //   install.js (本文件)        ← 纯调度：preflightFor(tool) + main(options) + detectDefaultTool
 //     ├── hooks/lib/install-claude.js    ← Claude Code 路径（marketplace + plugin + wrapper）
 //     ├── hooks/lib/install-opencode.js ← OpenCode 路径（skills 复制 + baseline 哨兵 + plugin 编译）
-//     ├── hooks/lib/install-qoder.js    ← 通义灵码 Qoder CN 路径（skills 复制 + rules 写入 + settings.json 合并）
+//     ├── hooks/lib/install-lingma.js    ← 通义灵码 Lingma CN 路径（skills 复制 + rules 写入 + settings.json 合并）
 //     └── hooks/lib/install-shared.js   ← 共享 utilities（哨兵、copyDirRecursive、copySkillsToDir）
 //
 // 工具特定前置检查（preflightFor）：
 //   - claude:   iam CLI（oms-login）+ openspec CLI（/sdd-review 归档用）
 //   - opencode: opencode CLI 检测（不在则提示用户装 IDE）
-//   - qoder:    lingma CLI / ~/.lingma/ 目录检测（不在则提示装通义灵码）
+//   - lingma:    lingma CLI / ~/.lingma/ 目录检测（不在则提示装通义灵码）
 //
 // 向后兼容：
 //   - 不传 --tool: 等价于 v0.1.0 的 npm postinstall 行为（自动检测 → claude）
@@ -26,7 +26,7 @@ import { checkNodeVersion, isIamInPath } from './hooks/lib/platform.js';
 import { ensureStateDir } from './hooks/lib/state-dir.js';
 import { installForClaude, isClaudeInstalled } from './hooks/lib/install-claude.js';
 import { installForOpenCode } from './hooks/lib/install-opencode.js';
-import { installForQoder } from './hooks/lib/install-qoder.js';
+import { installForLingma } from './hooks/lib/install-lingma.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = __dirname;
@@ -40,7 +40,7 @@ function preflightFor(tool) {
     process.exit(1);
   }
 
-  // 工具特定检查：避免给 OpenCode/Qoder 用户打印 iam/openspec 等 Claude 专属提示
+  // 工具特定检查：避免给 OpenCode/lingma 用户打印 iam/openspec 等 Claude 专属提示
   switch (tool) {
     case 'claude':
       if (!isIamInPath()) {
@@ -63,8 +63,8 @@ function preflightFor(tool) {
         process.stderr.write('    安装：https://opencode.dev\n');
       }
       break;
-    case 'qoder':
-      if (!isQoderInstalled()) {
+    case 'lingma':
+      if (!isLingmaInstalled()) {
         process.stderr.write('⚠️  未检测到通义灵码 (lingma) IDE。已写入 rules + 合并 settings.json，但 IDE 不在时不生效。\n');
         process.stderr.write('    安装：https://lingma.aliyun.com\n');
       }
@@ -85,7 +85,7 @@ function isOpenCodeInstalled() {
   }
 }
 
-function isQoderInstalled() {
+function isLingmaInstalled() {
   const cmd = process.platform === 'win32' ? 'where' : 'which';
   try {
     execFileSync(cmd, ['lingma'], { stdio: 'ignore' });
@@ -107,7 +107,7 @@ function detectDefaultTool() {
   // 自动检测用户主要使用的 AI 工具
   if (isClaudeInstalled()) return 'claude';
   if (isOpenCodeInstalled()) return 'opencode';
-  if (isQoderInstalled()) return 'qoder';
+  if (isLingmaInstalled()) return 'lingma';
   return 'claude'; // fallback（向后兼容 v0.1）
 }
 
@@ -126,11 +126,11 @@ async function main(options = {}) {
       return installForClaude({ PACKAGE_ROOT });
     case 'opencode':
       return installForOpenCode({ PACKAGE_ROOT, announce });
-    case 'qoder':
-      return installForQoder({ PACKAGE_ROOT, announce });
+    case 'lingma':
+      return installForLingma({ PACKAGE_ROOT, announce });
     default:
       process.stderr.write(`❌ 未知工具: ${tool}\n`);
-      process.stderr.write('  支持: claude, opencode, qoder\n');
+      process.stderr.write('  支持: claude, opencode, lingma\n');
       process.exit(1);
   }
 }
@@ -151,4 +151,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 
 export { main, preflightFor, detectDefaultTool,
-         isClaudeInstalled, isOpenCodeInstalled, isQoderInstalled };
+         isClaudeInstalled, isOpenCodeInstalled, isLingmaInstalled };

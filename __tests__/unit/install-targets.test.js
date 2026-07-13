@@ -60,9 +60,9 @@ test('SENTINEL_RE handles missing sentinel gracefully', () => {
 });
 
 // ============================================
-// Qoder settings.json 深度合并测试
+// lingma settings.json 深度合并测试
 // ============================================
-test('Qoder hook merge preserves user custom events', () => {
+test('lingma hook merge preserves user custom events', () => {
   const omsEvents = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop'];
   const existing = {
     hooks: {
@@ -90,7 +90,7 @@ test('Qoder hook merge preserves user custom events', () => {
   assert.ok(existing.hooks.CustomEvent);
 });
 
-test('Qoder hook removal keeps non-oms events intact', () => {
+test('lingma hook removal keeps non-oms events intact', () => {
   // 卸载后：oms 4 个事件被删，但用户的 CustomEvent 保留
   const settings = {
     hooks: {
@@ -108,7 +108,7 @@ test('Qoder hook removal keeps non-oms events intact', () => {
   assert.deepEqual(Object.keys(settings.hooks), ['CustomEvent']);
 });
 
-test('Qoder hook removal deletes hooks container when fully empty', () => {
+test('lingma hook removal deletes hooks container when fully empty', () => {
   // 当只有 oms 事件时，全部删除后 hooks 容器应被清除
   const settings = {
     hooks: {
@@ -179,6 +179,6 @@ test('copySkillsToDir preserves skill name as directory', async () => {
   }
 });
 
-// 注：isHomeDir 是 install-opencode.js / install-qoder.js 内部的 5 行工具函数，
+// 注：isHomeDir 是 install-opencode.js / install-lingma.js 内部的 5 行工具函数，
 // 重复定义无共享价值，因此未导出也不单独测试。它的逻辑（resolve vs realpath）
 // 已经在 install.js 的更严格的 isHomeDir 实现中验证（通过 smoke-check）。

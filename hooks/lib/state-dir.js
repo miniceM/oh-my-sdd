@@ -1,13 +1,13 @@
 // state-dir.js — oh-my-sdd 跨工具共享状态目录管理。
 //
 // 为何独立成文件：~/.oh-my-sdd/ 是 oh-my-sdd 的**跨工具共享状态目录**（不只是
-// Claude 用的）。所有工具路径（claude/opencode/qoder）的安装入口都应调用
+// Claude 用的）。所有工具路径（claude/opencode/lingma）的安装入口都应调用
 // ensureStateDir()，保证 ~/.oh-my-sdd/ 存在。
 //
 // 当前内容：
 //   - config.json: 跨工具共享配置（dop_endpoint, log_level 等）
 //   - baseline-{tool}.sentinel: 卸载时精准定位 baseline 注入位置
-//   - sessions/{session-id}.json: session 元数据（Claude 用，但 OpenCode/Qoder
+//   - sessions/{session-id}.json: session 元数据（Claude 用，但 OpenCode/lingma
 //     也可能用同一文件锁做 event-queue）
 //
 // 未来扩展：所有工具的配置统一在此目录，~ 端不污染用户文件系统。

@@ -2,7 +2,7 @@
 // Manual uninstaller entry point
 //
 // CLI flags:
-//   --tool <claude|opencode|qoder>   Uninstall only the specified tool (default: all)
+//   --tool <claude|opencode|lingma>   Uninstall only the specified tool (default: all)
 //   --purge                          Also remove ~/.oh-my-sdd/ state directory
 //   -h, --help                       Show this help and exit
 //   -V, --version                    Print version and exit
@@ -38,10 +38,10 @@ function printHelp() {
 工具:
   claude       Claude Code
   opencode     OpenCode
-  qoder        通义灵码 Qoder CN
+  lingma        通义灵码 lingma
 
 选项:
-  --tool <name>    仅卸载指定工具。默认卸载所有工具（Claude + OpenCode + Qoder）
+  --tool <name>    仅卸载指定工具。默认卸载所有工具（Claude + OpenCode + lingma）
   --purge          同时删除 ~/.oh-my-sdd/ 状态目录
   -h, --help       显示此帮助并退出
   -V, --version    显示版本并退出
@@ -73,7 +73,7 @@ function parseArgs(argv) {
     tool = argv[toolIdx + 1];
     if (!tool || tool.startsWith('-')) {
       process.stderr.write('❌ --tool 需要指定工具名\n');
-      process.stderr.write('  支持: claude, opencode, qoder\n');
+      process.stderr.write('  支持: claude, opencode, lingma\n');
       process.stderr.write('  查看帮助: oms-uninstall --help\n');
       process.exit(1);
     }

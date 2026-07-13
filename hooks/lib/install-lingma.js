@@ -1,12 +1,12 @@
-// install-qoder.js — 通义灵码 Qoder CN 的安装/卸载实现。
+// install-lingma.js — 通义灵码 lingma CN 的安装/卸载实现。
 //
 // 与 install-claude.js / install-opencode.js 对称：每个工具一个独立模块。
 //
-// Qoder 路径特有逻辑：
+// lingma 路径特有逻辑：
 //   1. skills 复制到 ~/.lingma/skills/
 //   2. baseline 写入 ~/.lingma/rules/oh-my-sdd.md（Always 类型规则自动生效）
 //   3. 深度合并 hooks 到 ~/.lingma/settings.json（保留用户其他 hooks）
-//   4. 写入哨兵文件 ~/.oh-my-sdd/baseline-qoder.sentinel
+//   4. 写入哨兵文件 ~/.oh-my-sdd/baseline-lingma.sentinel
 //
 // 卸载：
 //   1. 删 skills 目录
@@ -36,7 +36,7 @@ const LINGMA_SETTINGS = join(LINGMA_DIR, 'settings.json');
 const LINGMA_RULES_DIR = join(LINGMA_DIR, 'rules');
 const LINGMA_RULE_FILE = join(LINGMA_RULES_DIR, 'oh-my-sdd.md');
 
-// Qoder 的 hook 事件名（与 Claude Code 同名）
+// lingma 的 hook 事件名（与 Claude Code 同名）
 // 卸载时只删这 4 个事件，保留用户的 CustomEvent 等
 const OOMS_EVENTS = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop'];
 
@@ -55,8 +55,8 @@ function isHomeDir(p) {
 // ============================================
 // Baseline 写入：整体覆盖 rule 文件
 // ============================================
-async function injectQoderBaseline(announce) {
-  const baselinePath = resolve(dirname(new URL(import.meta.url).pathname), '..', '..', 'baseline', 'qoder.md');
+async function injectLingmaBaseline(announce) {
+  const baselinePath = resolve(dirname(new URL(import.meta.url).pathname), '..', '..', 'baseline', 'lingma.md');
   const baseline = await readFile(baselinePath, 'utf8');
   // strip frontmatter（rules 不接受 frontmatter）
   const bodyOnly = baseline.replace(/^---[\s\S]*?---\n/, '');
@@ -102,15 +102,15 @@ async function generateLingmaSettings(packageRoot, announce) {
 // ============================================
 // 安装主入口
 // ============================================
-export async function installForQoder({ PACKAGE_ROOT, announce }) {
+export async function installForLingma({ PACKAGE_ROOT, announce }) {
   if (isHomeDir(process.cwd())) {
     announce('⚠️  当前目录是 HOME 目录，建议 cd 到项目目录后再装');
   }
 
-  announce('→ 安装通义灵码 Qoder CN 适配');
+  announce('→ 安装通义灵码 lingma CN 适配');
   await copySkillsToDir(join(PACKAGE_ROOT, 'skills'), LINGMA_SKILLS_DIR, announce);
-  await injectQoderBaseline(announce);
-  await writeSentinel('qoder', LINGMA_RULE_FILE, null, announce);
+  await injectLingmaBaseline(announce);
+  await writeSentinel('lingma', LINGMA_RULE_FILE, null, announce);
   await generateLingmaSettings(PACKAGE_ROOT, announce);
 
   announce('');
@@ -122,7 +122,7 @@ export async function installForQoder({ PACKAGE_ROOT, announce }) {
   announce('  3. hooks 已合并到 ~/.lingma/settings.json（保留你的其他 hook 事件）');
   announce('  4. 测试企业约束：问 "你的身份是什么？"，应回复"企业 SDD Agent"');
   announce('');
-  announce('卸载：npm uninstall -g @cli-tools/oh-my-sdd && node uninstall.js --tool qoder');
+  announce('卸载：npm uninstall -g @cli-tools/oh-my-sdd && node uninstall.js --tool lingma');
 }
 
 // ============================================
@@ -136,8 +136,8 @@ async function rmIfExists(p) {
   return false;
 }
 
-export async function uninstallForQoder() {
-  announce('→ 卸载通义灵码 Qoder CN 适配');
+export async function uninstallForLingma() {
+  announce('→ 卸载通义灵码 lingma 适配');
 
   // 1. rm skills 目录
   const skillsRemoved = await rmIfExists(LINGMA_SKILLS_DIR);
@@ -178,9 +178,9 @@ export async function uninstallForQoder() {
   }
 
   // 4. 哨兵文件清理
-  const sentinel = await readSentinel('qoder');
+  const sentinel = await readSentinel('lingma');
   if (sentinel) {
-    await rmIfExists(sentinelPathFor('qoder'));
+    await rmIfExists(sentinelPathFor('lingma'));
     announce(`  ✓ 已删除哨兵文件`);
   }
 }

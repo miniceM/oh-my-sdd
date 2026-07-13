@@ -1,6 +1,6 @@
 // install-claude.js — Claude Code 路径的安装/卸载实现。
 //
-// 与 install-targets.js 对称：后者处理 OpenCode 和通义灵码 Qoder CN。
+// 与 install-targets.js 对称：后者处理 OpenCode 和通义灵码 lingma CN。
 //
 // Claude 路径特有逻辑：
 //   1. 注册 marketplace（`claude plugin marketplace add`）
@@ -8,7 +8,7 @@
 //   3. 安装 Claude CLI wrapper（拦截原 claude，注入企业 baseline）
 //
 // 与通用路径的关系：
-//   - hooks/*.js 零修改（与 OpenCode/Qoder 共用）
+//   - hooks/*.js 零修改（与 OpenCode/lingma 共用）
 //   - skills 仍走 ~/.claude/skills/（plugin marketplace 自动处理）
 //   - baseline 走 ~/.config/claude-enterprise/baseline.md（wrapper 注入）
 //

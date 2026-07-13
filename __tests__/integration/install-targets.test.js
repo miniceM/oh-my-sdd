@@ -10,7 +10,7 @@ const PACKAGE_ROOT = resolve(__dirname, '..', '..');
 const SKILLS_SRC = join(PACKAGE_ROOT, 'skills');
 
 // ============================================
-// 集成测试：把 OpenCode/Qoder 安装/卸载的副作用
+// 集成测试：把 OpenCode/Lingma 安装/卸载的副作用
 // 重定向到临时 HOME 目录，避免污染真实用户环境。
 //
 // 策略：通过设置 HOME env 调用 install-shared.js 中的导出函数。
@@ -101,7 +101,7 @@ test('integration: AGENTS.md sentinel removal preserves user content', () => {
   assert.ok(!after.includes('baseline'));
 });
 
-test('integration: Qoder settings.json merge preserves user custom events', async () => {
+test('integration: Lingma settings.json merge preserves user custom events', async () => {
   const fakeLingmaDir = makeFakeHome();
   const settingsPath = join(fakeLingmaDir, 'settings.json');
   // 模拟用户已有 settings.json，含自定义 hook
@@ -145,7 +145,7 @@ test('integration: Qoder settings.json merge preserves user custom events', asyn
   }
 });
 
-test('integration: Qoder uninstall removes only oms events', async () => {
+test('integration: Lingma uninstall removes only oms events', async () => {
   const fakeLingmaDir = makeFakeHome();
   const settingsPath = join(fakeLingmaDir, 'settings.json');
   const initial = {
