@@ -88,18 +88,32 @@ oms-install --tool lingma          # 再装 lingma
 
 ## 卸载
 
-**单工具卸载**（推荐，保留其他工具的安装）：
+### 单工具卸载（推荐，保留其他工具的安装）
+
 ```bash
 oms-uninstall --tool claude     # 仅清 Claude 路径
 oms-uninstall --tool opencode   # 仅清 OpenCode 路径
-oms-uninstall --tool lingma      # 仅清 lingma 路径
+oms-uninstall --tool lingma     # 仅清 lingma 路径
 ```
 
-**彻底清理**（所有工具 + npm 包 + state dir）：
+### 完整卸载
+
+`npm uninstall -g` 会触发 `preuninstall` 钩子，自动清理 Claude / OpenCode / lingma 三套产物的 skills、rules、plugin、wrapper。状态目录 `~/.oh-my-sdd/` 默认保留（可重装复用）。
+
 ```bash
+# 一步搞定（保留 ~/.oh-my-sdd/ 状态目录，重装可复用）
 npm uninstall -g @cli-tools/oh-my-sdd
-oms-uninstall --purge           # 删 ~/.oh-my-sdd/、~/.claude/CLAUDE.md 哨兵块、各工具的 skills/rules/plugin 目录
 ```
+
+### 彻底清空（含状态目录）
+
+必须按顺序执行三步（`oms-uninstall` 命令必须在包还装着时跑）：
+
+```bash
+oms-uninstall --purge && npm uninstall -g @cli-tools/oh-my-sdd && rm -rf ~/.oh-my-sdd/
+```
+
+**为什么不能反过来**：旧版"先 npm uninstall 再 oms-uninstall --purge"会在第二步失败——`oms-uninstall` 命令本身由被卸载的包提供，包卸了命令也消失了。
 
 ## 强制约束体系（洋葱模型）
 
