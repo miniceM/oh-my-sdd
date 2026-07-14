@@ -4,6 +4,8 @@ node_modules/
 .idea/
 .vscode/
 dist/
+!/opencode/dist/
+!/opencode/dist/**
 coverage/
 .oh-my-sdd/
 *.tgz

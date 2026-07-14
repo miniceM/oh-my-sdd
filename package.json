@@ -28,6 +28,8 @@
     "skills/",
     "content/",
     "hooks/",
+    "baseline/",
+    "opencode/",
     "README.md"
   ],
   "publishConfig": {
