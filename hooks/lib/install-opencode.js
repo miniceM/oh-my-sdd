@@ -166,7 +166,8 @@ export async function installForOpenCode({ PACKAGE_ROOT, announce }) {
   announce('  2. 在项目目录打开 OpenCode，baseline 规则已注入 ~/.config/opencode/AGENTS.md');
   announce('  3. 测试企业约束：问 "你的身份是什么？"，应回复"企业 SDD Agent"');
   announce('');
-  announce('卸载：npm uninstall -g @cli-tools/oh-my-sdd && node uninstall.js --tool opencode');
+  announce('卸载（仅清 OpenCode）：oms-uninstall --tool opencode   # 保留 ~/.oh-my-sdd/ 状态目录');
+  announce('完整卸载：npm uninstall -g @cli-tools/oh-my-sdd   # preuninstall 自动清三套产物');
 }
 
 // ============================================

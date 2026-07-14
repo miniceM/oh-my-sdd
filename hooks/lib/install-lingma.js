@@ -122,7 +122,8 @@ export async function installForLingma({ PACKAGE_ROOT, announce }) {
   announce('  3. hooks 已合并到 ~/.lingma/settings.json（保留你的其他 hook 事件）');
   announce('  4. 测试企业约束：问 "你的身份是什么？"，应回复"企业 SDD Agent"');
   announce('');
-  announce('卸载：npm uninstall -g @cli-tools/oh-my-sdd && node uninstall.js --tool lingma');
+  announce('卸载（仅清 lingma）：oms-uninstall --tool lingma   # 保留 ~/.oh-my-sdd/ 状态目录');
+  announce('完整卸载：npm uninstall -g @cli-tools/oh-my-sdd   # preuninstall 自动清三套产物');
 }
 
 // ============================================
