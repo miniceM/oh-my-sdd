@@ -21,6 +21,10 @@ test('npm pack --dry-run output includes baseline and opencode paths', () => {
     cwd: PACKAGE_ROOT,
     encoding: 'utf8',
   });
+  assert.equal(result.error, undefined,
+    `npm pack failed to start: ${result.error && result.error.message}`);
+  assert.equal(result.status, 0,
+    `npm pack exited ${result.status}; stderr: ${(result.stderr || '').slice(0, 500)}`);
   const output = (result.stdout || '') + (result.stderr || '');
   assert.match(output, /baseline\/opencode\.md/);
   assert.match(output, /baseline\/lingma\.md/);
