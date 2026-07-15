@@ -23,6 +23,11 @@ jobs:
       - run: npm install --ignore-scripts
       - run: npm test
       - run: npm run lint:baseline
+      - name: Verify opencode plugin build
+        working-directory: opencode
+        run: |
+          npm ci --include=dev
+          npm run build
 
   smoke-check:
     needs: test
