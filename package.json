@@ -15,6 +15,7 @@
   "scripts": {
     "postinstall": "node install.js",
     "preuninstall": "node uninstall.js",
+    "prepublishOnly": "cd opencode && npm ci --include=dev && npm run build",
     "test": "node scripts/run-tests.js",
     "test:glob": "node --test \"__tests__/**/*.test.js\"",
     "lint:baseline": "node scripts/check-baseline-tokens.mjs"
@@ -29,7 +30,7 @@
     "content/",
     "hooks/",
     "baseline/",
-    "opencode/",
+    "opencode/dist/",
     "README.md"
   ],
   "publishConfig": {

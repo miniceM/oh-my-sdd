@@ -8,14 +8,14 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
 
-test('package.json files whitelist includes baseline/ and opencode/', () => {
+test('package.json files whitelist includes baseline/ and opencode/dist/', () => {
   const pkg = JSON.parse(readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'));
   assert.ok(Array.isArray(pkg.files), 'package.json must have a "files" array');
   assert.ok(pkg.files.includes('baseline/'), 'files must include "baseline/"');
-  assert.ok(pkg.files.includes('opencode/'), 'files must include "opencode/"');
+  assert.ok(pkg.files.includes('opencode/dist/'), 'files must include "opencode/dist/" (exact path, not bare opencode/)');
 });
 
-test('npm pack --dry-run output includes baseline and opencode paths', () => {
+test('npm pack --dry-run output includes opencode/dist/ and excludes opencode/src/', () => {
   // npm pack writes the file listing to stderr, not stdout
   const result = spawnSync('npm', ['pack', '--dry-run'], {
     cwd: PACKAGE_ROOT,
@@ -29,7 +29,8 @@ test('npm pack --dry-run output includes baseline and opencode paths', () => {
   assert.match(output, /baseline\/opencode\.md/);
   assert.match(output, /baseline\/lingma\.md/);
   assert.match(output, /opencode\/dist\/plugin\.js/);
-  assert.match(output, /opencode\/src\/plugin\.ts/);
+  assert.doesNotMatch(output, /opencode\/src\/plugin\.ts/,
+    'opencode/src files must NOT be in tarball — only opencode/dist/');
 });
 
 test('.gitignore has !/opencode/dist/ exception', () => {
@@ -51,4 +52,27 @@ test('git check-ignore confirms opencode/dist/plugin.js is NOT ignored', () => {
     // exit non-zero = not ignored (good)
   }
   assert.equal(ignored, false, 'opencode/dist/plugin.js must NOT be ignored after the gitignore exception');
+});
+
+test('package.json files whitelist contains opencode/dist/ (exact path, not opencode/)', () => {
+  const pkg = JSON.parse(readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'));
+  assert.ok(Array.isArray(pkg.files), 'package.json must have a "files" array');
+  assert.ok(
+    pkg.files.includes('opencode/dist/'),
+    'files must include "opencode/dist/" (exact path) so tarball ships the build artifact'
+  );
+  assert.ok(
+    !pkg.files.includes('opencode/') && !pkg.files.includes('opencode/src/'),
+    'files must NOT include "opencode/" or "opencode/src/" — only the exact "opencode/dist/" path'
+  );
+});
+
+test('package.json scripts has prepublishOnly hook for opencode build', () => {
+  const pkg = JSON.parse(readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'));
+  assert.ok(pkg.scripts, 'package.json must have a "scripts" object');
+  assert.equal(
+    pkg.scripts.prepublishOnly,
+    'cd opencode && npm ci --include=dev && npm run build',
+    'prepublishOnly must force opencode build before npm publish'
+  );
 });
