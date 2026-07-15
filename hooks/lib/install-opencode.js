@@ -5,9 +5,9 @@
 // OpenCode 路径特有逻辑：
 //   1. skills 复制到 ~/.config/opencode/skills/
 //   2. baseline 注入到 ~/.config/opencode/AGENTS.md（哨兵块追加，保留用户内容）
-//   3. 编译 opencode/src/plugin.ts → dist/plugin.js（Bun 自动加载）
-//   4. 复制 dist/ 到 ~/.config/opencode/plugins/oh-my-sdd/
-//   5. 写入哨兵文件 ~/.oh-my-sdd/baseline-opencode.sentinel
+//   3. 复制 ship 的 dist/plugin.js 到 ~/.config/opencode/plugins/oh-my-sdd/
+//      （dist 是开发者/CI 编译产物，由 prepublishOnly + CI 保证最新；用户机器零编译）
+//   4. 写入哨兵文件 ~/.oh-my-sdd/baseline-opencode.sentinel
 //
 // 卸载：
 //   1. 删 skills 目录
@@ -17,8 +17,7 @@
 //
 // 共享 utilities 见 install-shared.js。
 
-import { spawn } from 'node:child_process';
-import { readFile, writeFile, mkdir, rm, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
@@ -77,60 +76,6 @@ async function injectOpenCodeBaseline(announce) {
   announce(`  ✓ baseline 已注入（哨兵块）: ${OPENCODE_AGENTS_MD}`);
 }
 
-// ============================================
-// TS plugin 编译（Bun 自动加载 dist/）
-// ============================================
-function compile(opencodeDir, announce) {
-  return new Promise((resolveCb) => {
-    const proc = spawn('npx', ['tsc'], {
-      cwd: opencodeDir,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let stderr = '';
-    proc.stderr.on('data', (d) => { stderr += d.toString(); });
-    proc.on('close', (code) => {
-      if (code === 0) {
-        announce('  ✓ OpenCode plugin 编译成功');
-      } else {
-        announce(`  ⚠️  OpenCode plugin 编译失败 (exit ${code}): ${stderr.slice(0, 500)}`);
-        announce('     请手动运行: cd opencode && npm install && npm run build');
-      }
-      resolveCb();
-    });
-    proc.on('error', (err) => {
-      announce(`  ⚠️  编译命令失败: ${err.message}`);
-      resolveCb();
-    });
-  });
-}
-
-async function buildOpenCodePlugin(packageRoot, announce) {
-  const opencodeDir = join(packageRoot, 'opencode');
-  const distDir = join(opencodeDir, 'dist');
-  const pluginTs = join(opencodeDir, 'src', 'plugin.ts');
-
-  if (!existsSync(pluginTs)) {
-    announce('  ⚠️  OpenCode plugin 源文件不存在，跳过编译');
-    return false;
-  }
-
-  // 检查 dist 是否已存在且比 src 新
-  if (existsSync(join(distDir, 'plugin.js'))) {
-    try {
-      const [srcStat, distStat] = await Promise.all([stat(pluginTs), stat(join(distDir, 'plugin.js'))]);
-      if (distStat.mtimeMs > srcStat.mtimeMs) {
-        announce('  ✓ OpenCode plugin 已编译（跳过）');
-        return true;
-      }
-    } catch {
-      // stat 失败 → 重新编译
-    }
-  }
-
-  await compile(opencodeDir, announce);
-  return true;
-}
-
 async function installOpenCodePluginToHome(packageRoot, announce) {
   const distSrc = join(packageRoot, 'opencode', 'dist');
   if (!existsSync(join(distSrc, 'plugin.js'))) {
@@ -155,7 +100,6 @@ export async function installForOpenCode({ PACKAGE_ROOT, announce }) {
   await copySkillsToDir(join(PACKAGE_ROOT, 'skills'), OPENCODE_SKILLS_DIR, announce);
   await injectOpenCodeBaseline(announce);
   await writeSentinel('opencode', OPENCODE_AGENTS_MD, 'OH-MY-SDD:BEGIN/END', announce);
-  await buildOpenCodePlugin(PACKAGE_ROOT, announce);
   await installOpenCodePluginToHome(PACKAGE_ROOT, announce);
 
   announce('');
