@@ -61,10 +61,12 @@ test('package.json files whitelist contains opencode/dist/ (exact path, not open
     pkg.files.includes('opencode/dist/'),
     'files must include "opencode/dist/" (exact path) so tarball ships the build artifact'
   );
-  assert.ok(
-    !pkg.files.includes('opencode/') && !pkg.files.includes('opencode/src/'),
-    'files must NOT include "opencode/" or "opencode/src/" — only the exact "opencode/dist/" path'
-  );
+  for (const forbidden of ['opencode/', 'opencode/src/']) {
+    assert.ok(
+      !pkg.files.includes(forbidden),
+      `files must NOT include "${forbidden}" — only the exact "opencode/dist/" path; actual files: ${JSON.stringify(pkg.files)}`
+    );
+  }
 });
 
 test('package.json scripts has prepublishOnly hook for opencode build', () => {
