@@ -12,7 +12,8 @@ const PRE_PUSH_CHECK = path.join(PROJECT_ROOT, 'hooks', 'git', 'pre-push-check.j
 
 function setupGitRepo() {
   const dir = mkdtempSync(path.join(tmpdir(), 'oms-prepush-'));
-  execFileSync('git', ['init', '-b', 'main'], { cwd: dir, stdio: 'ignore' });
+  execFileSync('git', ['init'], { cwd: dir, stdio: 'ignore' });
+  execFileSync('git', ['branch', '-m', 'main'], { cwd: dir, stdio: 'ignore' });
   execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: dir, stdio: 'ignore' });
   execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir, stdio: 'ignore' });
   // 初始 commit，让 HEAD 消息可读

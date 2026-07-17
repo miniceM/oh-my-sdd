@@ -46,7 +46,7 @@ test('session.end reports code_delta based on saved start_sha', async (t) => {
   const repo = mkdtempSync(path.join(tmpdir(), 'oms-repo-'));
   t.after(() => rmSync(repo, { recursive: true, force: true }));
   const { execSync } = await import('node:child_process');
-  execSync('git init -b main && git config user.email t@t && git config user.name t', { cwd: repo });
+  execSync('git init && git branch -m main && git config user.email t@t && git config user.name t', { cwd: repo });
   writeFileSync(path.join(repo, 'a.ts'), 'const a = 1;\n');
   execSync('git add . && git commit -m init', { cwd: repo });
   const startSha = execSync('git rev-parse HEAD', { cwd: repo }).toString().trim();
@@ -112,7 +112,7 @@ test('orphan cleanup does not delete active session meta even when mtime >7d', a
   const repo = mkdtempSync(path.join(tmpdir(), 'oms-repo-orphan-'));
   t.after(() => rmSync(repo, { recursive: true, force: true }));
   const { execSync } = await import('node:child_process');
-  execSync('git init -b main && git config user.email t@t && git config user.name t', { cwd: repo });
+  execSync('git init && git branch -m main && git config user.email t@t && git config user.name t', { cwd: repo });
   writeFileSync(path.join(repo, 'a.ts'), 'const a = 1;\n');
   execSync('git add . && git commit -m init', { cwd: repo });
   const startSha = execSync('git rev-parse HEAD', { cwd: repo }).toString().trim();

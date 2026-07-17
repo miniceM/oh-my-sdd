@@ -9,16 +9,26 @@
  * 关键设计：不在 plugin.ts 里复制 hooks 业务逻辑（matchRules/iam/dop），
  * 通过 child_process.spawn 调用 Node 跑原始的 hooks/*.js——保持单源真相。
  *
- * 安装位置：~/.config/opencode/plugins/oh-my-sdd/dist/plugin.js
- * OpenCode 启动时自动加载此文件（无需 opencode.json 配置 plugin 字段）。
+ * 安装位置：~/.config/opencode/plugins/oh-my-sdd/{plugin.js,dist/plugin.js}
+ * （新 install 走 dist/ 布局；老 install 是顶层 plugin.js；plugin 内部探针兼容）
+ * 注意：仅复制到 plugins/ 目录**不生效**——必须把入口加到
+ * ~/.config/opencode/opencode.json 的 plugin 数组（由 install-opencode.js 完成）。
  */
 import { spawn } from 'node:child_process';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// dist/plugin.js → ../../../  (回到 PACKAGE_ROOT)
-const PLUGIN_ROOT = resolve(__dirname, '..', '..', '..');
-const HOOKS_DIR = join(PLUGIN_ROOT, 'hooks');
+// 两种合法安装布局（向下兼容）：
+//   A. 旧布局：.../plugins/oh-my-sdd/plugin.js + .../plugins/oh-my-sdd/hooks/
+//   B. 新布局：.../plugins/oh-my-sdd/dist/plugin.js + .../plugins/oh-my-sdd/hooks/
+// 探针：先看 hooks/ 是不是和 plugin.js 同级；不是就回退到上级目录
+const SIBLING_HOOKS = join(__dirname, 'hooks', 'pre-tool-use.js');
+const HOOKS_DIR = existsSync(SIBLING_HOOKS)
+    ? join(__dirname, 'hooks')
+    : join(__dirname, '..', 'hooks');
+// PLUGIN_ROOT 是 hooks/ 的父目录，供 CLAUDE_PLUGIN_ROOT 注入（hooks 内部用它定位资源）
+const PLUGIN_ROOT = join(HOOKS_DIR, '..');
 // ============================================
 // 工具名映射: OpenCode (小写) → Claude Code (大写)
 // ============================================

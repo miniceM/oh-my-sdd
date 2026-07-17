@@ -57,5 +57,9 @@
     "enterprise"
   ],
   "license": "UNLICENSED",
-  "private": false
+  "private": false,
+  "devDependencies": {
+    "oh-my-sdd-opencode-plugin": "file:opencode",
+    "typescript": "^5.9.3"
+  }
 }
