@@ -25,7 +25,7 @@ test('npm pack --dry-run output includes opencode/dist/ and excludes opencode/sr
     `npm pack failed to start: ${result.error && result.error.message}`);
   assert.equal(result.status, 0,
     `npm pack exited ${result.status}; stderr: ${(result.stderr || '').slice(0, 500)}`);
-  const output = (result.stdout || '') + (result.stderr || '');
+  const output = ((result.stdout || '') + (result.stderr || '')).replaceAll('\\', '/');
   assert.match(output, /baseline\/opencode\.md/);
   assert.match(output, /baseline\/lingma\.md/);
   assert.match(output, /opencode\/dist\/plugin\.js/);
