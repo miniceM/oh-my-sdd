@@ -1,0 +1,8 @@
+{
+  "change_id": "ARD378508",
+  "slug": "ard378508",
+  "created_at": "2026-07-17T15:36:00+08:00",
+  "dop_status": "spec-in-progress",
+  "dry_run": false,
+  "delta_capabilities": ["sdd-doc"]
+}
