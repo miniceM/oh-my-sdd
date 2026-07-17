@@ -20,6 +20,7 @@ test('npm pack --dry-run output includes opencode/dist/ and excludes opencode/sr
   const result = spawnSync('npm', ['pack', '--dry-run'], {
     cwd: PACKAGE_ROOT,
     encoding: 'utf8',
+    shell: process.platform === 'win32', // Windows needs shell for PATH resolution
   });
   assert.equal(result.error, undefined,
     `npm pack failed to start: ${result.error && result.error.message}`);
