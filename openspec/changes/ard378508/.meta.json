@@ -1,0 +1,10 @@
+{
+  "change_id": "ARD378508",
+  "slug": "ard378508",
+  "created_at": "2026-07-17T15:36:00+08:00",
+  "dop_status": "pr-created",
+  "dop_status_at": "2026-07-17T15:45:00+08:00",
+  "pr_url": "https://github.com/miniceM/oh-my-sdd/pull/2",
+  "dry_run": false,
+  "delta_capabilities": ["sdd-doc"]
+}
