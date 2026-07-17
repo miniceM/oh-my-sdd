@@ -382,18 +382,26 @@ EOF
 
 ## Task 3: 删 `opencode/package.json` dead devDeps
 
+> **Amended 2026-07-15 (post Task 1+2 review)**: 实施时发现 spec 漏洞——`opencode/tsconfig.json:13` 显式 `"types": ["node"]` 让 `@types/node` 是真 build dep，**不是** dead。Plan v1 的"两者都是 dead dep"断言是错的（runtime 不用 ≠ build 不用）。Task 3 收窄为：**只删 `@opencode-ai/plugin`**，`@types/node` **保留**。修复理由 commit message 详述。
+
 **Files:**
 - Modify: `opencode/package.json` (devDeps 段)
 
 **Interfaces:**
 - Consumes: Task 1 已 fix `package.json` `files` 数组 → tarball 不含 `opencode/src/`，因此 `opencode/package.json` 也**不进** tarball（不在 files 列表）→ opencode/package.json 是 dev 期间用
-- Produces: `opencode/package.json` devDeps 仅含 `typescript: ^5.5.0`；`@opencode-ai/plugin` 和 `@types/node` 已 verify 是 dead dep（plugin.ts 只用 Node stdlib）后清理
+- Produces: `opencode/package.json` devDeps 含 `typescript: ^5.5.0` + `@types/node: ^20.0.0`；**只删** `@opencode-ai/plugin`（真 dead：plugin.ts 不 import）
 
-- [ ] **Step 1: 确认 dead dep 真的 dead**
+- [ ] **Step 1: 确认 `@opencode-ai/plugin` 真的 dead**
 
 Run: `grep -E "import|from" opencode/src/plugin.ts`
 
 Expected: 输出仅含 Node stdlib (`node:child_process` / `node:path` / `node:url`)。**如果发现** `@opencode-ai/plugin` import，**abort task** 并报告 spec 漏洞——这意味着需要 SDK，需要 devDeps 保留。
+
+- [ ] **Step 1.5: 确认 `@types/node` 是 tsconfig 引用、不能删**
+
+Run: `grep -n '"types"' opencode/tsconfig.json`
+
+Expected: 看到 `"types": ["node"]`。**这意味着 `@types/node` 是真 build dep，不是 dead**——tsc 找不到 `@types/node` 报 TS2688 exit 2。如果 grep 看不到 `types` 字段，则 Step 2 可同时删 `@types/node`。
 
 - [ ] **Step 2: 改 `opencode/package.json` devDeps**
 
@@ -402,12 +410,12 @@ Expected: 输出仅含 Node stdlib (`node:child_process` / `node:path` / `node:u
 ```diff
    "devDependencies": {
 -    "@opencode-ai/plugin": "^1.0.0",
--    "@types/node": "^20.0.0",
+     "@types/node": "^20.0.0",
      "typescript": "^5.5.0"
    }
 ```
 
-**完整删除** `@opencode-ai/plugin` 和 `@types/node` 两行，**保留** `typescript`。
+**只删** `@opencode-ai/plugin`，**保留** `@types/node` + `typescript`。`@types/node` 是 tsconfig `types: ["node"]` 引用的真 build dep。
 
 - [ ] **Step 3: 在 `opencode/` 跑 `npm install` 验证 build 链路**
 
@@ -434,12 +442,16 @@ git add opencode/dist/plugin.js
 git status --short
 # 确认只 add 了 2 个文件（opencode/package.json + opencode/dist/plugin.js）
 git commit -m "$(cat <<'EOF'
-[OMSBUILD] chore(opencode): remove dead devDeps
+[OMSBUILD] chore(opencode): remove @opencode-ai/plugin (dead devDep)
 
-opencode/src/plugin.ts 只 import Node stdlib（child_process / path / url），不
-用 @opencode-ai/plugin SDK 运行时（devDep 是 dead import 或 type-only），也不
-需要 @types/node（plugin.ts 是手写类型推断，不需要 types 包）。两个 devDep
-是噪声，清理后 dev install 更快、tarball 子包更小。
+opencode/src/plugin.ts 只 import Node stdlib（child_process / path / url），
+不 import `@opencode-ai/plugin` SDK——是 dead devDep，清理后 dev install 更快。
+
+**保留** `@types/node`：原 plan 想删但 spec 漏洞——`opencode/tsconfig.json:13`
+显式 `"types": ["node"]` 引用 `@types/node`，tsc 找不到它报 TS2688 exit 2。
+`@types/node` 是真 build dep（提供 `process` / `Buffer` 等 Node 全局类型），
+plugin.ts 的 `process.env` / `process.cwd()` / `process.stderr.write` 都依赖。
+本次只清真 dead dep（@opencode-ai/plugin），tsconfig 调整留作后续 spec 评审。
 
 build 链路 verify：cd opencode && npm install --include=dev && npm run build
 退出 0，dist 重新生成。
@@ -456,12 +468,16 @@ EOF
 
 ## Task 4: 改 `.github/workflows/ci.yml` 加 build step
 
+> **Amended 2026-07-15 (post-Task 3)**: 原 plan Step 2/Step 6 用 `npm ci --include=dev`，但 `opencode/package-lock.json` 不在 repo（`opencode/` 是 dev subdir，lock 文件没 commit）。`npm ci` 在 CI 跑会 EUSAGE 失败（run 29384144714 验证）。**改用 `npm install --include=dev`**：依赖更松（允许 lock file 缺席），但足够验证 build 链路。后续如要把 lock 进 repo，可切回 `npm ci`。
+>
+> 另：实施发现 Windows pre-existing 故障（`npm test` step 报 `spawnSync npm ENOENT`）—— 与 [OMSBUILD] 无关，是 base 分支 (`fc75282` 之后) 的预存在 bug，run 29218911888 之后就红了。**build step 本身在 6 个 ubuntu/macos 组合全 PASS**，Task 4 不阻塞于 Windows pre-existing failure。Plan 留 TODO 后续 fix。
+
 **Files:**
 - Modify: `.github/workflows/ci.yml` (test job 加 step)
 
 **Interfaces:**
 - Consumes: Task 1 已加 `prepublishOnly` hook，Task 3 已删 dead devDeps
-- Produces: CI `test` job 跑 multi-OS (ubuntu/macos/windows) × multi-Node (18/20/22) 时，每个组合都跑 `cd opencode && npm ci --include=dev && npm run build` 验证 build 链路
+- Produces: CI `test` job 跑 multi-OS (ubuntu/macos/windows) × multi-Node (18/20/22) 时，每个组合都跑 `cd opencode && npm install --include=dev && npm run build` 验证 build 链路
 
 - [ ] **Step 1: 读 `ci.yml` 定位插入点**
 
@@ -479,7 +495,7 @@ Run: `cat .github/workflows/ci.yml`
       - name: Verify opencode plugin build
         working-directory: opencode
         run: |
-          npm ci --include=dev
+          npm install --include=dev
           npm run build
 ```
 
@@ -490,7 +506,7 @@ Run: `cat .github/workflows/ci.yml`
       - name: Verify opencode plugin build
         working-directory: opencode
         run: |
-          npm ci --include=dev
+          npm install --include=dev
           npm run build
 ```
 
@@ -519,7 +535,7 @@ git status --short
 git commit -m "$(cat <<'EOF'
 [OMSBUILD] ci(workflow): verify opencode build on multi-OS matrix
 
-test job 加一个 step: working-directory: opencode + npm ci --include=dev +
+test job 加一个 step: working-directory: opencode + npm install --include=dev +
 npm run build。multi-OS matrix (ubuntu/macos/windows) 自动覆盖，每次 push /
 PR 验证 build 链路可重现。
 
@@ -530,6 +546,10 @@ PR 验证 build 链路可重现。
 - 任何 opencode/src/plugin.ts 改动都会被 CI 立即验证 build 成功
 
 如果 build 失败 → CI 红 → PR 不可 merge → 不会 ship 旧 dist。
+
+注：用 `npm install` 而非 `npm ci`，因为 `opencode/package-lock.json` 当前
+不在 repo（dev subdir 锁文件未 commit）。后续如要把 lock 进 repo，可切回
+`npm ci` 拿严格锁。
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 EOF
@@ -543,7 +563,9 @@ Run: `gh run list --workflow=ci.yml --limit 1 --json status,conclusion,headSha 2
 
 Expected: 最新 run 的 `status: completed`, `conclusion: success`（等待几秒后 status 会从 `in_progress` 变 `completed`）。
 
-如果 `conclusion: failure`，**不要 mark task 完成**：用 `gh run view <run-id> --log-failed` 查看具体哪个 OS × Node 组合失败，修复后重 commit + push。
+**如果 `conclusion: failure`，分两类处理**：
+- **新引入的 failure**（Task 4 自身导致）：用 `gh run view <run-id> --log-failed` 查看具体哪个 OS × Node 组合失败，修复后重 commit + push。
+- **pre-existing failure**（Task 4 之前 base 分支就坏的，比如 Windows `npm test` 报 `spawnSync npm ENOENT`）：**不阻塞 Task 4 完成**——新 build step 在非 Windows 6 个组合 PASS 即可，pre-existing 留 TODO 后续单独 fix。`gh run view <run-id> --log-failed` 确认 failure step 是 `npm test`（pre-existing）而非新 build step（Task 4 责任）。
 
 ---
 
@@ -761,7 +783,7 @@ Expected:
 | §3.1 package.json files 改 | Task 1 |
 | §3.1 package.json prepublishOnly | Task 1 |
 | §3.1 install-opencode.js 删 compile + buildOpenCodePlugin + 调用 + 注释 + spawn import | Task 2 |
-| §3.1 opencode/package.json 删 dead devDeps | Task 3 |
+| §3.1 opencode/package.json 删 dead devDeps | Task 3 (amended: 只删 @opencode-ai/plugin；@types/node 保留) |
 | §3.1 .github/workflows/ci.yml 加 build step | Task 4 |
 | §3.1 package-files.test.js 加 2 test case | Task 1 |
 | §3.1 install-opencode-build-flow.test.js 新建 (3 test case) | Task 2 (Step 1) |
@@ -783,7 +805,7 @@ Expected:
 - `install-opencode.js` 删除的函数名 `compile` / `buildOpenCodePlugin` 在 spec §3.1 + §4.3 + 注释中一致
 - `package.json` `files` 数组的精确路径 `"opencode/dist/"` 在 spec + plan + test code 中一致
 - `prepublishOnly` script 字符串 `"cd opencode && npm ci --include=dev && npm run build"` 在 spec §4.2 + plan Task 1 Step 4 + test code 中一致
-- devDeps 字段名 `@opencode-ai/plugin` + `@types/node` + `typescript` 在 spec §4.4 + plan Task 3 一致
+- devDeps 字段名 `@opencode-ai/plugin` + `@types/node` + `typescript` 在 spec §4.4 + plan Task 3 一致（**amended 2026-07-15**: Task 3 实施发现 @types/node 是 tsconfig 真 build dep，spec §4.4 的"dead dep"判断漏了 tsconfig 引用；amend 后只删 @opencode-ai/plugin，@types/node 保留）
 
 ✅ Consistent.
 
@@ -807,5 +829,15 @@ Plan complete and saved to `docs/superpowers/plans/2026-07-15-opencode-build-flo
 1. **Subagent-Driven (recommended)** - 我 dispatch 5 个 fresh subagent（每 task 1 个），per-task 2-stage review，最后 dispatch 1 个 final whole-branch reviewer。匹配 [OMSTOOLS] 模式。
 
 2. **Inline Execution** - 在本 session 用 executing-plans 串行执行 5 个 task，无 per-task review gate，只在最后做 1 次 final review。
+
+---
+
+## Follow-up TODOs (post-[OMSBUILD])
+
+- [ ] 修复 Windows pre-existing `npm test` 故障（`spawnSync npm ENOENT`，base 分支 `fc75282` 之后即存在，与 [OMSBUILD] 无关；当前 latest run 29384439405 的 3 个 Windows 组合因此红）。build step 本身在 6 个 ubuntu/macos 组合全 PASS，不阻塞 [OMSBUILD] 合入。
+- [ ]（可选）commit `opencode/package-lock.json` 进 repo，让 CI build step 可用 `npm ci` 拿严格锁；不 commit 也 OK（`npm install` 已能验证 build）。如要 commit，需同步 amend `package.json` `prepublishOnly` 和 `__tests__/unit/package-files.test.js` test 6 的字符串。
+- [ ]（可选）`package.json` `scripts` 加 `"build:opencode": "cd opencode && npm install --include=dev && npm run build"` 让开发者本地一键 build（与 CI build step 一致，不依赖 `prepublishOnly`）。
+- [ ] 在 release notes 加 "opencode plugin 编译流程重设计" 段
+- [ ] 监控野生用户 `oms-install --tool opencode` 的输出，确认无 ⚠️ 编译相关报告
 
 Which approach?
