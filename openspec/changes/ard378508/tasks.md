@@ -29,12 +29,12 @@ Fix `skills/sdd-doc/SKILL.md` 中两处硬编码脚本路径引用，将 `script
 - Modify: `skills/sdd-doc/SKILL.md` (lines 226, 280)
 
 **Changes**:
-- [ ] Line 226: `python3 scripts/sdd_doc.py` → `python3 skills/sdd-doc/scripts/sdd_doc.py`
-- [ ] Line 280: `python3 scripts/sdd_doc.py` → `python3 skills/sdd-doc/scripts/sdd_doc.py`
+- [x] Line 226: `python3 scripts/sdd_doc.py` → `python3 skills/sdd-doc/scripts/sdd_doc.py`
+- [x] Line 280: `python3 scripts/sdd_doc.py` → `python3 skills/sdd-doc/scripts/sdd_doc.py`
 
 **Verification**:
-- [ ] Run `python3 skills/sdd-doc/scripts/sdd_doc.py --help` → exits with code 0
-- [ ] Run `python3 skills/sdd-doc/scripts/sdd_doc.py --check-overwrite /tmp/test.md` → returns valid JSON with `exists: false`
-- [ ] Read L226-L227 and L280-L281 to confirm paths are correct
+- [x] Run `python3 skills/sdd-doc/scripts/sdd_doc.py --help` → exits with code 0
+- [x] Run `python3 skills/sdd-doc/scripts/sdd_doc.py --check-overwrite /tmp/test.md` → returns valid JSON with `exists: false`
+- [x] Read L226-L227 and L280-L281 to confirm paths are correct
 
 **Commit**: `[ARD378508] fix: T1 - update sdd_doc.py script path references in SKILL.md`
