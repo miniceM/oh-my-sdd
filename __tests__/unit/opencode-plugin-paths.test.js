@@ -15,7 +15,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const DIST_PLUGIN = '/Users/hosea/work/git/oh-my-sdd/opencode/dist/plugin.js';
+const DIST_RUNNER = '/Users/hosea/work/git/oh-my-sdd/opencode/dist/runner.js';
+const DIST_PATHS = '/Users/hosea/work/git/oh-my-sdd/opencode/dist/paths.js';
 
 // 在临时目录模拟两种 install 布局，import plugin.js，触发模块顶层求值（PLUGIN_ROOT/HOOKS_DIR），
 // 然后通过调用 runHook 内部逻辑无法直接做到——改为静态检查：构造虚拟 import.meta.url 等价场景。
@@ -89,14 +90,20 @@ test('plugin.js path probe resolves hooks/ when plugin.js is in dist/ subdir (..
   }
 });
 
-test('shipped dist/plugin.js contains the sibling-probe fallback (not the buggy hardcoded ..)', () => {
-  const src = readFileSync(DIST_PLUGIN, 'utf8');
+test('shipped dist/paths.js contains the sibling-probe fallback (not the buggy hardcoded ..)', () => {
+  const src = readFileSync(DIST_PATHS, 'utf8');
   // Must use existsSync to probe — the buggy version just did resolve(__dirname, '..')
   assert.match(src, /existsSync/,
-    'dist/plugin.js must probe with existsSync to support both install layouts');
+    'dist/paths.js must probe with existsSync to support both install layouts');
   assert.match(src, /SIBLING_HOOKS/,
-    'dist/plugin.js must check sibling hooks/ first');
+    'dist/paths.js must check sibling hooks/ first');
   // Ensure the buggy hardcoded PLUGIN_ROOT = resolve(__dirname, '..') pattern is gone
   assert.doesNotMatch(src, /PLUGIN_ROOT\s*=\s*resolve\(__dirname,\s*['"]\.\.['']\)/,
-    'dist/plugin.js must not use the buggy hardcoded resolve(__dirname, "..") pattern');
+    'dist/paths.js must not use the buggy hardcoded resolve(__dirname, "..") pattern');
+  // Verify runner.js (the hook-execution module) imports the probe result from paths.js
+  const runnerSrc = readFileSync(DIST_RUNNER, 'utf8');
+  assert.match(runnerSrc, /import.*HOOKS_DIR.*from.*paths/,
+    'dist/runner.js must import HOOKS_DIR from paths.js');
+  assert.match(runnerSrc, /import.*PLUGIN_ROOT.*from.*paths/,
+    'dist/runner.js must import PLUGIN_ROOT from paths.js');
 });
