@@ -23,8 +23,7 @@
 
 import { matchRules } from './lib/rules.js';
 import { error } from './lib/log.js';
-
-const TRACKED_TOOLS = new Set(['Edit', 'Write', 'MultiEdit']);
+import { normalizeToolName, normalizeToolInput, isTrackedTool } from './lib/tool-normalizer.js';
 const STDIN_TIMEOUT_MS = 5_000; // 增大超时,避免大型 payload 竞争
 
 async function readStdin() {
@@ -47,19 +46,19 @@ async function readStdin() {
 
 function extractContentAndPath(toolName, toolInput) {
   if (!toolInput || typeof toolInput !== 'object') return null;
-  const filePath = toolInput.file_path;
+  const filePath = toolInput.filePath;
   if (!filePath || typeof filePath !== 'string') return null;
 
   if (toolName === 'Write') {
     return { content: typeof toolInput.content === 'string' ? toolInput.content : '', filePath };
   }
   if (toolName === 'Edit') {
-    return { content: typeof toolInput.new_string === 'string' ? toolInput.new_string : '', filePath };
+    return { content: typeof toolInput.newString === 'string' ? toolInput.newString : '', filePath };
   }
   if (toolName === 'MultiEdit') {
     const edits = Array.isArray(toolInput.edits) ? toolInput.edits : [];
     const content = edits
-      .map((e) => (e && typeof e.new_string === 'string' ? e.new_string : ''))
+      .map((e) => (e && typeof e.newString === 'string' ? e.newString : ''))
       .join('\n');
     return { content, filePath };
   }
@@ -75,12 +74,14 @@ async function main() {
     /* tolerate malformed stdin */
   }
 
-  if (!TRACKED_TOOLS.has(stdin.tool_name)) {
+  const toolName = normalizeToolName(stdin.tool_name);
+  if (!isTrackedTool(toolName)) {
     process.stdout.write('{}');
     return;
   }
 
-  const extracted = extractContentAndPath(stdin.tool_name, stdin.tool_input);
+  const toolInput = normalizeToolInput(stdin.tool_input);
+  const extracted = extractContentAndPath(toolName, toolInput);
   if (!extracted) {
     process.stdout.write('{}');
     return;

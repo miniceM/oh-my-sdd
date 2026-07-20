@@ -16,8 +16,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 
 import { sessionMetaPath } from './lib/platform.js';
 import { error, warn } from './lib/log.js';
-
-const TRACKED_TOOLS = new Set(['Edit', 'Write', 'MultiEdit']);
+import { normalizeToolName, normalizeToolInput, isTrackedTool } from './lib/tool-normalizer.js';
 const STDIN_TIMEOUT_MS = 1_000;
 
 async function readStdin() {
@@ -36,12 +35,14 @@ async function main() {
   let stdin = {};
   try { stdin = rawStdin && rawStdin.trim() ? JSON.parse(rawStdin) : {}; } catch { /* tolerate */ }
 
-  if (!TRACKED_TOOLS.has(stdin.tool_name)) {
+  const toolName = normalizeToolName(stdin.tool_name);
+  if (!isTrackedTool(toolName)) {
     process.stdout.write('{}');
     return;
   }
 
-  const filePath = stdin.tool_input?.file_path;
+  const toolInput = normalizeToolInput(stdin.tool_input || {});
+  const filePath = toolInput.filePath;
   if (!filePath) {
     process.stdout.write('{}');
     return;
