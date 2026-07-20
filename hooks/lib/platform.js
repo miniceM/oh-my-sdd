@@ -21,13 +21,22 @@ export function checkNodeVersion(minVersion) {
 }
 
 export function getHomeDir() {
-  // 优先用 env override（测试场景需要），fallback 到 os.homedir()
-  // Windows 上 os.homedir() 不读 HOME，所以需要显式查 USERPROFILE
-  return (
-    process.env.HOME ||
-    process.env.USERPROFILE ||
-    os.homedir()
-  );
+  // 统一跨平台 home 目录获取策略
+  // 优先级：XDG_HOME_DIR > HOME > USERPROFILE > os.homedir()
+  // 遵循 XDG Base Directory Spec，优先使用 XDG_HOME_DIR
+  if (process.env.XDG_HOME_DIR) {
+    return process.env.XDG_HOME_DIR;
+  }
+  // macOS/Linux 标准环境变量
+  if (process.env.HOME) {
+    return process.env.HOME;
+  }
+  // Windows 标准环境变量
+  if (process.env.USERPROFILE) {
+    return process.env.USERPROFILE;
+  }
+  // Node.js 备用方案
+  return os.homedir();
 }
 
 export function getStateDir() {
