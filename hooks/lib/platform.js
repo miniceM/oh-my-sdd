@@ -30,12 +30,16 @@ export function getHomeDir() {
   );
 }
 
-export function getPluginInstallDir() {
-  return path.join(getHomeDir(), '.claude', 'plugins', 'oh-my-sdd');
+export function getStateDir() {
+  // 遵循 XDG Base Directory Spec
+  if (process.env.XDG_STATE_HOME) {
+    return path.join(process.env.XDG_STATE_HOME, 'oh-my-sdd');
+  }
+  return path.join(getHomeDir(), '.local', 'state', 'oh-my-sdd');
 }
 
-export function getStateDir() {
-  return path.join(getHomeDir(), '.oh-my-sdd');
+export function getPluginInstallDir() {
+  return path.join(getHomeDir(), '.claude', 'plugins', 'oh-my-sdd');
 }
 
 // Resolve the on-disk path for a session meta file. session_ids coming from
