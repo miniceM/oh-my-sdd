@@ -68,11 +68,9 @@ function extractContentAndPath(toolName, toolInput) {
 async function main() {
   const rawStdin = await readStdin();
   let stdin = {};
-  try {
-    stdin = rawStdin && rawStdin.trim() ? JSON.parse(rawStdin) : {};
-  } catch {
-    /* tolerate malformed stdin */
-  }
+  // CRITICAL: Parse stdin without try-catch - malformed JSON is a security issue
+  // that should prevent tool execution. Let the error propagate to block execution.
+  stdin = rawStdin && rawStdin.trim() ? JSON.parse(rawStdin) : {};
 
   const toolName = normalizeToolName(stdin.tool_name);
   if (!isTrackedTool(toolName)) {
