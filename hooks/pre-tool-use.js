@@ -24,6 +24,7 @@
 import { matchRules } from './lib/rules.js';
 import { error } from './lib/log.js';
 import { normalizeToolName, normalizeToolInput, isTrackedTool } from './lib/tool-normalizer.js';
+import { readFile } from 'node:fs/promises';
 const STDIN_TIMEOUT_MS = 5_000; // 增大超时,避免大型 payload 竞争
 
 async function readStdin() {
