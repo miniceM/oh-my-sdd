@@ -1,6 +1,8 @@
 /**
- * Input mappers: translate OpenCode events into Claude Code stdin-protocol
- * payloads consumed by hooks/*.js.
+ * Event mappers: OpenCode plugin events → Claude Code hook stdin protocol.
+ *
+ * Single source of truth for translating OpenCode's event shape into the
+ * JSON that hooks/*.js scripts expect on stdin.
  *
  * OpenCode tool names are lowercase ('write'/'edit') or different
  * ('apply_patch' ≈ MultiEdit). hooks/pre-tool-use.js hardcodes the Claude
@@ -11,60 +13,114 @@ import type { OpenCodeSessionInput, OpenCodeToolInput } from './types.js';
 
 // ============================================
 // 工具名映射: OpenCode (小写) → Claude Code (大写)
+// Includes common name variants so events are never silently dropped.
 // ============================================
-export const TOOL_MAP: Record<string, string> = {
-  write: 'Write',
-  edit: 'Edit',
-  apply_patch: 'MultiEdit',
+export const TOOL_MAP: { [key: string]: string } = {
+ // Primary names (OpenCode SDK)
+ write: 'Write',
+ edit: 'Edit',
+ apply_patch: 'MultiEdit',
+ // Already-capitalized pass-through (Claude Code native names)
+ Write: 'Write',
+ Edit: 'Edit',
+ MultiEdit: 'MultiEdit',
+ // Common variants (no underscore, lowercase)
+ multiedit: 'MultiEdit',
+ applypatch: 'MultiEdit',
 };
 
-export const TRACKED_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
+export const TRACKED_TOOLS = new Set(Object.values(TOOL_MAP));
 
 // ============================================
 // Session mappers
 // ============================================
 
-export function mapSessionStart(input: OpenCodeSessionInput): Record<string, unknown> {
-  return {
-    session_id: input.session_id ?? `oms-opencode-${Date.now()}`,
-    cwd: input.cwd ?? process.cwd(),
-  };
+export function mapSessionStart(input: OpenCodeSessionInput): { [key: string]: unknown } {
+ return {
+ session_id: input.session_id ?? `oms-opencode-${Date.now()}`,
+ cwd: input.cwd ?? process.cwd(),
+ };
 }
 
-export function mapSessionEnd(input: OpenCodeSessionInput): Record<string, unknown> {
-  return {
-    session_id: input.session_id ?? `oms-opencode-${Date.now()}`,
-    cwd: input.cwd ?? process.cwd(),
-  };
+export function mapSessionEnd(input: OpenCodeSessionInput): { [key: string]: unknown } {
+ return {
+ session_id: input.session_id ?? `oms-opencode-${Date.now()}`,
+ cwd: input.cwd ?? process.cwd(),
+ };
 }
 
 // ============================================
 // Tool mappers
 // ============================================
 
-export function mapPreToolUse(input: OpenCodeToolInput): Record<string, unknown> | null {
-  const mappedTool = TOOL_MAP[input.tool];
-  if (!mappedTool || !TRACKED_TOOLS.has(mappedTool)) return null;
-
-  const toolInput = input.input ?? {};
-  return {
-    tool_name: mappedTool,
-    tool_input: {
-      file_path: toolInput.file_path,
-      content: toolInput.content,
-      new_string: toolInput.new_string,
-      edits: toolInput.edits,
-    },
-  };
+/**
+ * Normalize edits[].new_string (snake_case from OpenCode) →
+ * edits[].newString (camelCase expected by hooks/lib/tool-normalizer.js
+ * and hooks/pre-tool-use.js extractContentAndPath).
+ *
+ * The top-level new_string → newString conversion is handled by the hook's
+ * normalizeToolInput, but it does NOT recurse into nested arrays.
+ */
+function normalizeEdits(
+ edits: Array<{ new_string?: string; newString?: string; [k: string]: unknown }> | undefined,
+): Array<{ newString?: string; [k: string]: unknown }> | undefined {
+ if (!edits) return undefined;
+ return edits.map((e) => ({
+ ...e,
+ newString: e.new_string ?? e.newString,
+ }));
 }
 
-export function mapPostToolUse(input: OpenCodeToolInput): Record<string, unknown> | null {
-  const mappedTool = TOOL_MAP[input.tool];
-  if (!mappedTool || !TRACKED_TOOLS.has(mappedTool)) return null;
-  return {
-    tool_name: mappedTool,
-    tool_input: input.input ?? {},
-  };
+export function mapPreToolUse(input: {
+ tool: string;
+ input?: OpenCodeToolInput;
+ sessionID?: string;
+}): { [key: string]: unknown } | null {
+ const toolName = TOOL_MAP[input.tool];
+ if (!toolName || !TRACKED_TOOLS.has(toolName)) return null;
+
+ const toolInput = input.input ?? {};
+ // Pass through full toolInput so hooks receive all fields (e.g. old_string,
+ // create_file, etc.), then overlay normalized edits on top.
+ const normalizedInput: { [key: string]: unknown } = { ...toolInput };
+ if (toolInput.edits) {
+ normalizedInput.edits = normalizeEdits(toolInput.edits);
+ }
+
+ const result: { [key: string]: unknown } = {
+ tool_name: toolName,
+ tool_input: normalizedInput,
+ };
+ // session_id is required by post-tool-use.js for session meta lookup.
+ // Include it when available so telemetry is not silently skipped.
+ if (input.sessionID) {
+ result.session_id = input.sessionID;
+ }
+ return result;
+}
+
+export function mapPostToolUse(input: {
+ tool: string;
+ input?: OpenCodeToolInput;
+ sessionID?: string;
+}): { [key: string]: unknown } | null {
+ const toolName = TOOL_MAP[input.tool];
+ if (!toolName || !TRACKED_TOOLS.has(toolName)) return null;
+
+ const toolInput = input.input ?? {};
+ const normalizedInput: { [key: string]: unknown } = { ...toolInput };
+ if (toolInput.edits) {
+ normalizedInput.edits = normalizeEdits(toolInput.edits);
+ }
+
+ const result: { [key: string]: unknown } = {
+ tool_name: toolName,
+ tool_input: normalizedInput,
+ };
+ if (input.sessionID) {
+ result.session_id = input.sessionID;
+ }
+ return result;
 }
 
 // ============================================
@@ -72,32 +128,36 @@ export function mapPostToolUse(input: OpenCodeToolInput): Record<string, unknown
 // ============================================
 
 interface OpenCodeCommandInput {
-  command?: string;
-  sessionID?: string;
-  session_id?: string;
-  arguments?: string;
-  cwd?: string;
+ command?: string;
+ sessionID?: string;
+ session_id?: string;
+ arguments?: string | readonly string[];
+ cwd?: string;
 }
 
 /**
  * Maps OpenCode command.execute.before (slash command) to the
  * user-prompt-submit.js stdin format: { session_id, prompt, cwd } with
- * Claude Code-style <command-name> tags.
+ * Claude Code-style tags.
  */
 export function mapUserPromptSubmit(
-  input: OpenCodeCommandInput,
-): Record<string, unknown> | null {
-  const command = input.command;
-  if (!command) return null;
-  // Accept both sessionID (SDK type) and session_id (runtime convention)
-  const session_id = input.session_id ?? input.sessionID ?? `oms-opencode-${Date.now()}`;
-  // Reconstruct the Claude Code-style prompt with <command-name> tags
-  // that user-prompt-submit.js's parseSlashCommand expects.
-  const prompt = `<command-name>${command}</command-name>` +
-    (input.arguments ? `<command-args>${input.arguments}</command-args>` : '');
-  return {
-    session_id,
-    prompt,
-    cwd: input.cwd ?? process.cwd(),
-  };
+ input: OpenCodeCommandInput,
+): { [key: string]: unknown } | null {
+ const command = input.command;
+ if (!command) return null;
+ // Accept both sessionID (SDK type) and session_id (runtime convention)
+ const session_id = input.session_id ?? input.sessionID ?? `oms-opencode-${Date.now()}`;
+ // OpenCode SDK Arguments type is readonly string[]; also accept plain string
+ const args = Array.isArray(input.arguments)
+ ? input.arguments.join(' ')
+ : (input.arguments ?? '');
+ // Reconstruct the Claude Code-style prompt with tags
+ // that user-prompt-submit.js's parseSlashCommand expects.
+ const prompt = `${command}` +
+ (args ? `${args}` : '');
+ return {
+ session_id,
+ prompt,
+ cwd: input.cwd ?? process.cwd(),
+ };
 }

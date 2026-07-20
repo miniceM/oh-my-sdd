@@ -40,11 +40,8 @@ export function getHomeDir() {
 }
 
 export function getStateDir() {
-  // 遵循 XDG Base Directory Spec
-  if (process.env.XDG_STATE_HOME) {
-    return path.join(process.env.XDG_STATE_HOME, 'oh-my-sdd');
-  }
-  return path.join(getHomeDir(), '.local', 'state', 'oh-my-sdd');
+  // 状态目录统一使用 ~/.oh-my-sdd（与 AGENTS.md、uninstall.js 保持一致）
+  return path.join(getHomeDir(), '.oh-my-sdd');
 }
 
 export function getPluginInstallDir() {

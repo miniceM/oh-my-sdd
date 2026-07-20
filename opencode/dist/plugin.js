@@ -1,55 +1,96 @@
-/** OpenCode plugin composition root. Wires config → mappers → runner. */
-import { loadConfig } from './config.js';
-import { log } from './logger.js';
-import { mapSessionStart, mapSessionEnd, mapPreToolUse, mapPostToolUse, mapUserPromptSubmit } from './mappers.js';
+/**
+ * OpenCode plugin entry point — bridges OpenCode lifecycle events to
+ * oh-my-sdd hooks/*.js via child_process.spawn (same protocol as Claude Code).
+ *
+ * Event mapping:
+ * event("session.created") → SessionStart (hooks/session-start.js)
+ * event("session.deleted") → SessionEnd (hooks/session-end.js)
+ * tool.execute.before → PreToolUse (hooks/pre-tool-use.js)
+ * tool.execute.after → PostToolUse (hooks/post-tool-use.js)
+ * command.execute.before → UserPromptSubmit (hooks/user-prompt-submit.js)
+ *
+ * Single source of truth: all hook logic lives in hooks/*.js, shared with
+ * the Claude Code plugin path. This adapter only translates events.
+ */
+import { mapSessionStart, mapSessionEnd, mapPreToolUse, mapPostToolUse, mapUserPromptSubmit, } from './mappers.js';
 import { runHook } from './runner.js';
-export const OhMySddPlugin = async (_ctx) => {
-    const config = await loadConfig();
-    if (config.disabled) {
-        void log('info', 'Plugin disabled');
-        return {};
-    }
-    return {
-        'session.created': async (input) => {
-            if (!config.hooks.sessionStart)
-                return;
-            await runHook('session-start.js', mapSessionStart(input), { timeoutMs: config.timeouts.sessionStart });
+import { log } from './logger.js';
+const HOOK_TIMEOUT_MS = 5_000;
+const plugin = async (_ctx) => {
+    log('info', 'oh-my-sdd plugin loaded');
+    const hooks = {
+        // ─── Event hook (catches session.created / session.deleted) ────────
+        async event(input) {
+            const { event } = input;
+            if (event.type === 'session.created') {
+                const session = event.properties.info;
+                const mapped = mapSessionStart({
+                    session_id: session.id,
+                    cwd: session.directory,
+                });
+                await runHook('session-start.js', mapped, {
+                    cwd: session.directory,
+                    timeoutMs: HOOK_TIMEOUT_MS,
+                });
+            }
+            if (event.type === 'session.deleted') {
+                const session = event.properties.info;
+                const mapped = mapSessionEnd({
+                    session_id: session.id,
+                    cwd: session.directory,
+                });
+                await runHook('session-end.js', mapped, {
+                    cwd: session.directory,
+                    timeoutMs: HOOK_TIMEOUT_MS,
+                });
+            }
         },
-        // session.deleted toggles with sessionStart (lifecycle paired)
-        'session.deleted': async (input) => {
-            if (!config.hooks.sessionStart)
+        // ─── Tool hooks (PreToolUse / PostToolUse) ─────────────────────────
+        async 'tool.execute.before'(input, output) {
+            const mapped = mapPreToolUse({
+                tool: input.tool,
+                input: output.args,
+                sessionID: input.sessionID,
+            });
+            if (!mapped)
                 return;
-            await runHook('session-end.js', mapSessionEnd(input), { timeoutMs: config.timeouts.preToolUse });
+            const result = await runHook('pre-tool-use.js', mapped, {
+                timeoutMs: HOOK_TIMEOUT_MS,
+            });
+            if (result?.permissionDecision === 'deny') {
+                // Throw to block the tool execution in OpenCode
+                const reason = typeof result.permissionDecisionReason === 'string'
+                    ? result.permissionDecisionReason
+                    : 'blocked by oh-my-sdd';
+                throw new Error(reason);
+            }
         },
-        'tool.execute.before': async (input) => {
-            if (!config.hooks.preToolUse)
+        async 'tool.execute.after'(input) {
+            const mapped = mapPostToolUse({
+                tool: input.tool,
+                input: input.args,
+                sessionID: input.sessionID,
+            });
+            if (!mapped)
                 return;
-            const stdinInput = mapPreToolUse(input);
-            if (!stdinInput)
-                return;
-            const result = await runHook('pre-tool-use.js', stdinInput, { timeoutMs: config.timeouts.preToolUse });
-            const out = result.hookSpecificOutput;
-            if (out?.permissionDecision === 'deny')
-                throw new Error(out?.permissionDecisionReason ?? 'HARD_RULE violated');
-            if (result.additionalContext)
-                process.stderr.write(`⚠️ oh-my-sdd: ${result.additionalContext}\n`);
+            await runHook('post-tool-use.js', mapped, {
+                timeoutMs: HOOK_TIMEOUT_MS,
+            });
         },
-        'tool.execute.after': async (input) => {
-            if (!config.hooks.postToolUse)
+        // ─── Command hook (UserPromptSubmit) ───────────────────────────────
+        async 'command.execute.before'(input) {
+            const mapped = mapUserPromptSubmit({
+                command: input.command,
+                session_id: input.sessionID,
+                arguments: input.arguments,
+            });
+            if (!mapped)
                 return;
-            const stdinInput = mapPostToolUse(input);
-            if (!stdinInput)
-                return;
-            await runHook('post-tool-use.js', stdinInput, { timeoutMs: config.timeouts.postToolUse });
-        },
-        'command.execute.before': async (input) => {
-            if (!config.hooks.userPrompt)
-                return;
-            const stdinInput = mapUserPromptSubmit(input);
-            if (!stdinInput)
-                return;
-            await runHook('user-prompt-submit.js', stdinInput, { timeoutMs: config.timeouts.userPrompt }).catch(() => { });
+            await runHook('user-prompt-submit.js', mapped, {
+                timeoutMs: HOOK_TIMEOUT_MS,
+            });
         },
     };
+    return hooks;
 };
-export default OhMySddPlugin;
+export default plugin;

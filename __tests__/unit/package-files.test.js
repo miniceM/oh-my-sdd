@@ -75,7 +75,7 @@ test('package.json scripts has prepublishOnly hook for opencode build', () => {
   assert.ok(pkg.scripts, 'package.json must have a "scripts" object');
   assert.equal(
     pkg.scripts.prepublishOnly,
-    'cd opencode && npm ci --include=dev && npm run build',
+    'npm run build:opencode',
     'prepublishOnly must force opencode build before npm publish'
   );
 });
