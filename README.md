@@ -279,3 +279,112 @@ oh-my-sdd v0.2+ 支持在多种 AI 编程工具中加载。skills + hooks + HARD
 ## 许可
 
 UNLICENSED（企业内部使用）
+
+## OpenCode Plugin
+
+oh-my-sdd 为 OpenCode IDE Agent 提供 parity plugin。它把 OpenCode 的事件与工具名映射到 Claude Code 的 hooks/*.js 协议，让同一套 HARD_RULE / SOFT_RULE 安全门禁和 SDD skills 在 OpenCode 里复用，无需为 OpenCode 单独维护 hook 逻辑。
+
+### 架构
+
+OpenCode 适配由 7 个模块组成，源码位于 `opencode/src/`，编译产物输出到 `opencode/dist/`：
+
+```
+plugin.ts (composition root)
+  ├── config.ts    → loadConfig() from opencode.json
+  ├── logger.ts    → structured logging w/ secret redaction
+  ├── mappers.ts   → tool name mapping (write→Write, etc.)
+  ├── runner.ts    → spawn hook process
+  ├── paths.ts     → install layout probe
+  └── types.ts     → shared interfaces
+```
+
+数据流：
+
+1. OpenCode 触发事件（`session.created` / `tool.execute.before` 等）。
+2. `mappers.ts` 把 OpenCode 小写工具名映射到 Claude Code 大写工具名（`write` → `Write`，`edit` → `Edit`，`apply_patch` → `MultiEdit`）。
+3. `runner.ts` 用 `node` 子进程启动 `hooks/*.js`，通过 stdin/stdout JSON 协议复用现有 hook。
+4. 若 `pre-tool-use.js` 返回 `permissionDecision: "deny"`，`plugin.ts` 抛出异常阻断工具执行。
+
+### Hook 生命周期
+
+OpenCode plugin 注册以下事件，按调用顺序构成完整会话生命周期：
+
+`session.created` → `tool.execute.before` → `tool.execute.after` → `command.execute.before` → `session.deleted`
+
+对应 hook 文件：
+
+| OpenCode 事件 | hook 文件 | 作用 |
+|---|---|---|
+| `session.created` | `session-start.js` | 会话开始，baseline 注入检查 |
+| `tool.execute.before` | `pre-tool-use.js` | 硬阻断违规写操作 |
+| `tool.execute.after` | `post-tool-use.js` | 埋点、后置审计 |
+| `command.execute.before` | `user-prompt-submit.js` | 斜杠命令解析与上报 |
+| `session.deleted` | `session-end.js` | 会话结束，刷新 DOP 埋点 |
+
+### 配置参考
+
+OpenCode 配置位于 `~/.config/opencode/opencode.json`。`oh-my-sdd` 块控制插件行为，`plugin` 数组注册插件入口。
+
+```json
+{
+  "plugin": ["./plugins/oh-my-sdd/dist/plugin.js"],
+  "oh-my-sdd": {
+    "disabled": false,
+    "logLevel": "info",
+    "hooks": {
+      "preToolUse": true,
+      "postToolUse": true,
+      "sessionStart": true,
+      "userPrompt": true
+    },
+    "timeouts": {
+      "preToolUse": 5000,
+      "postToolUse": 3000,
+      "sessionStart": 10000,
+      "userPrompt": 3000
+    }
+  }
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `disabled` | boolean | `false` | 设为 `true` 关闭整个插件 |
+| `logLevel` | string | `"info"` | 日志级别：`debug` / `info` / `warn` / `error` |
+| `hooks.preToolUse` | boolean | `true` | 是否启用 `tool.execute.before` 硬阻断 |
+| `hooks.postToolUse` | boolean | `true` | 是否启用 `tool.execute.after` 后置埋点 |
+| `hooks.sessionStart` | boolean | `true` | 是否启用 `session.created` / `session.deleted` |
+| `hooks.userPrompt` | boolean | `true` | 是否启用 `command.execute.before` 斜杠命令解析 |
+| `timeouts.preToolUse` | number | `5000` | `pre-tool-use.js` 超时（ms），范围 100-30000 |
+| `timeouts.postToolUse` | number | `3000` | `post-tool-use.js` 超时（ms），范围 100-30000 |
+| `timeouts.sessionStart` | number | `10000` | `session-start.js` 超时（ms），范围 100-30000 |
+| `timeouts.userPrompt` | number | `3000` | `user-prompt-submit.js` 超时（ms），范围 100-30000 |
+
+缺失 `oh-my-sdd` 块、文件不存在或 JSON 损坏时全部回退到上表默认值。
+
+### 禁用 / 启用
+
+临时开关插件而不删除已安装文件：
+
+```bash
+# 禁用：设置 oh-my-sdd.disabled=true 并从 opencode.json plugin 数组移除入口
+oms-install --disable
+
+# 启用：重新加入 plugin 数组并清除 disabled 标记
+oms-install --enable
+```
+
+禁用后已复制的 skills、baseline 注入和插件文件仍保留在 `~/.config/opencode/`，只是 OpenCode 不再加载 plugin。
+
+### 参与贡献
+
+修改 OpenCode 适配后，先编译再跑单元测试：
+
+```bash
+npm run build:opencode
+node --test __tests__/unit/opencode/
+```
+
+源码入口在 `opencode/src/plugin.ts`，新增事件或调整工具名映射时请同步更新 `opencode/src/mappers.ts` 和对应 hook 的 stdin 格式。
