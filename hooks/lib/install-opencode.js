@@ -208,6 +208,71 @@ export async function unregisterOpenCodePlugin(announce, opts = {}) {
 }
 
 // ============================================
+// Disable / Enable（只改 opencode.json，不碰磁盘文件）
+// ============================================
+
+export async function disableOpenCodePlugin(announceFn, opts = {}) {
+  const configPath = opts.configPath ?? OPENCODE_CONFIG_JSON;
+  if (!existsSync(configPath)) {
+    announceFn('  (opencode.json 不存在，无法 disable)');
+    return false;
+  }
+
+  let config;
+  try {
+    config = JSON.parse(await readFile(configPath, 'utf8'));
+  } catch {
+    announceFn('  ⚠️  opencode.json JSON 损坏，无法 disable');
+    return false;
+  }
+
+  config['oh-my-sdd'] = config['oh-my-sdd'] ?? {};
+  config['oh-my-sdd'].disabled = true;
+
+  if (Array.isArray(config.plugin)) {
+    const targets = new Set([PLUGIN_ENTRY_DIST, PLUGIN_ENTRY_TOPLEVEL]);
+    config.plugin = config.plugin.filter((p) => !targets.has(p));
+    if (config.plugin.length === 0) delete config.plugin;
+  }
+
+  await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', { mode: 0o644 });
+  announceFn(`  ✓ OpenCode plugin disabled (entry removed from ${configPath})`);
+  return true;
+}
+
+export async function enableOpenCodePlugin(announceFn, opts = {}) {
+  const configPath = opts.configPath ?? OPENCODE_CONFIG_JSON;
+  const entry = opts.entry ?? detectPluginEntry();
+
+  if (!existsSync(configPath)) {
+    announceFn('  (opencode.json 不存在，无法 enable)');
+    return false;
+  }
+
+  let config;
+  try {
+    config = JSON.parse(await readFile(configPath, 'utf8'));
+  } catch {
+    announceFn('  ⚠️  opencode.json JSON 损坏，无法 enable');
+    return false;
+  }
+
+  if (config['oh-my-sdd']) {
+    delete config['oh-my-sdd'].disabled;
+    if (Object.keys(config['oh-my-sdd']).length === 0) delete config['oh-my-sdd'];
+  }
+
+  if (!Array.isArray(config.plugin)) config.plugin = [];
+  if (!config.plugin.includes(entry)) {
+    config.plugin.push(entry);
+  }
+
+  await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', { mode: 0o644 });
+  announceFn(`  ✓ OpenCode plugin enabled (entry added to ${configPath})`);
+  return true;
+}
+
+// ============================================
 // 安装主入口
 // ============================================
 export async function installForOpenCode({ PACKAGE_ROOT, announce }) {
@@ -278,8 +343,27 @@ export async function uninstallForOpenCode() {
 
   // 5. 哨兵文件清理
   const sentinel = await readSentinel('opencode');
+  let sentinelRemoved = false;
   if (sentinel) {
-    await rmIfExists(sentinelPathFor('opencode'));
+    sentinelRemoved = await rmIfExists(sentinelPathFor('opencode'));
     announce(`  ✓ 已删除哨兵文件`);
   }
+
+  // Summary
+  const removed = [];
+  if (skillsRemoved) removed.push('skills 目录');
+  if (pluginRemoved) removed.push('plugin 目录');
+  if (sentinelRemoved) removed.push('哨兵文件');
+  removed.push('opencode.json plugin 入口');
+  removed.push('AGENTS.md 哨兵块');
+
+  announce('');
+  announce('📋 卸载摘要：');
+  announce(`  删除了 ${removed.length} 项 OpenCode 适配`);
+  if (removed.length > 0) {
+    announce(`  · ${removed.join('\n  · ')}`);
+  }
+  announce('');
+  announce('提示：oh-my-sdd 状态目录 (~/.oh-my-sdd/) 保留，下次安装无需重新认证。');
+  announce('如需完全清除：rm -rf ~/.oh-my-sdd/');
 }

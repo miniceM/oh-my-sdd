@@ -35,6 +35,8 @@ function printHelp() {
 用法:
   oms-install                              自动检测工具并安装
   oms-install --tool <name>                指定工具安装
+  oms-install --tool opencode --disable    禁用 OpenCode plugin（保留文件）
+  oms-install --tool opencode --enable     重新启用 OpenCode plugin
   oms-install --help | -h                  显示帮助
   oms-install --version | -V               显示版本
 
@@ -45,13 +47,17 @@ function printHelp() {
 
 选项:
   --tool <name>    指定目标 AI 工具。不传时按 which claude > which opencode > which lingma 顺序自动检测
+  --disable        禁用 OpenCode plugin（仅移除 opencode.json 入口，保留磁盘文件）
+  --enable         重新启用 OpenCode plugin（恢复 opencode.json 入口）
   -h, --help       显示此帮助并退出
   -V, --version    显示版本并退出
 
 示例:
-  oms-install --tool opencode      装 OpenCode 路径
-  oms-install --tool lingma         装通义灵码 lingma CN 路径
-  oms-install                      装 Claude Code 路径（自动检测）
+  oms-install --tool opencode              装 OpenCode 路径
+  oms-install --tool opencode --disable    禁用 OpenCode（下次重启不加载 plugin）
+  oms-install --tool opencode --enable     重新启用 OpenCode
+  oms-install --tool lingma                装通义灵码 lingma CN 路径
+  oms-install                             装 Claude Code 路径（自动检测）
 
 更多信息:
   README: https://github.com/cli-tools/oh-my-sdd#快速开始
@@ -68,8 +74,15 @@ function parseArgs(argv) {
     process.exit(0);
   }
 
+  const disable = argv.includes('--disable');
+  const enable = argv.includes('--enable');
+  if (disable && enable) {
+    process.stderr.write('❌ --disable 和 --enable 不能同时使用\n');
+    process.exit(1);
+  }
+
   const toolIdx = argv.indexOf('--tool');
-  if (toolIdx === -1) return { tool: null };
+  if (toolIdx === -1) return { tool: null, disable, enable };
   const tool = argv[toolIdx + 1];
   if (!tool || tool.startsWith('-')) {
     process.stderr.write('❌ --tool 需要指定工具名\n');
@@ -77,12 +90,12 @@ function parseArgs(argv) {
     process.stderr.write('  查看帮助: oms-install --help\n');
     process.exit(1);
   }
-  return { tool };
+  return { tool, disable, enable };
 }
 
-const { tool } = parseArgs(process.argv.slice(2));
+const { tool, disable, enable } = parseArgs(process.argv.slice(2));
 
-main({ tool }).catch((err) => {
+main({ tool, disable, enable }).catch((err) => {
   process.stderr.write(`❌ 安装失败：${err.stack ?? err.message}\n`);
   process.exit(1);
 });

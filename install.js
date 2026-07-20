@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { checkNodeVersion, isIamInPath } from './hooks/lib/platform.js';
 import { ensureStateDir } from './hooks/lib/state-dir.js';
 import { installForClaude, isClaudeInstalled } from './hooks/lib/install-claude.js';
-import { installForOpenCode } from './hooks/lib/install-opencode.js';
+import { installForOpenCode, disableOpenCodePlugin, enableOpenCodePlugin } from './hooks/lib/install-opencode.js';
 import { installForLingma } from './hooks/lib/install-lingma.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -125,6 +125,8 @@ async function main(options = {}) {
     case 'claude':
       return installForClaude({ PACKAGE_ROOT });
     case 'opencode':
+      if (options.disable) return disableOpenCodePlugin(announce);
+      if (options.enable) return enableOpenCodePlugin(announce);
       return installForOpenCode({ PACKAGE_ROOT, announce });
     case 'lingma':
       return installForLingma({ PACKAGE_ROOT, announce });
