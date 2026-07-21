@@ -18,14 +18,14 @@ export function getPluginRoot(): string {
   return process.env.OMS_PLUGIN_ROOT ?? DEFAULT_PLUGIN_ROOT;
 }
 
-/** hooks/*.js live at the repo root in `hooks/`. From opencode/dist → ../../hooks. */
+/** hooks/*.js live at the repo root in `hooks/`. From opencode/ → ../hooks. */
 export function getHooksDir(): string {
-  return path.resolve(getPluginRoot(), '..', '..', 'hooks');
+  return path.resolve(getPluginRoot(), '..', 'hooks');
 }
 
 /** content/enterprise-baseline.md is the SoT for enterprise rules (shared). */
 export function getBaselinePath(): string {
-  return path.resolve(getPluginRoot(), '..', '..', 'content', 'enterprise-baseline.md');
+  return path.resolve(getPluginRoot(), '..', 'content', 'enterprise-baseline.md');
 }
 
 /** Shared with claude/lingma. NEVER diverge — this is the invariant. */

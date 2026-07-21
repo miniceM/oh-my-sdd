@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import os from 'node:os';
+import fs from 'node:fs';
 import {
   getPluginRoot,
   getHooksDir,
@@ -13,29 +14,57 @@ import {
 
 test('paths: getPluginRoot reads OMS_PLUGIN_ROOT env', () => {
   process.env.OMS_PLUGIN_ROOT = '/custom/root';
-  assert.equal(getPluginRoot(), '/custom/root');
-  delete process.env.OMS_PLUGIN_ROOT;
+  try {
+    assert.equal(getPluginRoot(), '/custom/root');
+  } finally {
+    delete process.env.OMS_PLUGIN_ROOT;
+  }
 });
 
-test('paths: getPluginRoot falls back to dist/../.. when env unset', () => {
+test('paths: getPluginRoot falls back to opencode/ dir when env unset', () => {
   delete process.env.OMS_PLUGIN_ROOT;
   const root = getPluginRoot();
   assert.ok(root.endsWith('opencode'), `Expected endsWith 'opencode', got ${root}`);
 });
 
-test('paths: getHooksDir is <pluginRoot>/../../hooks', () => {
+test('paths: getHooksDir is <pluginRoot>/../hooks', () => {
   process.env.OMS_PLUGIN_ROOT = '/x/opencode';
-  assert.equal(getHooksDir(), path.normalize('/x/opencode/../../hooks'));
+  try {
+    assert.equal(getHooksDir(), path.normalize('/x/hooks'));
+  } finally {
+    delete process.env.OMS_PLUGIN_ROOT;
+  }
 });
 
-test('paths: getBaselinePath is <pluginRoot>/../../content/enterprise-baseline.md', () => {
+test('paths: getHooksDir fallback resolves to actual hooks/ dir', () => {
+  delete process.env.OMS_PLUGIN_ROOT;
+  const hooksDir = getHooksDir();
+  assert.ok(fs.existsSync(hooksDir), `hooks/ should exist, got ${hooksDir}`);
+});
+
+test('paths: getBaselinePath is <pluginRoot>/../content/enterprise-baseline.md', () => {
   process.env.OMS_PLUGIN_ROOT = '/x/opencode';
-  assert.equal(getBaselinePath(), path.normalize('/x/opencode/../../content/enterprise-baseline.md'));
+  try {
+    assert.equal(getBaselinePath(), path.normalize('/x/content/enterprise-baseline.md'));
+  } finally {
+    delete process.env.OMS_PLUGIN_ROOT;
+  }
+});
+
+test('paths: getBaselinePath fallback resolves to actual baseline file', () => {
+  delete process.env.OMS_PLUGIN_ROOT;
+  const bp = getBaselinePath();
+  assert.ok(fs.existsSync(bp), `baseline should exist, got ${bp}`);
 });
 
 test('paths: getStateDir uses ~/.oh-my-sdd (shared with claude/lingma)', () => {
   const state = getStateDir();
   assert.equal(state, path.join(os.homedir(), '.oh-my-sdd'));
+});
+
+test('paths: getLogFile returns ~/.oh-my-sdd/logs/opencode.log', () => {
+  const logFile = getLogFile();
+  assert.equal(logFile, path.join(os.homedir(), '.oh-my-sdd', 'logs', 'opencode.log'));
 });
 
 test('paths: sanitizeSessionId replaces non-allowed chars with _', () => {
@@ -46,9 +75,5 @@ test('paths: sanitizeSessionId replaces non-allowed chars with _', () => {
 
 test('paths: sanitizeSessionId returns fallback for undefined', () => {
   const a = sanitizeSessionId(undefined);
-  const b = sanitizeSessionId(undefined);
-  // Both should be strings
-  assert.equal(typeof a, 'string');
-  assert.equal(typeof b, 'string');
   assert.match(a, /^oms-opencode-\d+$/);
 });
