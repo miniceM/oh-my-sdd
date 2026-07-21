@@ -17,7 +17,8 @@
     "preuninstall": "node uninstall.js",
     "test": "node scripts/run-tests.js",
     "test:glob": "node --test \"__tests__/**/*.test.js\"",
-    "lint:baseline": "node scripts/check-baseline-tokens.mjs"
+    "lint:baseline": "node scripts/check-baseline-tokens.mjs",
+    "build:opencode": "cd opencode && npm install --no-audit --no-fund && npm run build"
   },
   "files": [
     ".claude-plugin/",
@@ -29,7 +30,8 @@
     "content/",
     "hooks/",
     "baseline/",
-    "README.md"
+    "README.md",
+    "opencode/dist/"
   ],
   "publishConfig": {
     "registry": "https://npm.enterprise.com/",
