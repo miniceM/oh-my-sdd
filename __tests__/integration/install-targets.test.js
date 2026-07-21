@@ -10,7 +10,7 @@ const PACKAGE_ROOT = resolve(__dirname, '..', '..');
 const SKILLS_SRC = join(PACKAGE_ROOT, 'skills');
 
 // ============================================
-// 集成测试：把 OpenCode/Lingma 安装/卸载的副作用
+// 集成测试：把 Lingma 安装/卸载的副作用
 // 重定向到临时 HOME 目录，避免污染真实用户环境。
 //
 // 策略：通过设置 HOME env 调用 install-shared.js 中的导出函数。
@@ -24,12 +24,12 @@ function makeFakeHome() {
   return mkdtempSync(join(tmpdir(), 'oms-int-'));
 }
 
-test('integration: OpenCode install creates expected files', async () => {
+test('integration: skills copy creates expected files for lingma install', async () => {
   const fakeHome = makeFakeHome();
   try {
     const { copySkillsToDir } = await import('../../hooks/lib/install-shared.js');
 
-    const destSkills = join(fakeHome, 'fake-opencode-skills');
+    const destSkills = join(fakeHome, 'fake-lingma-skills');
     const messages = [];
     const count = await copySkillsToDir(SKILLS_SRC, destSkills, (m) => messages.push(m));
     assert.ok(count >= 17, `应复制 17+ skills，实际 ${count}`);

@@ -68,4 +68,4 @@ target_tool: lingma
 - **MINOR**：新增 HARD_RULE/SOFT_RULE
 - **PATCH**：措辞、typo、非语义澄清
 
-修改后需同步更新 `content/enterprise-baseline.md`（主版本）、`baseline/opencode.md`、`baseline/lingma.md`（本文件）。
+修改后需同步更新 `content/enterprise-baseline.md`（主版本）、`baseline/lingma.md`（本文件）。

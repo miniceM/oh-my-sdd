@@ -1,7 +1,7 @@
-// install-shared.js — OpenCode 和通义灵码 lingma 安装/卸载的共享 utilities。
+// install-shared.js — 通义灵码 lingma 安装/卸载的共享 utilities。
 //
-// 为何独立成文件：避免 install-opencode.js 和 install-lingma.js 重复同样的工具代码。
-// 这些 utilities 100% 跨工具复用——剥离它们让两个工具模块只保留"工具特定"逻辑。
+// 为何独立成文件：避免 install-lingma.js 重复同样的工具代码。
+// 这些 utilities 100% 跨调用复用——剥离它们让 lingma 模块只保留"工具特定"逻辑。
 //
 // 包含：
 //   - copyDirRecursive: 通用目录递归复制
@@ -9,9 +9,9 @@
 //   - 哨兵系统：writeSentinel / readSentinel / SENTINEL_* 常量
 //
 // 不包含：
-//   - 路径常量（每个工具有自己的 ~/.config/opencode 或 ~/.lingma）
-//   - baseline 注入逻辑（OpenCode 哨兵块追加 vs lingma 整体覆盖，机制不同不共享）
-//   - 工具特定 plugin 编译/settings.json 生成
+//   - 路径常量（每个工具有自己的 ~/.lingma）
+//   - baseline 注入逻辑（lingma 整体覆盖，机制特定）
+//   - 工具特定 settings.json 生成
 
 import { readFile, writeFile, mkdir, readdir, copyFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -90,7 +90,7 @@ export async function copyDirRecursive(src, dest) {
  * 只复制含 SKILL.md 的子目录（其他目录视为非 skill）。
  *
  * @param {string} skillsSrc - oh-my-sdd 的 skills/ 绝对路径
- * @param {string} destDir - 目标工具的 skills 目录（如 ~/.config/opencode/skills/）
+ * @param {string} destDir - 目标工具的 skills 目录（如 ~/.lingma/skills/）
  * @param {Function} announce - 进度通知函数
  * @returns {Promise<number>} 复制的 skill 数量
  */

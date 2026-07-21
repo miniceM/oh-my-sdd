@@ -5,37 +5,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // ============================================
-// 工具名映射测试（关键契约）
-// ============================================
-test('TOOL_MAP maps OpenCode tool names to Claude Code names', () => {
-  // 模仿 plugin.ts 中的映射；测试时硬编码复制以避免 import 实际 TS
-  const TOOL_MAP = {
-    write: 'Write',
-    edit: 'Edit',
-    apply_patch: 'MultiEdit',
-  };
-  assert.equal(TOOL_MAP.write, 'Write');
-  assert.equal(TOOL_MAP.edit, 'Edit');
-  assert.equal(TOOL_MAP.apply_patch, 'MultiEdit');
-});
-
-test('OpenCode lower-case tools must be mapped before passing to pre-tool-use.js', () => {
-  // pre-tool-use.js 硬编码匹配 ['Edit', 'Write', 'MultiEdit'] 大写
-  // OpenCode 的 input.tool 是小写
-  // 任何未在 TOOL_MAP 中的工具都应被放行（pre-tool-use.js 内部 TRACKED_TOOLS 过滤）
-  const opencodeTools = ['write', 'edit', 'apply_patch'];
-  const expectedMapped = ['Write', 'Edit', 'MultiEdit'];
-  const TOOL_MAP = {
-    write: 'Write',
-    edit: 'Edit',
-    apply_patch: 'MultiEdit',
-  };
-  for (let i = 0; i < opencodeTools.length; i++) {
-    assert.equal(TOOL_MAP[opencodeTools[i]], expectedMapped[i]);
-  }
-});
-
-// ============================================
 // 哨兵正则测试（卸载精准删除）
 // ============================================
 test('SENTINEL_RE matches baseline block wrapped by sentinels', () => {
@@ -131,16 +100,16 @@ test('lingma hook removal deletes hooks container when fully empty', () => {
 test('Sentinel metadata round-trips correctly', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'oms-test-'));
   try {
-    const sentinelPath = join(tmp, 'baseline-opencode.sentinel');
+    const sentinelPath = join(tmp, 'baseline-lingma.sentinel');
     const meta = {
-      tool: 'opencode',
-      dest: '/Users/test/.config/opencode/AGENTS.md',
+      tool: 'lingma',
+      dest: '/Users/test/.lingma/rules/oh-my-sdd.md',
       block_marker: 'OH-MY-SDD:BEGIN/END',
       installed_at: '2026-07-06T10:00:00Z',
     };
     writeFileSync(sentinelPath, JSON.stringify(meta, null, 2));
     const loaded = JSON.parse(readFileSync(sentinelPath, 'utf8'));
-    assert.equal(loaded.tool, 'opencode');
+    assert.equal(loaded.tool, 'lingma');
     assert.equal(loaded.dest, meta.dest);
     assert.equal(loaded.installed_at, '2026-07-06T10:00:00Z');
   } finally {
@@ -179,6 +148,6 @@ test('copySkillsToDir preserves skill name as directory', async () => {
   }
 });
 
-// 注：isHomeDir 是 install-opencode.js / install-lingma.js 内部的 5 行工具函数，
+// 注：isHomeDir 是 install-lingma.js 内部的 5 行工具函数，
 // 重复定义无共享价值，因此未导出也不单独测试。它的逻辑（resolve vs realpath）
 // 已经在 install.js 的更严格的 isHomeDir 实现中验证（通过 smoke-check）。

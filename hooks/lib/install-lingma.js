@@ -1,6 +1,6 @@
 // install-lingma.js — 通义灵码 lingma CN 的安装/卸载实现。
 //
-// 与 install-claude.js / install-opencode.js 对称：每个工具一个独立模块。
+// 与 install-claude.js 对称：每个工具一个独立模块。
 //
 // lingma 路径特有逻辑：
 //   1. skills 复制到 ~/.lingma/skills/
