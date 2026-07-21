@@ -36,7 +36,8 @@ function redact(obj: unknown): unknown {
       if (k === 'password' || k === 'secret' || k === 'token' || k === 'apiKey') {
         out[k] = '[REDACTED]';
       } else if (k === 'filePath' && typeof v === 'string') {
-        out.filePathHash = hashStr(v);
+        // Use _filePathHash prefix to avoid collision with payload's own filePathHash
+        out._filePathHash = hashStr(v);
       } else {
         out[k] = redact(v);
       }
@@ -53,10 +54,11 @@ function hashStr(s: string): string {
 }
 
 export function log(level: 'debug' | 'info' | 'warn' | 'error', msg: string, payload: Record<string, unknown> = {}): void {
+  const sanitizedMsg = String(msg).replace(AK_PATTERN, 'AKIA[REDACTED]').replace(PATH_PATTERN, '[PATH]');
   const entry = JSON.stringify({
     ts: Date.now(),
     level,
-    msg,
+    msg: sanitizedMsg,
     ...(redact(payload) as Record<string, unknown>),
   });
   const line = entry + '\n';

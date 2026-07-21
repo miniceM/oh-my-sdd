@@ -45,10 +45,19 @@ test('logger: redacts sensitive fields in payload', () => {
   assert.ok(content.includes('"safe":"ok"'));
 });
 
-test('logger: redacts filePath hash only (not path) for path payloads', () => {
+test('logger: redacts AK in msg field as well (not just payload)', () => {
+  _resetForTest();
+  log('info', 'key AKIAIOSFODNN7EXAMPLE in message');
+  const content = fs.readFileSync(process.env.OMS_LOG_FILE, 'utf8');
+  assert.ok(!content.includes('AKIAIOSFODNN7EXAMPLE'), 'msg field should also be sanitized');
+  assert.ok(content.includes('AKIA[REDACTED]'), 'sanitized AK should appear');
+});
+
+test('logger: redacts filePath hash (not path) for path payloads', () => {
   _resetForTest();
   log('info', 'tool call', { filePath: '/Users/alice/secrets/aws.env', tool: 'edit' });
   const content = fs.readFileSync(process.env.OMS_LOG_FILE, 'utf8');
   assert.ok(!content.includes('/Users/alice'), 'should not log full path');
   assert.ok(content.includes('"tool":"edit"'));
+  assert.ok(/_filePathHash/.test(content), 'should have _filePathHash field');
 });
