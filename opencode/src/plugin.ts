@@ -1,0 +1,81 @@
+/**
+ * OpenCode hook dispatchers. Each handler maps OpenCode event → hook script.
+ *
+ * Core translation: OpenCode SDK events → Claude hook stdin → hooks/*.js →
+ * parsed stdout → throw (deny) or pass-through (allow).
+ *
+ * All handlers are async (OpenCode requires Promise<void>). The runner is
+ * fail-CLOSED by default, so any hook error propagates as a thrown error
+ * that OpenCode catches to block the tool.
+ */
+import { runHook } from './runner.js';
+import {
+  mapSessionStart,
+  mapSessionEnd,
+  mapPreToolUse,
+  mapUserPromptSubmit,
+} from './mappers.js';
+import { loadBaseline, buildSystemPrompt } from './baseline.js';
+import { log } from './logger.js';
+
+const HOOK_TIMEOUT_MS = Number(process.env.OMS_HOOK_TIMEOUT_MS ?? 5000);
+
+export async function handleSystemTransform(
+  _input: { sessionID?: string; model: unknown },
+  output: { system?: string[] },
+): Promise<void> {
+  const sections = await loadBaseline();
+  buildSystemPrompt(sections, output);
+  log('debug', 'baseline injected', { count: sections.length });
+}
+
+export async function handleToolExecuteBefore(
+  input: { tool: string; sessionID?: string; callID?: string },
+  output: { args: Record<string, unknown> },
+): Promise<void> {
+  const payload = mapPreToolUse({
+    tool: input.tool,
+    input: output.args,
+    sessionID: input.sessionID,
+  });
+  if (!payload) return;
+  await runHook('pre-tool-use.js', payload, { timeoutMs: HOOK_TIMEOUT_MS });
+}
+
+export async function handleToolExecuteAfter(
+  input: { tool: string; sessionID?: string; callID?: string; args?: Record<string, unknown> },
+  _output: unknown,
+): Promise<void> {
+  const payload = mapPreToolUse({
+    tool: input.tool,
+    input: input.args ?? {},
+    sessionID: input.sessionID,
+  });
+  if (!payload) return;
+  await runHook('post-tool-use.js', payload, { timeoutMs: HOOK_TIMEOUT_MS });
+}
+
+export async function handleCommandExecuteBefore(
+  input: { command?: string; sessionID?: string; arguments?: string },
+  _output: { parts: unknown[] },
+): Promise<void> {
+  const payload = mapUserPromptSubmit(input);
+  if (!payload) return;
+  await runHook('user-prompt-submit.js', payload, { timeoutMs: HOOK_TIMEOUT_MS });
+}
+
+export async function handleEvent(input: {
+  event: { type: string; [k: string]: unknown };
+}): Promise<void> {
+  const ev = input.event;
+  const t = ev.type;
+  if (t === 'session.created' || t === 'session.deleted') {
+    // Extract info from various Event variant shapes (properties.info or properties directly)
+    const props = (ev.properties ?? {}) as Record<string, unknown>;
+    const info = (props.info ?? props) as { id?: string; directory?: string };
+    const mapper = t === 'session.created' ? mapSessionStart : mapSessionEnd;
+    const payload = mapper({ sessionID: info.id, directory: info.directory });
+    const script = t === 'session.created' ? 'session-start.js' : 'session-end.js';
+    await runHook(script, payload, { timeoutMs: HOOK_TIMEOUT_MS });
+  }
+}
