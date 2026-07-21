@@ -2,10 +2,10 @@
 // Manual uninstaller entry point
 //
 // CLI flags:
-//   --tool <claude|opencode|lingma>   Uninstall only the specified tool (default: all)
-//   --purge                          Also remove ~/.oh-my-sdd/ state directory
-//   -h, --help                       Show this help and exit
-//   -V, --version                    Print version and exit
+//   --tool <claude|lingma>   Uninstall only the specified tool (default: all)
+//   --purge                  Also remove ~/.oh-my-sdd/ state directory
+//   -h, --help               Show this help and exit
+//   -V, --version            Print version and exit
 
 import { main } from '../uninstall.js';
 import { readFileSync } from 'node:fs';
@@ -37,18 +37,17 @@ function printHelp() {
 
 工具:
   claude       Claude Code
-  opencode     OpenCode
-  lingma        通义灵码 lingma
+  lingma       通义灵码 lingma
 
 选项:
-  --tool <name>    仅卸载指定工具。默认卸载所有工具（Claude + OpenCode + lingma）
+  --tool <name>    仅卸载指定工具。默认卸载所有工具（Claude + lingma）
   --purge          同时删除 ~/.oh-my-sdd/ 状态目录
   -h, --help       显示此帮助并退出
   -V, --version    显示版本并退出
 
 示例:
-  oms-uninstall --tool opencode       仅卸载 OpenCode 路径
   oms-uninstall --tool claude         仅卸载 Claude 路径
+  oms-uninstall --tool lingma         仅卸载 lingma 路径
   oms-uninstall --purge               卸载所有工具 + 删 state 目录
   oms-uninstall                       卸载所有工具（state 目录保留供重装复用）
 
@@ -73,7 +72,7 @@ function parseArgs(argv) {
     tool = argv[toolIdx + 1];
     if (!tool || tool.startsWith('-')) {
       process.stderr.write('❌ --tool 需要指定工具名\n');
-      process.stderr.write('  支持: claude, opencode, lingma\n');
+      process.stderr.write('  支持: claude, lingma\n');
       process.stderr.write('  查看帮助: oms-uninstall --help\n');
       process.exit(1);
     }
