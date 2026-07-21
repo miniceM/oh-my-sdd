@@ -15,12 +15,9 @@
   "scripts": {
     "postinstall": "node install.js",
     "preuninstall": "node uninstall.js",
-    "prepublishOnly": "npm run build:opencode",
     "test": "node scripts/run-tests.js",
     "test:glob": "node --test \"__tests__/**/*.test.js\"",
-    "lint:baseline": "node scripts/check-baseline-tokens.mjs",
-    "build:opencode": "node scripts/build-opencode-plugin.mjs",
-    "ci:opencode": "npm run build:opencode && node --test __tests__/unit/opencode/ && git diff --exit-code opencode/dist/"
+    "lint:baseline": "node scripts/check-baseline-tokens.mjs"
   },
   "files": [
     ".claude-plugin/",
@@ -32,7 +29,6 @@
     "content/",
     "hooks/",
     "baseline/",
-    "opencode/dist/",
     "README.md"
   ],
   "publishConfig": {
@@ -61,7 +57,6 @@
   "license": "UNLICENSED",
   "private": false,
   "devDependencies": {
-    "oh-my-sdd-opencode-plugin": "file:opencode",
     "typescript": "^5.9.3"
   }
 }

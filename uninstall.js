@@ -124,11 +124,6 @@ async function uninstallForClaude({ announce }) {
 async function main({ purge = false, tool } = {}) {
   // 1. 卸载指定工具的钩子/配置（如果指定了 tool）
   if (tool) {
-    if (tool === 'opencode') {
-      const { uninstallForOpenCode: fn } = await import('./hooks/lib/install-opencode.js');
-      await fn();
-      return;
-    }
     if (tool === 'lingma') {
       const { uninstallForLingma: fn } = await import('./hooks/lib/install-lingma.js');
       await fn();
@@ -144,12 +139,10 @@ async function main({ purge = false, tool } = {}) {
   // 2. 默认：完整卸载 Claude Code 路径
   await uninstallForClaude({ announce });
 
-  // 3. 工具未指定时，也清理 OpenCode/Lingma（如果装过）
+  // 3. 工具未指定时，也清理 lingma（如果装过）
   if (!tool) {
-    const { uninstallForOpenCode: fn1 } = await import('./hooks/lib/install-opencode.js');
-    const { uninstallForLingma: fn2 } = await import('./hooks/lib/install-lingma.js');
-    await fn1();
-    await fn2();
+    const { uninstallForLingma: fn } = await import('./hooks/lib/install-lingma.js');
+    await fn();
   }
 
   if (purge) {
