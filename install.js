@@ -24,6 +24,7 @@ import { checkNodeVersion, isIamInPath } from './hooks/lib/platform.js';
 import { ensureStateDir } from './hooks/lib/state-dir.js';
 import { installForClaude, isClaudeInstalled } from './hooks/lib/install-claude.js';
 import { installForLingma } from './hooks/lib/install-lingma.js';
+import { installForOpencode, isOpenCodeInstalled } from './hooks/lib/install-opencode.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = __dirname;
@@ -58,6 +59,12 @@ function preflightFor(tool) {
       if (!isLingmaInstalled()) {
         process.stderr.write('⚠️  未检测到通义灵码 (lingma) IDE。已写入 rules + 合并 settings.json，但 IDE 不在时不生效。\n');
         process.stderr.write('    安装：https://lingma.aliyun.com\n');
+      }
+      break;
+    case 'opencode':
+      if (!isOpenCodeInstalled()) {
+        process.stderr.write('⚠️  未检测到 OpenCode。继续安装（plugin 写到目录里等用户用），但 OpenCode 不在时不生效。\n');
+        process.stderr.write('    安装：https://opencode.ai\n');
       }
       break;
   }
@@ -106,9 +113,11 @@ async function main(options = {}) {
       return installForClaude({ PACKAGE_ROOT });
     case 'lingma':
       return installForLingma({ PACKAGE_ROOT, announce });
+    case 'opencode':
+      return installForOpencode({ PACKAGE_ROOT, announce });
     default:
       process.stderr.write(`❌ 未知工具: ${tool}\n`);
-      process.stderr.write('  支持: claude, lingma\n');
+      process.stderr.write('  支持: claude, lingma, opencode\n');
       process.exit(1);
   }
 }
@@ -129,4 +138,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 
 export { main, preflightFor, detectDefaultTool,
-         isClaudeInstalled, isLingmaInstalled };
+         isClaudeInstalled, isLingmaInstalled, isOpenCodeInstalled };

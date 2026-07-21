@@ -1,6 +1,6 @@
 # @cli-tools/oh-my-sdd
 
-企业级 SDD 工作流插件。**支持 2 种 AI 编程工具**：Claude Code、通义灵码 Lingma。skills + HARD_RULE 安全门禁跨工具复用。
+企业级 SDD 工作流插件。**支持 3 种 AI 编程工具**：Claude Code、通义灵码 Lingma、OpenCode。skills + HARD_RULE 安全门禁跨工具复用。
 
 **核心能力：**
 - 5 个 SDD 斜杠命令：`/sdd-spec` `/sdd-plan` `/sdd-task` `/sdd-apply` `/sdd-review`
@@ -11,6 +11,25 @@
 ## 快速开始
 
 按你使用的工具选一条路径。`oms-install` 不传 `--tool` 时自动检测（`which claude > which lingma`）。
+
+### OpenCode
+
+```bash
+# 1. 全局安装
+npm install -g --foreground-scripts @cli-tools/oh-my-sdd
+
+# 2. 显式选择工具
+oms-install --tool opencode
+
+# 3. 启动 OpenCode
+#    plugin 自动加载到 ~/.config/opencode/plugins/oh-my-sdd/
+#    baseline 通过 experimental.chat.system.transform 注入
+#    /sdd-spec <change-name>
+```
+
+⚠️ **前置依赖**：OpenCode（`npm install -g opencode` 或从 https://opencode.ai 下载）
+⚠️ **baseline 注入**：依赖 `@opencode-ai/plugin` 1.15+ 的 `experimental.chat.system.transform` hook
+⚠️ **HARD_RULE 强制**：通过自维护 TypeScript 适配层，`permissionDecision: "deny"` 转译为 OpenCode 的 `throw new Error()`
 
 ### Claude Code（默认）
 
