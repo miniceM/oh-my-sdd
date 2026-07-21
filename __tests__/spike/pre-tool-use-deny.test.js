@@ -21,24 +21,24 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOK_PATH = path.resolve(__dirname, '..', '..', 'hooks', 'pre-tool-use.js');
 
 const FIXTURES = {
-  awsAk: { file_path: 'leak.js', content: 'const AWS_KEY = "AKIAIOSFODNN7EXAMPLE";\n' },
-  openAiSk: { file_path: 'client.js', content: 'const OPENAI = "sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";\n' },
-  rmRfRoot: { file_path: 'clean.sh', content: '#!/bin/bash\nrm -rf /\n' },
-  gitForceMain: { file_path: 'push.sh', content: 'git push --force origin main\n' },
-  envFile: { file_path: '.env', content: 'AWS_KEY=foo\n' },
-  envExample: { file_path: '.env.example', content: 'AWS_KEY=replace-me\n' },
-  readmeClean: { file_path: 'README.md', content: '# Foo\n\n## Quick Start\n\nnpm i\n' },
-  readmeMissing: { file_path: 'README.md', content: '# Foo\n\nSome text.\n' },
-  benign: { file_path: 'foo.txt', content: 'hello world\n' },
+  awsAk: { filePath: 'leak.js', content: 'const AWS_KEY = "AKIAIOSFODNN7EXAMPLE";\n' },
+  openAiSk: { filePath: 'client.js', content: 'const OPENAI = "sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";\n' },
+  rmRfRoot: { filePath: 'clean.sh', content: '#!/bin/bash\nrm -rf /\n' },
+  gitForceMain: { filePath: 'push.sh', content: 'git push --force origin main\n' },
+  envFile: { filePath: '.env', content: 'AWS_KEY=foo\n' },
+  envExample: { filePath: '.env.example', content: 'AWS_KEY=replace-me\n' },
+  readmeClean: { filePath: 'README.md', content: '# Foo\n\n## Quick Start\n\nnpm i\n' },
+  readmeMissing: { filePath: 'README.md', content: '# Foo\n\nSome text.\n' },
+  benign: { filePath: 'foo.txt', content: 'hello world\n' },
 };
 
 async function runWithFixture(fixture, toolName = 'Write') {
   const toolInput =
     toolName === 'Write'
-      ? { file_path: fixture.file_path, content: fixture.content }
+      ? { filePath: fixture.filePath, content: fixture.content }
       : toolName === 'Edit'
-      ? { file_path: fixture.file_path, new_string: fixture.content }
-      : { file_path: fixture.file_path, edits: [{ new_string: fixture.content }] };
+      ? { filePath: fixture.filePath, newString: fixture.content }
+      : { filePath: fixture.filePath, edits: [{ newString: fixture.content }] };
 
   return runHook(HOOK_PATH, {
     session_id: 'spike',
@@ -89,7 +89,7 @@ test('spike/contract: every HARD fixture produces deny (Write tool)', async () =
   }
 });
 
-test('spike/contract: HARD fixtures also work under Edit tool (new_string)', async () => {
+test('spike/contract: HARD fixtures also work under Edit tool (newString)', async () => {
   const hardFixtures = ['awsAk', 'envFile'];
   for (const name of hardFixtures) {
     const result = await runWithFixture(FIXTURES[name], 'Edit');
@@ -158,7 +158,7 @@ test('spike/contract: non-edit tool (e.g. Read) returns {}', async () => {
   const result = await runHook(HOOK_PATH, {
     session_id: 'spike',
     tool_name: 'Read',
-    tool_input: { file_path: '/tmp/foo.txt' },
+    tool_input: { filePath: '/tmp/foo.txt' },
   });
   assert.equal(result.stdout.trim(), '{}');
 });

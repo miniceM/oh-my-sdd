@@ -9,8 +9,8 @@
 //
 // Content extraction per tool:
 //   - Write:    tool_input.content            (full new file body)
-//   - Edit:     tool_input.new_string         (replacement fragment)
-//   - MultiEdit: tool_input.edits[].new_string (concatenated)
+//   - Edit:     tool_input.newString         (replacement fragment)
+//   - MultiEdit: tool_input.edits[].newString (concatenated)
 //
 // SOFT rules that scan whole-file structure (readme-missing-quickstart,
 // public-api-missing-docstring) are best-effort under Edit/MultiEdit — they
@@ -23,9 +23,11 @@
 
 import { matchRules } from './lib/rules.js';
 import { error } from './lib/log.js';
-import { normalizeToolName, normalizeToolInput, isTrackedTool } from './lib/tool-normalizer.js';
 import { readFile } from 'node:fs/promises';
 const STDIN_TIMEOUT_MS = 5_000; // 增大超时,避免大型 payload 竞争
+
+// 规则引擎扫描 content 的工具集合。Claude Code 协议保证 tool_name 是 PascalCase。
+const TRACKED_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
 
 async function readStdin() {
   return new Promise((resolve) => {
@@ -73,14 +75,13 @@ async function main() {
   // that should prevent tool execution. Let the error propagate to block execution.
   stdin = rawStdin && rawStdin.trim() ? JSON.parse(rawStdin) : {};
 
-  const toolName = normalizeToolName(stdin.tool_name);
-  if (!isTrackedTool(toolName)) {
+  const toolName = stdin.tool_name;
+  if (!TRACKED_TOOLS.has(toolName)) {
     process.stdout.write('{}');
     return;
   }
 
-  const toolInput = normalizeToolInput(stdin.tool_input);
-  const extracted = extractContentAndPath(toolName, toolInput);
+  const extracted = extractContentAndPath(toolName, stdin.tool_input);
   if (!extracted) {
     process.stdout.write('{}');
     return;

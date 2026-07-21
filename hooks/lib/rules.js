@@ -92,7 +92,7 @@ const ENV_FILE_EDIT = {
  * Triggers on README.md (any case) lacking all of: "Quick Start",
  * "快速开始", "quickstart" (case-insensitive).
  *
- * Best-effort limitation: under Edit/MultiEdit, only sees new_string fragment,
+ * Best-effort limitation: under Edit/MultiEdit, only sees newString fragment,
  * not full file. May false-positive if fragment lacks heading but full file
  * has it. For Write (full content), check is accurate.
  */
@@ -101,7 +101,7 @@ const README_MISSING_QUICKSTART = {
   severity: 'soft',
   filePattern: BASE_NAME_RE(/(^|\/)README\.md$/i),
   check(content) {
-    // Best-effort: under Edit/MultiEdit only sees new_string fragment, not full file.
+    // Best-effort: under Edit/MultiEdit only sees newString fragment, not full file.
     // May false-positive if fragment lacks heading but full file has it.
     if (/(quick[ _-]?start|快速开始)/i.test(content)) return null;
     return [{

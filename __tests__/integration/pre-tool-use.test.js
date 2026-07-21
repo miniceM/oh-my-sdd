@@ -15,7 +15,7 @@ test('pre-tool-use denies Write with hardcoded AWS Access Key', async () => {
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
-      file_path: '/tmp/leak.js',
+      filePath: '/tmp/leak.js',
       content: 'const AWS_KEY = "AKIAIOSFODNN7EXAMPLE";\n',
     },
   });
@@ -31,9 +31,9 @@ test('pre-tool-use denies Edit with hardcoded OpenAI SK', async () => {
     session_id: 'test',
     tool_name: 'Edit',
     tool_input: {
-      file_path: '/tmp/client.js',
-      old_string: '// placeholder',
-      new_string: 'const SK = "sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";\n',
+      filePath: '/tmp/client.js',
+      oldString: '// placeholder',
+      newString: 'const SK = "sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";\n',
     },
   });
 
@@ -48,10 +48,10 @@ test('pre-tool-use denies MultiEdit with rm -rf / in any edit', async () => {
     session_id: 'test',
     tool_name: 'MultiEdit',
     tool_input: {
-      file_path: '/tmp/clean.sh',
+      filePath: '/tmp/clean.sh',
       edits: [
-        { old_string: '# comment', new_string: '#!/bin/bash' },
-        { old_string: 'echo hi', new_string: 'rm -rf /\n' },
+        { oldString: '# comment', newString: '#!/bin/bash' },
+        { oldString: 'echo hi', newString: 'rm -rf /\n' },
       ],
     },
   });
@@ -67,7 +67,7 @@ test('pre-tool-use denies direct .env file edit (filePattern only)', async () =>
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
-      file_path: '/tmp/.env',
+      filePath: '/tmp/.env',
       content: 'SECRET=value\n',
     },
   });
@@ -83,7 +83,7 @@ test('pre-tool-use allows .env.example (filePattern negative)', async () => {
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
-      file_path: '/tmp/.env.example',
+      filePath: '/tmp/.env.example',
       content: 'SECRET=\n',
     },
   });
@@ -99,7 +99,7 @@ test('pre-tool-use lists multiple HARD rules in deny reason', async () => {
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
-      file_path: '/tmp/multi.ts',
+      filePath: '/tmp/multi.ts',
       content: 'const AK = "AKIAIOSFODNN7EXAMPLE";\nconst SK = "sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";\n',
     },
   });
@@ -118,7 +118,7 @@ test('pre-tool-use warns on README.md missing Quick Start (Write)', async () => 
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
-      file_path: '/tmp/README.md',
+      filePath: '/tmp/README.md',
       content: '# My Project\n\nThis README lacks any setup or getting-started section.\n',
     },
   });
@@ -134,7 +134,7 @@ test('pre-tool-use does not warn on README.md with Quick Start', async () => {
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
-      file_path: '/tmp/README.md',
+      filePath: '/tmp/README.md',
       content: '# My Project\n\n## Quick Start\n\nnpm install\n',
     },
   });
@@ -150,7 +150,7 @@ test('pre-tool-use clean path: plain .md returns {}', async () => {
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
-      file_path: '/tmp/notes.md',
+      filePath: '/tmp/notes.md',
       content: '# Notes\n\nThis is a normal doc with no violations.\n',
     },
   });
@@ -163,7 +163,7 @@ test('pre-tool-use ignores non-edit tools', async () => {
   const result = await runHook(HOOK_PATH, {
     session_id: 'test',
     tool_name: 'Read',
-    tool_input: { file_path: '/tmp/x.ts' },
+    tool_input: { filePath: '/tmp/x.ts' },
   });
 
   assert.equal(result.exitCode, 0);
@@ -179,7 +179,7 @@ test('pre-tool-use works WITHOUT session meta (stateless rules check)', async ()
     session_id: 'no-meta-session',
     tool_name: 'Write',
     tool_input: {
-      file_path: '/tmp/leak.js',
+      filePath: '/tmp/leak.js',
       content: 'const AK = "AKIAIOSFODNN7EXAMPLE";\n',
     },
   });
@@ -198,7 +198,7 @@ test('pre-tool-use deny JSON keys match Claude Code documented schema', async ()
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
-      file_path: '/tmp/leak.js',
+      filePath: '/tmp/leak.js',
       content: 'const AK = "AKIAIOSFODNN7EXAMPLE";\n',
     },
   });
@@ -225,7 +225,7 @@ test('pre-tool-use warn JSON keys match expected schema', async () => {
     session_id: 'test',
     tool_name: 'Write',
     tool_input: {
-      file_path: '/tmp/README.md',
+      filePath: '/tmp/README.md',
       content: '# My Project\n\nNo setup instructions here.\n',
     },
   });

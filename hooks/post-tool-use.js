@@ -16,8 +16,10 @@ import { readFile, writeFile } from 'node:fs/promises';
 
 import { sessionMetaPath } from './lib/platform.js';
 import { error, warn } from './lib/log.js';
-import { normalizeToolName, normalizeToolInput, isTrackedTool } from './lib/tool-normalizer.js';
 const STDIN_TIMEOUT_MS = 1_000;
+
+// 记录 files_touched 的工具集合。Claude Code 协议保证 tool_name 是 PascalCase。
+const TRACKED_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
 
 async function readStdin() {
   return new Promise((resolve) => {
@@ -35,14 +37,13 @@ async function main() {
   let stdin = {};
   try { stdin = rawStdin && rawStdin.trim() ? JSON.parse(rawStdin) : {}; } catch { /* tolerate */ }
 
-  const toolName = normalizeToolName(stdin.tool_name);
-  if (!isTrackedTool(toolName)) {
+  const toolName = stdin.tool_name;
+  if (!TRACKED_TOOLS.has(toolName)) {
     process.stdout.write('{}');
     return;
   }
 
-  const toolInput = normalizeToolInput(stdin.tool_input || {});
-  const filePath = toolInput.filePath;
+  const filePath = stdin.tool_input?.filePath;
   if (!filePath) {
     process.stdout.write('{}');
     return;

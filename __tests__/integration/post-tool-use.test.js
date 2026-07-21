@@ -38,7 +38,7 @@ test('post-tool-use records incremental file change in session meta', async (t) 
       session_id: 's1',
       cwd: '/tmp',
       tool_name: 'Edit',
-      tool_input: { file_path: '/tmp/foo.ts' },
+      tool_input: { filePath: '/tmp/foo.ts' },
     },
     { HOME: tmpHome, USERPROFILE: tmpHome }
   );
@@ -62,7 +62,7 @@ test('post-tool-use with Write tool also records', async (t) => {
       session_id: 's2',
       cwd: '/tmp',
       tool_name: 'Write',
-      tool_input: { file_path: '/tmp/bar.py' },
+      tool_input: { filePath: '/tmp/bar.py' },
     },
     { HOME: tmpHome, USERPROFILE: tmpHome }
   );
@@ -84,7 +84,7 @@ test('post-tool-use ignores non-edit tools', async (t) => {
       session_id: 's3',
       cwd: '/tmp',
       tool_name: 'Read',
-      tool_input: { file_path: '/tmp/x.ts' },
+      tool_input: { filePath: '/tmp/x.ts' },
     },
     { HOME: tmpHome, USERPROFILE: tmpHome }
   );
@@ -105,7 +105,7 @@ test('post-tool-use returns {} when session meta missing (short-circuit)', async
       session_id: 'no-meta',
       cwd: '/tmp',
       tool_name: 'Edit',
-      tool_input: { file_path: '/tmp/whatever.ts' },
+      tool_input: { filePath: '/tmp/whatever.ts' },
     },
     { HOME: tmpHome, USERPROFILE: tmpHome }
   );
