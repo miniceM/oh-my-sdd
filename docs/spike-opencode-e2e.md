@@ -121,6 +121,66 @@ OpenCode 作为"执行端"工具，只能消费 baseline，不能修改。
   安装流程也会自动清掉它（self-healing）
 - 管理员修改 baseline 仍走 Claude Code + sdd-constitution（管理端工具）
 
+### Issue #6: Orchestrator 模式 vs executing-plans 写代码冲突 ✅ 已修
+
+**现象**：在 Orchestrator 模式（agent 系统 prompt 含 "You NEVER write code yourself"）
+下跑 `/sdd-apply` 并选择 `executing-plans` 模式时，出现约束冲突：
+- Orchestrator HARD_RULE：agent 不得直接写代码
+- executing-plans 流程：`Follow each step exactly` → 直接 `Write` / `Edit` 文件
+
+两者在 `/sdd-apply` 交汇时必然冲突，agent 要么违反 Orchestrator 约束，要么无法完成 plan。
+
+**根因**：`sdd-apply/SKILL.md` 对"当前 agent 是 Orchestrator"这一运行环境毫无感知，
+直接把 executing-plans 当 inline 执行模式推荐给用户。但 executing-plans 原生假设
+当前 agent 就是执行者——这在 subagent-driven-development 下没问题（每 task 派 fresh
+subagent），在 executing-plans 下则必然冲突。
+
+**修复**：在 `sdd-apply/SKILL.md` 步骤 2 与步骤 3 之间插入**步骤 2.5：Orchestrator 运行环境适配**：
+1. **识别信号**：系统 prompt 含 "NEVER write code" / "orchestrator" / "coordinator" 等关键词
+2. **适配策略**：
+   - 选 `executing-plans` 模式 → 改为**每个 task 用 `Agent(...)` / `task(...)` 委托**
+     `build` / `quick` 类型 subagent 执行；subagent prompt 必带 5 条执行约束
+   - 选 `subagent-driven-development` 模式 → 保持不变（本来就派 subagent）
+3. **强制规则增补**：
+   - ✅ Orchestrator 模式检测为必走路径
+   - ❌ Orchestrator 模式下禁止 inline 写代码
+
+### Issue #7: tasks.md 缺 TDD 步骤（planning → execution 的约束丢失）✅ 已修
+
+**现象**：`/sdd-plan` 跑完后，生成的 `tasks.md` 中 task 步骤序列**没有 RED / GREEN /
+REFACTOR 三阶段**。到 `/sdd-apply` 阶段，agent 按 tasks.md 直接写实现代码，跳过测试。
+
+**根因链路**：
+```
+/sdd-plan
+  → 委托 superpowers:brainstorming
+    → 自动 chain writing-plans
+      → 产 tasks.md
+            ↑
+        TDD 在这里丢失
+```
+
+- `writing-plans/SKILL.md` 提到 TDD（"DRY。YAGNI。TDD。频繁 commit"），但只是**建议**级措辞
+- `writing-plans` 的 task 模板示例里有"Step 1: 写失败测试"，但没作为强制约束
+- `sdd-plan` 在委托 writing-plans 时传的约束列表**完全没提 TDD**
+- 企业 baseline 的"禁止跳过 TDD" HARD_RULE 没下沉到 planning 阶段
+
+**修复（双层防御）**：
+
+**(A) 源头修复 — `sdd-plan/SKILL.md` 步骤 3**：在 writing-plans 约束列表中显式追加
+**TDD 强制（HARD_GATE）**，要求每个 task 必须含 RED → GREEN → REFACTOR 三阶段。
+在委托 prompt 中明确给反例/正例，并声明这是企业 baseline HARD_RULE 的强制下沉。
+
+**(B) 兜底守门 — `sdd-plan/SKILL.md` 步骤 4d + `sdd-apply/SKILL.md` 步骤 2.6**：
+两道 TDD 守门，扫描 tasks.md 每个 task 的 TDD 信号（`test_` / `.spec.` / RED / GREEN
+等关键字）：
+- 命中 → PASS
+- 缺失 → **自动注入** RED 步骤（task 首个实现步骤之前）+ REFACTOR 步骤（验证/提交之前），
+  终端打印 `⛓️ TDD steps auto-injected for Task N`，commit 注入结果
+- 注入失败 → 停止等用户手动补全
+
+两道门任一生效都能保证 `/sdd-apply` 拿到 TDD 就绪的 tasks.md。
+
 ## 手动验证步骤
 
 ## 前置步骤（CI 已验证）
