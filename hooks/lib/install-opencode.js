@@ -244,6 +244,16 @@ const SDD_COMMANDS = [
     description: 'SDD 第 4 环：代码审查 + PR 创建',
     skill: 'sdd-review',
   },
+  {
+    name: 'sdd-doc',
+    description: 'SDD 产出文档：把 spec + plan 转成企业模版 Markdown 需求规格说明书',
+    skill: 'sdd-doc',
+  },
+  {
+    name: 'sdd-constitution',
+    description: 'SDD 治理：创建或更新项目 baseline（enterprise-baseline.md）',
+    skill: 'sdd-constitution',
+  },
 ];
 
 function buildCommandContent(cmd) {

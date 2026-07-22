@@ -36,7 +36,7 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
 
   // Step 1.5: verify command files + skills were installed
   const commandsDir = path.join(tmpHome, '.config', 'opencode', 'commands');
-  const expectedCommands = ['sdd-spec.md', 'sdd-plan.md', 'sdd-task.md', 'sdd-apply.md', 'sdd-review.md'];
+  const expectedCommands = ['sdd-spec.md', 'sdd-plan.md', 'sdd-task.md', 'sdd-apply.md', 'sdd-review.md', 'sdd-doc.md', 'sdd-constitution.md'];
   for (const cmdFile of expectedCommands) {
     const cmdPath = path.join(commandsDir, cmdFile);
     assert.ok(fs.existsSync(cmdPath), `command file should exist: ${cmdFile}`);
@@ -50,7 +50,7 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
   // skills 复制（主 SDD skills 必须存在）
   const skillsDir = path.join(pluginDir, 'skills');
   assert.ok(fs.existsSync(skillsDir), 'skills dir should exist in plugin dir');
-  const expectedSkills = ['sdd-spec', 'sdd-plan', 'sdd-task', 'sdd-apply', 'sdd-review'];
+  const expectedSkills = ['sdd-spec', 'sdd-plan', 'sdd-task', 'sdd-apply', 'sdd-review', 'sdd-doc'];
   for (const skill of expectedSkills) {
     const skillMd = path.join(skillsDir, skill, 'SKILL.md');
     assert.ok(fs.existsSync(skillMd), `skill SKILL.md should exist: ${skill}/SKILL.md`);
