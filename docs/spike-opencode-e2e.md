@@ -74,6 +74,26 @@ agent 把 "ignore" 字面理解成"跳过整个 Skill() 调用"。两层错：
 - 对 SDD 工作流关键步骤（brainstorming、writing-plans 等）使用 fallback
   链比硬依赖文件存在更健壮——用户即便没装 Claude Code 也能跑。
 
+### Issue #4: `/sdd-doc` + `/sdd-constitution` 命令缺失 ✅ 已修
+
+**现象**：完成 `/sdd-plan` 后找不到 `/sdd-doc` 命令。
+
+**根因**：`SDD_COMMANDS` 数组只定义了 5 个命令（spec/plan/task/apply/review），
+漏了 `sdd-doc` 和 `sdd-constitution`。`copySkillsToPluginDir` 的 `sddSkills`
+列表包含这两个 skill（文件被复制了），但 command 注册列表没包含，OpenCode
+不生成 `~/.config/opencode/commands/sdd-doc.md` / `sdd-constitution.md`。
+
+**修复**（commit 54ffd44）：
+- SDD_COMMANDS 增加：
+  - `sdd-doc`：SDD 产出文档——把 spec + plan 转成企业模版 Markdown 需求规格说明书
+  - `sdd-constitution`：SDD 治理——创建或更新项目 baseline
+- 集成测试同步更新 `expectedCommands` / `expectedSkills` 列表
+
+**现状**：OpenCode 现在注册 7 个 `/sdd-*` 命令：
+```
+/sdd-spec, /sdd-plan, /sdd-task, /sdd-apply, /sdd-review, /sdd-doc, /sdd-constitution
+```
+
 ## 手动验证步骤
 
 ## 前置步骤（CI 已验证）
