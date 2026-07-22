@@ -154,7 +154,7 @@ function copySkillsToPluginDir(packageRoot) {
   // (A) 主 SDD skills（顶层 skills/ 目录）
   const skillsDir = join(packageRoot, 'skills');
   if (existsSync(skillsDir)) {
-    const sddSkills = ['sdd-spec', 'sdd-plan', 'sdd-task', 'sdd-apply', 'sdd-review', 'sdd-constitution', 'sdd-doc'];
+    const sddSkills = ['sdd-spec', 'sdd-plan', 'sdd-task', 'sdd-apply', 'sdd-review', 'sdd-doc']; // sdd-constitution 不复制——企业规则禁止项目组本地修改
     for (const skill of sddSkills) {
       const srcSkill = join(skillsDir, skill);
       if (existsSync(srcSkill)) {
@@ -165,6 +165,14 @@ function copySkillsToPluginDir(packageRoot) {
         if (existsSync(skillMd)) {
           copyFileSync(skillMd, join(targetSkill, 'SKILL.md'));
         }
+      }
+    }
+    // 清理上版本遗留的 sdd-* skill 目录（治理不变量：sdd-constitution 不得暴露给项目组）
+    const allowedSkills = new Set(sddSkills);
+    for (const entry of readdirSync(targetSkillsDir)) {
+      if (entry.startsWith('sdd-') && !allowedSkills.has(entry)) {
+        rmSync(join(targetSkillsDir, entry), { recursive: true, force: true });
+        announce(`  ✓ 清理遗留 skill 目录: ${entry}`);
       }
     }
     announce(`  ✓ SDD skills 复制到: ${targetSkillsDir}`);
@@ -249,11 +257,10 @@ const SDD_COMMANDS = [
     description: 'SDD 产出文档：把 spec + plan 转成企业模版 Markdown 需求规格说明书',
     skill: 'sdd-doc',
   },
-  {
-    name: 'sdd-constitution',
-    description: 'SDD 治理：创建或更新项目 baseline（enterprise-baseline.md）',
-    skill: 'sdd-constitution',
-  },
+  // 注意：sdd-constitution 故意不注册为 OpenCode 命令。
+  // 企业级规则（enterprise-baseline.md）必须通过中央工具统一更新下发，
+  // 禁止项目组本地修改（治理不变量）。sdd-constitution 仅在管理端
+  // （Claude Code + 管理员权限）可用，OpenCode 作为执行端不暴露。
 ];
 
 function buildCommandContent(cmd) {
@@ -311,6 +318,20 @@ You are now executing the /${cmd.name} skill for oh-my-sdd (enterprise SDD workf
 
 function installCommandFiles() {
   mkdirSync(OPENCODE_COMMANDS_DIR, { recursive: true });
+
+  // 清理上版本遗留的 sdd-*.md 文件（如之前版本注册过 sdd-constitution，
+  // 新版本不再暴露，必须从 commands/ 删除，否则 OpenCode 仍会识别为斜杠命令）
+  // 治理不变量：sdd-constitution 不得暴露给项目组
+  if (existsSync(OPENCODE_COMMANDS_DIR)) {
+    const allowedCmds = new Set(SDD_COMMANDS.map(c => `${c.name}.md`));
+    for (const f of readdirSync(OPENCODE_COMMANDS_DIR)) {
+      if (f.startsWith('sdd-') && f.endsWith('.md') && !allowedCmds.has(f)) {
+        rmSync(join(OPENCODE_COMMANDS_DIR, f));
+        announce(`  ✓ 清理遗留命令文件: ${f}`);
+      }
+    }
+  }
+
   for (const cmd of SDD_COMMANDS) {
     const target = join(OPENCODE_COMMANDS_DIR, `${cmd.name}.md`);
     writeFileSync(target, buildCommandContent(cmd), { mode: 0o644 });

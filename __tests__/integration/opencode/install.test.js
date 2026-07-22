@@ -36,7 +36,8 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
 
   // Step 1.5: verify command files + skills were installed
   const commandsDir = path.join(tmpHome, '.config', 'opencode', 'commands');
-  const expectedCommands = ['sdd-spec.md', 'sdd-plan.md', 'sdd-task.md', 'sdd-apply.md', 'sdd-review.md', 'sdd-doc.md', 'sdd-constitution.md'];
+  // 6 个 SDD 命令（sdd-constitution 故意排除——企业规则禁止项目组本地修改）
+  const expectedCommands = ['sdd-spec.md', 'sdd-plan.md', 'sdd-task.md', 'sdd-apply.md', 'sdd-review.md', 'sdd-doc.md'];
   for (const cmdFile of expectedCommands) {
     const cmdPath = path.join(commandsDir, cmdFile);
     assert.ok(fs.existsSync(cmdPath), `command file should exist: ${cmdFile}`);
@@ -92,6 +93,14 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
       `${cmdFile} 应强烈提示不能跳过委托步骤`
     );
   }
+
+  // sdd-constitution 必须不注册为 OpenCode 命令（治理不变量）：
+  // 企业级 baseline 由中央工具统一更新下发，禁止项目组本地修改
+  const constitutionCmd = path.join(commandsDir, 'sdd-constitution.md');
+  assert.ok(!fs.existsSync(constitutionCmd), 'sdd-constitution.md 必须不被创建（企业规则禁止项目组本地修改）');
+  // 同样，skill 文件也不复制到 plugin 目录（消除 agent 意外发现该 skill 的可能）
+  const constitutionSkill = path.join(skillsDir, 'sdd-constitution', 'SKILL.md');
+  assert.ok(!fs.existsSync(constitutionSkill), 'sdd-constitution skill 必须不被复制到 plugin 目录');
 
   // Step 2: uninstall
   execFileSync('node', ['bin/oms-uninstall.js', '--tool', 'opencode'], {
