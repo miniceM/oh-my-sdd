@@ -80,6 +80,61 @@ function copyDistToPluginDir(packageRoot) {
 }
 
 // ============================================
+// 复制 content/ → ~/.config/opencode/plugins/oh-my-sdd/content/
+// baseline 注入需要 content/enterprise-baseline.md
+// ============================================
+function copyContentToPluginDir(packageRoot) {
+  const srcContentDir = join(packageRoot, 'content');
+  if (!existsSync(srcContentDir)) {
+    announce('  ⚠️  content/ 目录不存在，跳过 content 复制');
+    return;
+  }
+  const targetContentDir = join(OPENCODE_PLUGIN_DIR, 'content');
+  mkdirSync(targetContentDir, { recursive: true });
+  const files = readdirSync(srcContentDir).filter(f => f.endsWith('.md'));
+  for (const f of files) {
+    copyFileSync(join(srcContentDir, f), join(targetContentDir, f));
+  }
+  announce(`  ✓ content 复制到: ${targetContentDir}`);
+}
+
+// ============================================
+// 复制 hooks/ → ~/.config/opencode/plugins/oh-my-sdd/hooks/
+// OpenCode plugin 通过 getHooksDir() 找 hooks/*.js，
+// 路径解析：plugin 目录的上一级的 hooks/（与 Claude/Lingma 共享）
+// 安装后 plugin 在 ~/.config/opencode/plugins/oh-my-sdd/，
+// 所以需要把 repo 的 hooks/ 复制到 plugin 目录里
+// ============================================
+function copyHooksToPluginDir(packageRoot) {
+  const srcHooksDir = join(packageRoot, 'hooks');
+  if (!existsSync(srcHooksDir)) {
+    announce('  ⚠️  hooks/ 目录不存在，跳过 hook 复制');
+    return;
+  }
+  const targetHooksDir = join(OPENCODE_PLUGIN_DIR, 'hooks');
+  mkdirSync(targetHooksDir, { recursive: true });
+
+  // 复制 hooks/*.js 和 hooks/lib/*.js
+  const hookFiles = readdirSync(srcHooksDir).filter(f => f.endsWith('.js'));
+  for (const f of hookFiles) {
+    copyFileSync(join(srcHooksDir, f), join(targetHooksDir, f));
+  }
+
+  // 复制 hooks/lib/
+  const srcLibDir = join(srcHooksDir, 'lib');
+  if (existsSync(srcLibDir)) {
+    const targetLibDir = join(targetHooksDir, 'lib');
+    mkdirSync(targetLibDir, { recursive: true });
+    const libFiles = readdirSync(srcLibDir).filter(f => f.endsWith('.js'));
+    for (const f of libFiles) {
+      copyFileSync(join(srcLibDir, f), join(targetLibDir, f));
+    }
+  }
+
+  announce(`  ✓ hooks 复制到: ${targetHooksDir}`);
+}
+
+// ============================================
 // 复制 skills → ~/.config/opencode/plugins/oh-my-sdd/skills/
 // OpenCode 的 slash command 通过 ~/.config/opencode/commands/*.md 注册，
 // 但 command 文件引用 skill 内容，所以要把 skills 复制到 plugin 目录
@@ -229,6 +284,8 @@ export async function installForOpencode({ PACKAGE_ROOT, announce: ann = announc
 
   buildOpencodePlugin(PACKAGE_ROOT);
   copyDistToPluginDir(PACKAGE_ROOT);
+  copyHooksToPluginDir(PACKAGE_ROOT);
+  copyContentToPluginDir(PACKAGE_ROOT);
   copySkillsToPluginDir(PACKAGE_ROOT);
   installCommandFiles();
   patchOpencodeJson();
