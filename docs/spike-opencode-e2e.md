@@ -1,9 +1,9 @@
 # OpenCode E2E Spike Report
 
-> **状态**：IN PROGRESS — Step 1 (安装) + Step 2 (启动) ✅ 通过；Step 3 (slash commands) 修复中
+> **状态**：IN PROGRESS — Step 1-3 ✅ 通过（安装 / 启动 / slash commands）；Step 4 (HARD_RULE 阻断) 待用户验证
 > **日期**：2026-07-22
 > **分支**：`worktree-opencode-platform-adapter`
-> **commit**：7e68538 (Phase 0-7) + 后续修复
+> **commit**：7e68538 (Phase 0-7) + 后续修复 → c72ab19 (Skill() delegation 修复)
 
 ## 摘要
 
@@ -37,6 +37,42 @@ Plugin 的 `command.execute.before` hook 只能**拦截**已有命令，不能**
 - install 时创建 5 个 command markdown 文件到 `~/.config/opencode/commands/sdd-*.md`
 - 每个 command 文件是 "wrapper"：指示 agent 读对应 SKILL.md + 包含 Claude → OpenCode 工具映射表
 - uninstall 时删除这些 command 文件
+
+### Issue #3: `/sdd-plan` 执行时跳过 brainstorming 委托 ✅ 已修
+
+**现象**：用户在 OpenCode 里跑 `/sdd-plan`，agent 直接 inline 设计，没走 brainstorming 流程
+（"为什么跳过'委托 brainstorming'"）。
+
+**根因**：命令 wrapper 的 Claude → OpenCode 工具映射里有这条：
+
+```
+- `Skill(name, args)` → ignore (skill content is in the file you're reading)
+```
+
+agent 把 "ignore" 字面理解成"跳过整个 Skill() 调用"。两层错：
+
+1. sdd-plan SKILL.md 里只有"委托 superpowers:brainstorming"指令，真实清单在
+   `brainstorming` 子技能的 SKILL.md 里——必须加载才能拿到 2-3 approaches、
+   design 展示、approve 等步骤。
+2. "ignore" 的本意是"OpenCode 没有 Skill() API 函数"，但应改用 `read` 工具加载
+   磁盘上的 SKILL.md 文件来执行，不是跳过。
+
+**修复**（commit c72ab19）：
+- 命令 wrapper 工具映射：`ignore` → **三级 fallback chain**
+  1. `<plugin>/skills/<name>/SKILL.md`（install 时最佳努力复制）
+  2. `~/.claude/skills/<name>/SKILL.md`（Claude Code runtime 目录，典型场景）
+  3. **inline** 执行（基于父 SKILL.md 描述内联执行意图，不跳过工作本身）
+- install-opencode.js 增加 `.claude/skills/*` 委托子技能最佳努力复制
+  （brainstorming, writing-plans, executing-plans, subagent-driven-development,
+  requesting-code-review）
+- wrapper 用 **CRITICAL** 强力提示："Resolving it is mandatory — only the
+  execution location (file vs inline) may change, never the work itself."
+
+**反思**：
+- LLM agent 会按字面执行指令，"ignore" 这种词对 agent 来说没有歧义容忍度。
+  写 prompt 时应明确区分"跳过这个函数调用" vs "跳过这一步工作"。
+- 对 SDD 工作流关键步骤（brainstorming、writing-plans 等）使用 fallback
+  链比硬依赖文件存在更健壮——用户即便没装 Claude Code 也能跑。
 
 ## 手动验证步骤
 
