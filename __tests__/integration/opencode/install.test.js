@@ -23,7 +23,38 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
   assert.ok(fs.existsSync(path.join(pluginDir, 'plugin.js')), 'plugin.js should exist');
   const cfgPath = path.join(tmpHome, '.config', 'opencode', 'opencode.json');
   const cfgAfterInstall = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-  assert.ok(cfgAfterInstall.plugin.includes('oh-my-sdd'), 'opencode.json should include oh-my-sdd');
+  // 注册的是相对路径（OpenCode 不解析裸字符串，详见 install-opencode.js）
+  assert.ok(
+    cfgAfterInstall.plugin.includes('./plugins/oh-my-sdd/index.js'),
+    `opencode.json 应包含 './plugins/oh-my-sdd/index.js'，实际: ${JSON.stringify(cfgAfterInstall.plugin)}`
+  );
+  // 历史遗留的裸字符串 'oh-my-sdd' 不应出现（install 会顺手清理）
+  assert.ok(
+    !cfgAfterInstall.plugin.includes('oh-my-sdd'),
+    'opencode.json 不应包含裸字符串 oh-my-sdd（OpenCode 无法解析）'
+  );
+
+  // Step 1.5: verify command files + skills were installed
+  const commandsDir = path.join(tmpHome, '.config', 'opencode', 'commands');
+  const expectedCommands = ['sdd-spec.md', 'sdd-plan.md', 'sdd-task.md', 'sdd-apply.md', 'sdd-review.md'];
+  for (const cmdFile of expectedCommands) {
+    const cmdPath = path.join(commandsDir, cmdFile);
+    assert.ok(fs.existsSync(cmdPath), `command file should exist: ${cmdFile}`);
+    const content = fs.readFileSync(cmdPath, 'utf8');
+    // command 文件格式：YAML frontmatter + 指示 agent 读 SKILL.md 的 wrapper prompt
+    assert.ok(content.startsWith('---'), `${cmdFile} 应以 YAML frontmatter 开头`);
+    assert.ok(content.includes('description:'), `${cmdFile} 应包含 description 字段`);
+    assert.ok(content.includes('SKILL.md'), `${cmdFile} 应指示 agent 读 SKILL.md`);
+    assert.ok(content.includes('$ARGUMENTS'), `${cmdFile} 应支持 $ARGUMENTS 占位符`);
+  }
+  // skills 复制
+  const skillsDir = path.join(pluginDir, 'skills');
+  assert.ok(fs.existsSync(skillsDir), 'skills dir should exist in plugin dir');
+  const expectedSkills = ['sdd-spec', 'sdd-plan', 'sdd-task', 'sdd-apply', 'sdd-review'];
+  for (const skill of expectedSkills) {
+    const skillMd = path.join(skillsDir, skill, 'SKILL.md');
+    assert.ok(fs.existsSync(skillMd), `skill SKILL.md should exist: ${skill}/SKILL.md`);
+  }
 
   // Step 2: uninstall
   execFileSync('node', ['bin/oms-uninstall.js', '--tool', 'opencode'], {
@@ -34,5 +65,14 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
   assert.ok(!fs.existsSync(pluginDir), 'plugin dir should be removed');
   const cfgAfterUninstall = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
   const plugins = cfgAfterUninstall.plugin ?? [];
-  assert.ok(!plugins.includes('oh-my-sdd'), 'opencode.json should not include oh-my-sdd');
+  // 三种历史 entry 都应被清理（含裸字符串 + 旧 plugin.js + 新 index.js）
+  assert.ok(!plugins.includes('./plugins/oh-my-sdd/index.js'), 'uninstall 应清掉 ./plugins/oh-my-sdd/index.js');
+  assert.ok(!plugins.includes('oh-my-sdd'), 'uninstall 应清掉裸字符串 oh-my-sdd');
+  assert.ok(!plugins.includes('./plugins/oh-my-sdd/plugin.js'), 'uninstall 应清掉旧 ./plugins/oh-my-sdd/plugin.js');
+
+  // command 文件应被清理
+  for (const cmdFile of expectedCommands) {
+    const cmdPath = path.join(commandsDir, cmdFile);
+    assert.ok(!fs.existsSync(cmdPath), `command file should be removed: ${cmdFile}`);
+  }
 });

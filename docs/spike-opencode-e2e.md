@@ -1,13 +1,44 @@
 # OpenCode E2E Spike Report
 
-> **状态**：PENDING MANUAL VERIFICATION
-> **日期**：2026-07-21
+> **状态**：IN PROGRESS — Step 1 (安装) + Step 2 (启动) ✅ 通过；Step 3 (slash commands) 修复中
+> **日期**：2026-07-22
 > **分支**：`worktree-opencode-platform-adapter`
-> **commit**：7e68538 (Phase 0-7 完成)
+> **commit**：7e68538 (Phase 0-7) + 后续修复
 
 ## 摘要
 
-本 spike 验证 oh-my-sdd OpenCode 适配在**真 OpenCode 运行时**中的端到端行为。由于当前测试环境未安装 OpenCode，需手动在有 OpenCode 的环境中执行以下步骤并记录结果。
+本 spike 验证 oh-my-sdd OpenCode 适配在**真 OpenCode 运行时**中的端到端行为。
+
+## 已发现的问题 + 修复
+
+### Issue #1: 启动报错 "Unexpected server error" ✅ 已修
+
+**根因**：`install-opencode.js` 在 `opencode.json` 注册裸字符串 `"oh-my-sdd"`，但 OpenCode 的 plugin 解析规则是：
+- 以 `./` 或 `/` 开头 → 文件路径（直接 import）
+- 其他 → npm 包名（去 registry 找）
+
+`"oh-my-sdd"` 不在 npm registry → `import("oh-my-sdd")` 抛 `MODULE_NOT_FOUND` → OpenCode 包成 "Unexpected server error"。
+
+**修复**：
+- install-opencode.js 注册 `"./plugins/oh-my-sdd/index.js"`（相对路径）
+- 顺手清理历史遗留的 `./plugins/oh-my-sdd/plugin.js` 裸字符串
+- uninstall 清理三种历史 entry
+
+### Issue #2: 启动成功但 `/sdd-*` 命令不出现 ⚠️ 修复中
+
+**根因**：OpenCode 的斜杠命令**不是通过 plugin hook 注册的**，而是 config-time 的东西：
+- `~/.config/opencode/commands/*.md` 文件（YAML frontmatter + markdown 正文）
+- 或 `opencode.json` 的 `command: { ... }` 字段
+
+Plugin 的 `command.execute.before` hook 只能**拦截**已有命令，不能**注册**新命令。
+
+**修复**：
+- install 时复制 `skills/sdd-*/SKILL.md` → `~/.config/opencode/plugins/oh-my-sdd/skills/`
+- install 时创建 5 个 command markdown 文件到 `~/.config/opencode/commands/sdd-*.md`
+- 每个 command 文件是 "wrapper"：指示 agent 读对应 SKILL.md + 包含 Claude → OpenCode 工具映射表
+- uninstall 时删除这些 command 文件
+
+## 手动验证步骤
 
 ## 前置步骤（CI 已验证）
 

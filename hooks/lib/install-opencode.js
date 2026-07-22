@@ -80,21 +80,139 @@ function copyDistToPluginDir(packageRoot) {
 }
 
 // ============================================
-// 修改 opencode.json 加 "plugin": ["oh-my-sdd"]
+// 复制 skills → ~/.config/opencode/plugins/oh-my-sdd/skills/
+// OpenCode 的 slash command 通过 ~/.config/opencode/commands/*.md 注册，
+// 但 command 文件引用 skill 内容，所以要把 skills 复制到 plugin 目录
 // ============================================
+function copySkillsToPluginDir(packageRoot) {
+  const skillsDir = join(packageRoot, 'skills');
+  if (!existsSync(skillsDir)) {
+    announce('  ⚠️  skills/ 目录不存在，跳过 skill 复制');
+    return;
+  }
+  const targetSkillsDir = join(OPENCODE_PLUGIN_DIR, 'skills');
+  mkdirSync(targetSkillsDir, { recursive: true });
+  // 复制 SDD skills (sdd-spec, sdd-plan, etc.)
+  const sddSkills = ['sdd-spec', 'sdd-plan', 'sdd-task', 'sdd-apply', 'sdd-review', 'sdd-constitution', 'sdd-doc'];
+  for (const skill of sddSkills) {
+    const srcSkill = join(skillsDir, skill);
+    if (existsSync(srcSkill)) {
+      const targetSkill = join(targetSkillsDir, skill);
+      mkdirSync(targetSkill, { recursive: true });
+      // Copy SKILL.md
+      const skillMd = join(srcSkill, 'SKILL.md');
+      if (existsSync(skillMd)) {
+        copyFileSync(skillMd, join(targetSkill, 'SKILL.md'));
+      }
+    }
+  }
+  announce(`  ✓ skills 复制到: ${targetSkillsDir}`);
+}
+
+// ============================================
+// 在 ~/.config/opencode/commands/ 创建 SDD slash command 文件
+//
+// OpenCode 的斜杠命令通过 markdown 文件注册（不在 plugin hook 里）：
+//   ~/.config/opencode/commands/<name>.md  → 变成 /<name> 斜杠命令
+//
+// 文件格式：YAML frontmatter (description) + markdown 正文（agent 看到的 prompt）
+// 我们用 "wrapper" 模式：command 文件指示 agent 读 plugin 目录里的 SKILL.md
+// （单一信息源，避免 skill 和 command 双写漂移）
+// ============================================
+const OPENCODE_COMMANDS_DIR = join(OPENCODE_CONFIG_DIR, 'commands');
+const SDD_COMMANDS = [
+  {
+    name: 'sdd-spec',
+    description: 'SDD 第 1 环：规格定义（直调 openspec）',
+    skill: 'sdd-spec',
+  },
+  {
+    name: 'sdd-plan',
+    description: 'SDD 第 2 环：实现计划（基于 spec 生成 design.md）',
+    skill: 'sdd-plan',
+  },
+  {
+    name: 'sdd-task',
+    description: 'SDD 第 2.5 环（可选）：任务拆分',
+    skill: 'sdd-task',
+  },
+  {
+    name: 'sdd-apply',
+    description: 'SDD 第 3 环：执行实现（按 plan 写代码）',
+    skill: 'sdd-apply',
+  },
+  {
+    name: 'sdd-review',
+    description: 'SDD 第 4 环：代码审查 + PR 创建',
+    skill: 'sdd-review',
+  },
+];
+
+function buildCommandContent(cmd) {
+  // wrapper prompt：agent 读 SKILL.md 并执行
+  // 工具映射表让 agent 把 Claude Code 工具名翻译成 OpenCode 工具名
+  return `---
+description: ${cmd.description}
+---
+
+You are now executing the /${cmd.name} skill for oh-my-sdd (enterprise SDD workflow).
+
+**Instructions:**
+
+1. Read the skill file at: \`${OPENCODE_PLUGIN_DIR}/skills/${cmd.skill}/SKILL.md\`
+2. Follow all instructions in that file exactly
+3. **Tool mapping** (Claude Code → OpenCode):
+   - \`Bash(cmd)\` → use \`bash\` tool
+   - \`Read(path)\` → use \`read\` tool
+   - \`Write(content, path)\` → use \`write\` tool
+   - \`Edit(path, old, new)\` → use \`edit\` tool
+   - \`AskUserQuestion(...)\` → ask user directly in chat
+   - \`Agent(...)\` → execute inline (no subagent spawning)
+   - \`Skill(name, args)\` → ignore (skill content is in the file you're reading)
+4. Execute the SDD workflow as described in the skill file
+
+**Change ID / arguments:** $ARGUMENTS
+`;
+}
+
+function installCommandFiles() {
+  mkdirSync(OPENCODE_COMMANDS_DIR, { recursive: true });
+  for (const cmd of SDD_COMMANDS) {
+    const target = join(OPENCODE_COMMANDS_DIR, `${cmd.name}.md`);
+    writeFileSync(target, buildCommandContent(cmd), { mode: 0o644 });
+  }
+  announce(`  ✓ slash commands 安装到: ${OPENCODE_COMMANDS_DIR}`);
+  for (const cmd of SDD_COMMANDS) {
+    announce(`      /${cmd.name} — ${cmd.description}`);
+  }
+}
+
+// ============================================
+// 修改 opencode.json 加 "plugin": ["./plugins/oh-my-sdd/index.js"]
+//
+// OpenCode 的 plugin 字段解析规则（v1.x）：
+//   - 以 './' 或 '/' 开头 → 文件路径（直接 import）
+//   - 其他 → npm 包名（去 node_modules / registry 找）
+// 所以必须用相对路径，裸字符串 "oh-my-sdd" 解析不到（不在 npm registry 里）
+// 参考：同目录下的 caveman 也是用 './plugins/caveman/plugin.js'
+// ============================================
+const OPENCODE_PLUGIN_ENTRY = './plugins/oh-my-sdd/index.js';
+
 function patchOpencodeJson() {
   let cfg = {};
   try {
     cfg = JSON.parse(readFileSync(OPENCODE_JSON, 'utf8'));
   } catch { /* fresh */ }
   const plugins = Array.isArray(cfg.plugin) ? [...cfg.plugin] : [];
-  if (!plugins.includes('oh-my-sdd')) {
-    plugins.push('oh-my-sdd');
+  // 清理遗留：之前版本误注册过裸字符串 'oh-my-sdd'，这里顺手清掉避免 OpenCode 启动报错
+  const cleaned = plugins.filter((p) => p !== 'oh-my-sdd' && p !== './plugins/oh-my-sdd/plugin.js');
+  if (!cleaned.includes(OPENCODE_PLUGIN_ENTRY)) {
+    cleaned.push(OPENCODE_PLUGIN_ENTRY);
   }
-  cfg.plugin = plugins;
+  cfg.plugin = cleaned;
   mkdirSync(dirname(OPENCODE_JSON), { recursive: true });
   writeFileSync(OPENCODE_JSON, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o644 });
-  announce(`  ✓ opencode.json 已加 "plugin": ["oh-my-sdd"]`);
+  announce(`  ✓ opencode.json 已加 "plugin": ["${OPENCODE_PLUGIN_ENTRY}"]`);
 }
 
 // ============================================
@@ -111,6 +229,8 @@ export async function installForOpencode({ PACKAGE_ROOT, announce: ann = announc
 
   buildOpencodePlugin(PACKAGE_ROOT);
   copyDistToPluginDir(PACKAGE_ROOT);
+  copySkillsToPluginDir(PACKAGE_ROOT);
+  installCommandFiles();
   patchOpencodeJson();
 
   ann('');
@@ -139,9 +259,24 @@ function rmIfExists(p) {
 export async function uninstallForOpencode() {
   announce('→ 卸载 OpenCode 适配');
 
-  // 1. 删 plugin 目录
+  // 1. 删 plugin 目录（包含 dist + skills）
   if (rmIfExists(OPENCODE_PLUGIN_DIR)) {
     announce(`  ✓ 已删除: ${OPENCODE_PLUGIN_DIR}`);
+  }
+
+  // 2. 删 command 文件（~/.config/opencode/commands/sdd-*.md）
+  if (existsSync(OPENCODE_COMMANDS_DIR)) {
+    let removed = 0;
+    for (const cmd of SDD_COMMANDS) {
+      const f = join(OPENCODE_COMMANDS_DIR, `${cmd.name}.md`);
+      if (existsSync(f)) {
+        rmSync(f);
+        removed++;
+      }
+    }
+    if (removed > 0) {
+      announce(`  ✓ 已删除 ${removed} 个 slash command 文件: ${OPENCODE_COMMANDS_DIR}/sdd-*.md`);
+    }
   }
 
   // 2. 从 opencode.json 移除 "oh-my-sdd"
@@ -154,10 +289,12 @@ export async function uninstallForOpencode() {
       cfg = null;
     }
     if (cfg && Array.isArray(cfg.plugin)) {
-      cfg.plugin = cfg.plugin.filter((p) => p !== 'oh-my-sdd');
+      // 三种历史 entry 都清掉：裸字符串 'oh-my-sdd' (v1 bug)、旧 './plugins/oh-my-sdd/plugin.js'、新 './plugins/oh-my-sdd/index.js'
+      const toRemove = new Set(['oh-my-sdd', './plugins/oh-my-sdd/plugin.js', OPENCODE_PLUGIN_ENTRY]);
+      cfg.plugin = cfg.plugin.filter((p) => !toRemove.has(p));
       if (cfg.plugin.length === 0) delete cfg.plugin;
       writeFileSync(OPENCODE_JSON, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o644 });
-      announce(`  ✓ 已从 opencode.json 移除 "oh-my-sdd"`);
+      announce(`  ✓ 已从 opencode.json 移除 oh-my-sdd 相关条目`);
     }
   }
 
