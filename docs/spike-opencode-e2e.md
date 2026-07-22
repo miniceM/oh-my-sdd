@@ -89,10 +89,37 @@ agent 把 "ignore" 字面理解成"跳过整个 Skill() 调用"。两层错：
   - `sdd-constitution`：SDD 治理——创建或更新项目 baseline
 - 集成测试同步更新 `expectedCommands` / `expectedSkills` 列表
 
-**现状**：OpenCode 现在注册 7 个 `/sdd-*` 命令：
+**现状**：OpenCode 现在注册 6 个 `/sdd-*` 命令：
 ```
-/sdd-spec, /sdd-plan, /sdd-task, /sdd-apply, /sdd-review, /sdd-doc, /sdd-constitution
+/sdd-spec, /sdd-plan, /sdd-task, /sdd-apply, /sdd-review, /sdd-doc
 ```
+
+### Issue #5: `/sdd-constitution` 必须不暴露（治理不变量）✅ 已修
+
+**背景**：上一版修复误把 `sdd-constitution` 加入 OpenCode 命令列表。
+企业级 baseline 由中央工具统一更新下发，**禁止项目组本地修改**。
+OpenCode 作为"执行端"工具，只能消费 baseline，不能修改。
+
+**修复**（commit 59089c3）：
+- `SDD_COMMANDS` 移除 `sdd-constitution` 条目
+- `sddSkills` 复制列表移除 `sdd-constitution`（消除 agent 意外发现该 skill 的可能）
+- `installCommandFiles()` / `copySkillsToPluginDir()` 增加清理逻辑：
+  扫描上版本遗留的 `sdd-*.md` / `sdd-*/`，不在当前白名单的一律删除
+- 集成测试新增**否定断言**：
+  - `sdd-constitution.md` 必须不被创建
+  - `sdd-constitution` skill 必须不被复制到 plugin 目录
+- 重新安装时实测清理生效：
+  ```
+  ✓ 清理遗留 skill 目录: sdd-constitution
+  ✓ 清理遗留命令文件: sdd-constitution.md
+  ```
+
+**治理意义**：
+- 集中管控：企业 baseline 通过中央 `oms-install` 工具统一分发，
+  项目团队在 OpenCode/Claude Code/Lingma 端只能读、不能改
+- 即使有人手动把 `skills/sdd-constitution/SKILL.md` 复制到 plugin 目录，
+  安装流程也会自动清掉它（self-healing）
+- 管理员修改 baseline 仍走 Claude Code + sdd-constitution（管理端工具）
 
 ## 手动验证步骤
 
