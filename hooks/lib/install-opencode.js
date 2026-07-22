@@ -138,30 +138,73 @@ function copyHooksToPluginDir(packageRoot) {
 // 复制 skills → ~/.config/opencode/plugins/oh-my-sdd/skills/
 // OpenCode 的 slash command 通过 ~/.config/opencode/commands/*.md 注册，
 // 但 command 文件引用 skill 内容，所以要把 skills 复制到 plugin 目录
+//
+// 两类 skill 都要复制：
+//   A. 主 SDD skills（顶层 skills/ 目录）：sdd-spec, sdd-plan, ...
+//   B. 委托子技能（.claude/skills/ 目录）：brainstorming, writing-plans, ...
+//      SDD skills 内部用 "委托 superpowers:xxx" 引用这些子技能，
+//      agent 执行时需要读对应的 SKILL.md 才能继续。
+//      （Claude Code 通过 Skill() API 动态加载；OpenCode 没有这个 API，
+//      所以用命令 wrapper 的工具映射告知 agent 直接读磁盘文件）
 // ============================================
 function copySkillsToPluginDir(packageRoot) {
-  const skillsDir = join(packageRoot, 'skills');
-  if (!existsSync(skillsDir)) {
-    announce('  ⚠️  skills/ 目录不存在，跳过 skill 复制');
-    return;
-  }
   const targetSkillsDir = join(OPENCODE_PLUGIN_DIR, 'skills');
   mkdirSync(targetSkillsDir, { recursive: true });
-  // 复制 SDD skills (sdd-spec, sdd-plan, etc.)
-  const sddSkills = ['sdd-spec', 'sdd-plan', 'sdd-task', 'sdd-apply', 'sdd-review', 'sdd-constitution', 'sdd-doc'];
-  for (const skill of sddSkills) {
-    const srcSkill = join(skillsDir, skill);
-    if (existsSync(srcSkill)) {
-      const targetSkill = join(targetSkillsDir, skill);
-      mkdirSync(targetSkill, { recursive: true });
-      // Copy SKILL.md
-      const skillMd = join(srcSkill, 'SKILL.md');
-      if (existsSync(skillMd)) {
-        copyFileSync(skillMd, join(targetSkill, 'SKILL.md'));
+
+  // (A) 主 SDD skills（顶层 skills/ 目录）
+  const skillsDir = join(packageRoot, 'skills');
+  if (existsSync(skillsDir)) {
+    const sddSkills = ['sdd-spec', 'sdd-plan', 'sdd-task', 'sdd-apply', 'sdd-review', 'sdd-constitution', 'sdd-doc'];
+    for (const skill of sddSkills) {
+      const srcSkill = join(skillsDir, skill);
+      if (existsSync(srcSkill)) {
+        const targetSkill = join(targetSkillsDir, skill);
+        mkdirSync(targetSkill, { recursive: true });
+        // Copy SKILL.md
+        const skillMd = join(srcSkill, 'SKILL.md');
+        if (existsSync(skillMd)) {
+          copyFileSync(skillMd, join(targetSkill, 'SKILL.md'));
+        }
       }
     }
+    announce(`  ✓ SDD skills 复制到: ${targetSkillsDir}`);
+  } else {
+    announce('  ⚠️  skills/ 目录不存在，跳过 SDD skill 复制');
   }
-  announce(`  ✓ skills 复制到: ${targetSkillsDir}`);
+
+  // (B) 委托子技能（.claude/skills/ 目录）
+  // 这些是 sdd-plan/sdd-apply/sdd-review/sdd-task 内部 "委托 superpowers:xxx" 引用的技能
+  const claudeSkillsDir = join(packageRoot, '.claude', 'skills');
+  const delegatedSkills = [
+    'brainstorming',              // sdd-plan 委托
+    'writing-plans',              // sdd-task 委托
+    'executing-plans',            // sdd-apply 委托（简单任务）
+    'subagent-driven-development',// sdd-apply 委托（复杂任务）
+    'requesting-code-review',     // sdd-review 委托
+  ];
+  if (existsSync(claudeSkillsDir)) {
+    let copied = 0;
+    for (const skill of delegatedSkills) {
+      const srcSkill = join(claudeSkillsDir, skill);
+      if (existsSync(srcSkill)) {
+        const targetSkill = join(targetSkillsDir, skill);
+        mkdirSync(targetSkill, { recursive: true });
+        // 复制 SKILL.md（如有 scripts/ 等附加资源也一并复制）
+        for (const entry of readdirSync(srcSkill)) {
+          const src = join(srcSkill, entry);
+          const dst = join(targetSkill, entry);
+          // 只复制文件，不递归复制子目录（子技能里 scripts/ 等如有需要再说）
+          try {
+            copyFileSync(src, dst);
+          } catch { /* skip directories for now */ }
+        }
+        copied++;
+      }
+    }
+    announce(`  ✓ 委托子技能复制到: ${targetSkillsDir} (${copied} 个: ${delegatedSkills.join(', ')})`);
+  } else {
+    announce(`  ⚠️  .claude/skills/ 目录不存在，跳过委托子技能复制`);
+  }
 }
 
 // ============================================
@@ -206,6 +249,17 @@ const SDD_COMMANDS = [
 function buildCommandContent(cmd) {
   // wrapper prompt：agent 读 SKILL.md 并执行
   // 工具映射表让 agent 把 Claude Code 工具名翻译成 OpenCode 工具名
+  //
+  // 关键：Skill(name, args) 映射
+  //   ❌ 旧：`ignore` —— agent 误以为"跳过整个委托步骤"（E2E spike 发现的 bug）
+  //   ✅ 新：三级 fallback —— 去磁盘读 SKILL.md 并执行；文件不在就内联执行
+  // 因为 SDD 主 skill（如 sdd-plan）内部会"委托 superpowers:brainstorming"，
+  // 但 SKILL.md 里只有委托指令，真实内容在子技能文件里，必须加载。
+  //
+  // 三级 fallback 的 path 解释：
+  //   1. plugin/skills/<name>/ — install 时最佳努力复制（用户同机有 Claude Code 时有）
+  //   2. ~/.claude/skills/<name>/ — Claude Code 用户全局 runtime 目录（典型路径）
+  //   3. inline — 文件都没有就基于主 SKILL.md 描述内联执行
   return `---
 description: ${cmd.description}
 ---
@@ -223,7 +277,22 @@ You are now executing the /${cmd.name} skill for oh-my-sdd (enterprise SDD workf
    - \`Edit(path, old, new)\` → use \`edit\` tool
    - \`AskUserQuestion(...)\` → ask user directly in chat
    - \`Agent(...)\` → execute inline (no subagent spawning)
-   - \`Skill(name, args)\` → ignore (skill content is in the file you're reading)
+   - \`Skill(name, args)\` or "delegate to superpowers:xxx" → OpenCode has no
+     Skill() API. Do **NOT** skip the step. Instead resolve the delegated skill's
+     content via this fallback chain, then follow ALL instructions in it:
+       1. \`${OPENCODE_PLUGIN_DIR}/skills/<name-without-namespace>/SKILL.md\`
+          (e.g. \`superpowers:brainstorming\` → \`${OPENCODE_PLUGIN_DIR}/skills/brainstorming/SKILL.md\`)
+       2. \`~/.claude/skills/<name-without-namespace>/SKILL.md\`
+          (Claude Code's runtime skill directory — present if user also uses Claude Code)
+       3. If neither file exists, perform the step **inline**: use the framework,
+          checklists, and goals described in the parent skill you're currently
+          reading to carry out the intent (e.g. for brainstorming: propose 2-3
+          approaches, present a design, get user approval before coding). Mention
+          in your output that you executed inline because the delegated skill
+          file was not found.
+     **CRITICAL**: The delegated skill contains the actual checklists, templates,
+     and step-by-step instructions. Resolving it is mandatory — only the execution
+     location (file vs inline) may change, never the work itself.
 4. Execute the SDD workflow as described in the skill file
 
 **Change ID / arguments:** $ARGUMENTS

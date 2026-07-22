@@ -47,13 +47,50 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
     assert.ok(content.includes('SKILL.md'), `${cmdFile} 应指示 agent 读 SKILL.md`);
     assert.ok(content.includes('$ARGUMENTS'), `${cmdFile} 应支持 $ARGUMENTS 占位符`);
   }
-  // skills 复制
+  // skills 复制（主 SDD skills 必须存在）
   const skillsDir = path.join(pluginDir, 'skills');
   assert.ok(fs.existsSync(skillsDir), 'skills dir should exist in plugin dir');
   const expectedSkills = ['sdd-spec', 'sdd-plan', 'sdd-task', 'sdd-apply', 'sdd-review'];
   for (const skill of expectedSkills) {
     const skillMd = path.join(skillsDir, skill, 'SKILL.md');
     assert.ok(fs.existsSync(skillMd), `skill SKILL.md should exist: ${skill}/SKILL.md`);
+  }
+
+  // 委托子技能（brainstorming/writing-plans 等）是最佳努力复制：
+  // 当 packageRoot/.claude/skills/ 存在时复制（用户同时用 Claude Code 的典型场景），
+  // 不存在时跳过（npm 安装/worktree 场景）。测试环境可能没有 .claude/skills/，
+  // 所以这里不硬断言，仅验证：如果存在，格式正确。
+  const possibleDelegated = ['brainstorming', 'writing-plans', 'executing-plans', 'subagent-driven-development', 'requesting-code-review'];
+  for (const skill of possibleDelegated) {
+    const skillMd = path.join(skillsDir, skill, 'SKILL.md');
+    if (fs.existsSync(skillMd)) {
+      const content = fs.readFileSync(skillMd, 'utf8');
+      assert.ok(content.length > 100, `delegated skill ${skill}/SKILL.md 应有实质内容`);
+    }
+  }
+
+  // command 文件不应包含旧的 "ignore (skill content is in the file you're reading)"
+  // 这行误导过 agent 把 Skill() 委托当成跳过处理（E2E spike 发现的问题）
+  for (const cmdFile of expectedCommands) {
+    const cmdPath = path.join(commandsDir, cmdFile);
+    const content = fs.readFileSync(cmdPath, 'utf8');
+    assert.ok(
+      !content.includes('ignore (skill content is in the file you\'re reading)'),
+      `${cmdFile} 不应包含旧的 "ignore" 工具映射（应指示读文件执行）`
+    );
+    // 新映射应明确告知 agent：Skill() 委托不能跳过，必须通过 fallback chain 解析
+    assert.ok(
+      content.includes('fallback chain'),
+      `${cmdFile} 应包含 Skill() 委托的三级 fallback chain 说明`
+    );
+    assert.ok(
+      content.includes('inline'),
+      `${cmdFile} 应包含 inline fallback（当 skill 文件不存在时）`
+    );
+    assert.ok(
+      content.includes('CRITICAL') || content.includes('NOT'),
+      `${cmdFile} 应强烈提示不能跳过委托步骤`
+    );
   }
 
   // Step 2: uninstall
