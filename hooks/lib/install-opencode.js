@@ -147,9 +147,16 @@ function copyHooksToPluginDir(packageRoot) {
 // 提供 superpowers 完整汉化 + 4 个中国原创 skills，支持 opencode 安装目标。
 // 我们用它来稳定提供委托子技能，让所有用户（含纯 OpenCode 用户）都能拿到完整功能。
 //
+// 安全策略：
+//   - **版本锁定**：pin 到 superpowers-zh@1.5.0，避免供应链漂移
+//     （如果未来要升级，需同步更新此常量并验证 skill 内容）
+//   - **`-y` 标志**：跳过 npx 的交互式确认（"Ok to proceed?"），避免 install 卡住
+//   - **超时**：60s 上限，避免网络问题让 install 永久挂起
+//   - **失败兜底**：superpowers-zh 失败不阻塞 install，继续走 .claude/skills/ fallback
+//
 // 流程：
 //   1. 创建 staging 区 `<plugin>/.superpowers-staging/`
-//   2. 跑 `npx superpowers-zh --tool opencode --force`，cwd = staging
+//   2. 跑 `npx -y superpowers-zh@1.5.0 --tool opencode --force`，cwd = staging
 //      → 把 20 个 skills 装到 `<staging>/.opencode/skills/`
 //   3. copySkillsToPluginDir 会优先从 `<staging>/.opencode/skills/` 复制委托子技能
 //   4. 清理 staging 区
@@ -160,6 +167,7 @@ function copyHooksToPluginDir(packageRoot) {
 //   - 命令 wrapper 的 fallback chain 最终 inline-content-resolution
 // ============================================
 const SUPERPOWERS_STAGING_DIR = join(OPENCODE_PLUGIN_DIR, '.superpowers-staging');
+const SUPERPOWERS_ZH_PACKAGE = 'superpowers-zh@1.5.0'; // 版本锁定，供应链安全
 
 function installSuperpowersZh() {
   // 清理可能遗留的旧 staging（上一次 install 失败遗留）
@@ -168,9 +176,9 @@ function installSuperpowersZh() {
   }
   mkdirSync(SUPERPOWERS_STAGING_DIR, { recursive: true });
 
-  announce('  通过 superpowers-zh 安装委托子技能（20 个 superpowers 汉化 + 中国原创 skills）...');
+  announce(`  通过 superpowers-zh 安装委托子技能（20 个 superpowers 汉化 + 中国原创 skills）...`);
   try {
-    execFileSync('npx', ['superpowers-zh', '--tool', 'opencode', '--force'], {
+    execFileSync('npx', ['-y', SUPERPOWERS_ZH_PACKAGE, '--tool', 'opencode', '--force'], {
       cwd: SUPERPOWERS_STAGING_DIR,
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 60000, // 60s 超时：npx 首次下载包可能较慢
@@ -189,7 +197,7 @@ function installSuperpowersZh() {
     const errMsg = e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e);
     announce(`  ⚠️  superpowers-zh 失败：${errMsg}`);
     announce(`      委托子技能将尝试从 .claude/skills/ 复制；若仍失败，agent 走 fallback chain 的 inline 执行`);
-    announce(`      手动安装：npx superpowers-zh --tool opencode`);
+    announce(`      手动安装委托子技能：npx -y ${SUPERPOWERS_ZH_PACKAGE} --tool opencode`);
     // 清理失败的 staging
     try { rmSync(SUPERPOWERS_STAGING_DIR, { recursive: true, force: true }); } catch {}
   }
@@ -302,7 +310,7 @@ function copySkillsToPluginDir(packageRoot) {
   } else {
     announce(`  ⚠️  委托子技能来源均不可用（superpowers-zh staging / packageRoot / mainRepo 都无 .claude/skills/）`);
     announce(`      OpenCode 运行时 agent 会按命令 wrapper 的 fallback chain 走 inline-content-resolution`);
-    announce(`      手动安装委托子技能：npx superpowers-zh --tool opencode`);
+    announce(`      手动安装委托子技能：npx -y ${SUPERPOWERS_ZH_PACKAGE} --tool opencode`);
   }
   // 清理 staging 区（installSuperpowersZh 创建，本函数用完）
   if (existsSync(SUPERPOWERS_STAGING_DIR)) {
