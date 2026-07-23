@@ -9,8 +9,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getLogFile } from './paths.js';
+import { LOG_ROTATION } from './constants.js';
 
-const ROTATE_BYTES = 10 * 1024 * 1024;
 const AK_PATTERN = /AKIA[A-Z0-9]{16}/g;
 const PATH_PATTERN = /\/Users\/[^"'\s]+|\/home\/[^"'\s]+|C:\\Users\\[^"'\s]+/g;
 
@@ -62,7 +62,7 @@ export function log(level: 'debug' | 'info' | 'warn' | 'error', msg: string, pay
     ...(redact(payload) as Record<string, unknown>),
   });
   const line = entry + '\n';
-  if (_currentSize + line.length > ROTATE_BYTES) rotate();
+  if (_currentSize + line.length > LOG_ROTATION.MAX_BYTES) rotate();
   if (_currentSize === 0) ensureDir();
   fs.appendFileSync(getLogPath(), line);
   _currentSize += line.length;
@@ -71,21 +71,27 @@ export function log(level: 'debug' | 'info' | 'warn' | 'error', msg: string, pay
 function rotate(): void {
   const p = getLogPath();
   // Close any open fd (appendFileSync opens/closed per call, so no explicit close needed)
-  for (let i = 10; i >= 1; i--) {
-    const from = i === 1 ? p : `${p}.${i - 1}.log`;
+  for (let i = LOG_ROTATION.MAX_BACKUP_FILES; i >= 1; i--) {
+    const from = i <= 1 ? p : `${p}.${i - 1}.log`;
     const to = `${p}.${i}.log`;
     try {
       if (fs.existsSync(from)) fs.renameSync(from, to);
-    } catch { /* best effort */ }
+    } catch (e) {
+      // Log rotation failure is non-fatal, but log it for diagnostics
+      console.error(`[logger] log rotation rename failed: ${from} → ${to}`, e);
+    }
   }
   _currentSize = 0;
 }
 
 /** Test-only: reset cached log path and delete the log file */
-export function _resetForTest(): void {
+export function resetForTest(): void {
   _currentSize = 0;
   _logPath = undefined;
   try {
     fs.unlinkSync(getLogPath());
   } catch { /* ok */ }
 }
+
+/** @deprecated Use resetForTest() instead */
+export const _resetForTest = resetForTest;

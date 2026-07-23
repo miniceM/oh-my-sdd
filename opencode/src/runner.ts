@@ -9,6 +9,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { log } from './logger.js';
 import { getHooksDir } from './paths.js';
+import { TIMEOUTS } from './constants.js';
 import type { HookResult } from './types.js';
 
 export class HookError extends Error {
@@ -29,8 +30,6 @@ export type RunHookOptions = {
   env?: Record<string, string>;
 };
 
-const DEFAULT_TIMEOUT_MS = 5000;
-
 export function runHook(
   scriptName: string,
   payload: unknown,
@@ -38,7 +37,7 @@ export function runHook(
 ): Promise<HookResult | null> {
   const hooksDir = process.env.OMS_HOOKS_DIR ?? getHooksDir();
   const scriptPath = path.join(hooksDir, scriptName);
-  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = opts.timeoutMs ?? TIMEOUTS.HOOK_DEFAULT_MS;
 
   return new Promise((resolve, reject) => {
     let proc: ChildProcess;

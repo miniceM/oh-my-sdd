@@ -83,12 +83,15 @@ export async function loadBaseline(): Promise<string[]> {
   return sections;
 }
 
-/** Test-only: 清缓存（用于测试 mtime 变化 / 文件缺失场景） */
-export function _resetBaselineCache(): void {
+/** Test-only: reset cache for test isolation */
+export function resetForTest(): void {
   _cachedSections = null;
   _cachedMtimeMs = null;
   _loggedInitialLoad = false;
 }
+
+/** @deprecated Use resetForTest() instead */
+export const _resetBaselineCache = resetForTest;
 
 export function buildSystemPrompt(
   sections: string[],
