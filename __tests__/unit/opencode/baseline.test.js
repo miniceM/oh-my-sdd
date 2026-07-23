@@ -10,8 +10,14 @@ import {
   detectExperimentalHook,
 } from '../../../opencode/dist/baseline.js';
 
+// 保存原始 env（测试结束时恢复）
+const ORIGINAL_BASELINE_PATH = process.env.OMS_BASELINE_PATH;
+const ORIGINAL_LOG_FILE = process.env.OMS_LOG_FILE;
+
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'oms-baseline-'));
 process.env.OMS_BASELINE_PATH = path.join(tmpDir, 'baseline.md');
+// 把测试日志重定向到测试专属文件，避免污染生产日志
+process.env.OMS_LOG_FILE = path.join(tmpDir, 'test.log');
 
 const SAMPLE = `---
 oms_version: 0.2.0
@@ -95,4 +101,13 @@ test('baseline: detectExperimentalHook returns true for current SDK', () => {
   const supported = detectExperimentalHook();
   assert.equal(typeof supported, 'boolean');
   assert.equal(supported, true);
+});
+
+// 测试结束清理：恢复 env + 删 temp 目录
+process.on('exit', () => {
+  if (ORIGINAL_BASELINE_PATH === undefined) delete process.env.OMS_BASELINE_PATH;
+  else process.env.OMS_BASELINE_PATH = ORIGINAL_BASELINE_PATH;
+  if (ORIGINAL_LOG_FILE === undefined) delete process.env.OMS_LOG_FILE;
+  else process.env.OMS_LOG_FILE = ORIGINAL_LOG_FILE;
+  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best effort */ }
 });

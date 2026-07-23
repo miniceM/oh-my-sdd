@@ -4,6 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
+// 保存原始 env（测试结束时恢复）
+const ORIGINAL_LOG_FILE = process.env.OMS_LOG_FILE;
+
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'oms-logger-'));
 process.env.OMS_LOG_FILE = path.join(tmpDir, 'test.log');
 
@@ -60,4 +63,11 @@ test('logger: redacts filePath hash (not path) for path payloads', () => {
   assert.ok(!content.includes('/Users/alice'), 'should not log full path');
   assert.ok(content.includes('"tool":"edit"'));
   assert.ok(/_filePathHash/.test(content), 'should have _filePathHash field');
+});
+
+// 测试结束清理：恢复 env + 删 temp 目录
+process.on('exit', () => {
+  if (ORIGINAL_LOG_FILE === undefined) delete process.env.OMS_LOG_FILE;
+  else process.env.OMS_LOG_FILE = ORIGINAL_LOG_FILE;
+  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best effort */ }
 });

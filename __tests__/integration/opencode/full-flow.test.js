@@ -4,10 +4,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
+// 保存原始 env（测试结束时恢复，避免污染同进程其他测试）
+const ORIGINAL_HOOKS_DIR = process.env.OMS_HOOKS_DIR;
+const ORIGINAL_LOG_FILE = process.env.OMS_LOG_FILE;
+
 // Set up a tmp hooks dir with a pre-tool-use.js stub that denies AK patterns
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'oms-fullflow-'));
 const HOOKS_DIR = path.join(tmpDir, 'hooks');
 fs.mkdirSync(HOOKS_DIR);
+
+// 把测试日志重定向到测试专属文件，避免污染生产日志
+process.env.OMS_LOG_FILE = path.join(tmpDir, 'test.log');
 
 // pre-tool-use.js: deny if tool_input.content contains AKIA
 fs.writeFileSync(path.join(HOOKS_DIR, 'pre-tool-use.js'), `
@@ -107,4 +114,13 @@ test('full-flow: untracked tool (bash) bypasses PreToolUse', async () => {
     { tool: 'bash', sessionID: 's1', callID: 'c1' },
     { args: { command: 'ls -la' } },
   );
+});
+
+// 测试结束清理：恢复 env + 删 temp 目录
+process.on('exit', () => {
+  if (ORIGINAL_HOOKS_DIR === undefined) delete process.env.OMS_HOOKS_DIR;
+  else process.env.OMS_HOOKS_DIR = ORIGINAL_HOOKS_DIR;
+  if (ORIGINAL_LOG_FILE === undefined) delete process.env.OMS_LOG_FILE;
+  else process.env.OMS_LOG_FILE = ORIGINAL_LOG_FILE;
+  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best effort */ }
 });

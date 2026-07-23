@@ -236,6 +236,34 @@ agent 把 Layer 1 的 "inline" 误读成 Layer 2 也走 inline（即当前 agent
   - `inline-content-resolution` 术语（强制使用新词，避免与 "inline execution" 混淆）
   - `Orchestrator` 提及（允许 subagent 委托例外）
 
+### Issue #9: 单元测试污染生产日志（误导崩溃诊断）✅ 已修
+
+**现象**：用户在 OpenCode 跑 `/sdd-apply` 后 OpenCode 崩溃，日志中出现：
+```
+{"ts":...,"msg":"baseline file missing","path":"...oms-baseline-QIcAcz/baseline.md"}
+{"ts":...,"msg":"wrote AGENTS.md fallback","path":"[PATH]"}
+{"ts":...,"script":"does-not-exist.js","stderr":"Cannot find module..."}
+```
+
+**根因**：`runner.test.js` / `baseline.test.js` / `full-flow.test.js` 在**模块作用域**设置
+`process.env.OMS_HOOKS_DIR` / `OMS_BASELINE_PATH`，且**不重定向日志**，
+导致测试期间的负面用例（如 `runHook('does-not-exist.js', ...)` fail-CLOSED 测试）
+和 baseline 缺失的 warn 日志直接写入**生产日志** `~/.oh-my-sdd/logs/opencode.log`。
+
+测试结束后用户查看生产日志，看到这些条目误以为是运行时崩溃原因。
+实际测试与 OpenCode 运行在不同进程，env var 不会跨进程，这些条目与真正的崩溃**无因果关系**。
+
+**修复**：
+- 所有测试文件（runner/baseline/full-flow/logger.test.js）：
+  1. 模块作用域保存原始 env var 值
+  2. 把 `OMS_LOG_FILE` 重定向到测试专属 temp 文件
+  3. `process.on('exit', ...)` 恢复 env + 清理 temp 目录
+- 实测验证：跑完整测试套件前后，生产日志行数**增量为 0**
+
+**真正的 OpenCode 崩溃原因未在粘贴的日志中显现**，需要用户提供：
+- 崩溃时刻前后更完整的日志片段（带时间戳对比）
+- 或 OpenCode 进程自身的 stderr / crash report
+
 ## 手动验证步骤
 
 ## 前置步骤（CI 已验证）
