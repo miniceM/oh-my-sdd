@@ -21,7 +21,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync, readdirSync, copyFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, isAbsolute } from 'node:path';
 
 const HOME = homedir();
 
@@ -182,7 +182,12 @@ function copySkillsToPluginDir(packageRoot) {
 
   // (B) 委托子技能（.claude/skills/ 目录）
   // 这些是 sdd-plan/sdd-apply/sdd-review/sdd-task 内部 "委托 superpowers:xxx" 引用的技能
-  const claudeSkillsDir = join(packageRoot, '.claude', 'skills');
+  //
+  // 关键：`.claude/skills/` 是 Claude Code 运行时目录，**不在 git 里**。
+  // 主仓库有这个目录，但 git worktree 没有（worktree 不共享 .claude/）。
+  // 所以在 worktree 里跑 install 会找不到这些技能。
+  // 解决：如果 packageRoot/.claude/skills/ 不存在，用 git rev-parse --git-common-dir
+  // 找到主仓库的 .git 路径，从它的 parent 推出主仓库根，再试 <mainRepo>/.claude/skills/。
   const delegatedSkills = [
     'brainstorming',              // sdd-plan 委托
     'writing-plans',              // sdd-task 委托
@@ -190,7 +195,25 @@ function copySkillsToPluginDir(packageRoot) {
     'subagent-driven-development',// sdd-apply 委托（复杂任务）
     'requesting-code-review',     // sdd-review 委托
   ];
-  if (existsSync(claudeSkillsDir)) {
+  const candidateDirs = [join(packageRoot, '.claude', 'skills')];
+  if (!existsSync(candidateDirs[0])) {
+    // Worktree 兼容：从 git common-dir 推主仓库根
+    try {
+      const commonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+        cwd: packageRoot,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).toString().trim();
+      // commonDir 可能是绝对路径 (/path/to/main/.git) 或相对路径 (.git)
+      const commonDirAbs = isAbsolute(commonDir) ? commonDir : join(packageRoot, commonDir);
+      const mainRepoRoot = dirname(commonDirAbs);
+      const mainRepoSkills = join(mainRepoRoot, '.claude', 'skills');
+      if (existsSync(mainRepoSkills)) {
+        candidateDirs.push(mainRepoSkills);
+      }
+    } catch { /* not in a git repo or git not installed — ignore */ }
+  }
+  const claudeSkillsDir = candidateDirs.find(existsSync);
+  if (claudeSkillsDir) {
     let copied = 0;
     for (const skill of delegatedSkills) {
       const srcSkill = join(claudeSkillsDir, skill);
@@ -209,9 +232,11 @@ function copySkillsToPluginDir(packageRoot) {
         copied++;
       }
     }
-    announce(`  ✓ 委托子技能复制到: ${targetSkillsDir} (${copied} 个: ${delegatedSkills.join(', ')})`);
+    const sourceNote = claudeSkillsDir === candidateDirs[0] ? 'packageRoot' : 'main repo (worktree fallback)';
+    announce(`  ✓ 委托子技能复制到: ${targetSkillsDir} (${copied} 个: ${delegatedSkills.join(', ')}) [from ${sourceNote}]`);
   } else {
-    announce(`  ⚠️  .claude/skills/ 目录不存在，跳过委托子技能复制`);
+    announce(`  ⚠️  .claude/skills/ 目录不存在（packageRoot 与主仓库都无），跳过委托子技能复制`);
+    announce(`      OpenCode 运行时 agent 会按命令 wrapper 的 fallback chain 走 inline-content-resolution`);
   }
 }
 

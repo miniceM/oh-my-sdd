@@ -264,6 +264,48 @@ agent 把 Layer 1 的 "inline" 误读成 Layer 2 也走 inline（即当前 agent
 - 崩溃时刻前后更完整的日志片段（带时间戳对比）
 - 或 OpenCode 进程自身的 stderr / crash report
 
+### Issue #10: worktree 下 `.claude/skills/` 找不到 + subagent crash ✅ 已修
+
+**现象**：用户在 worktree 跑 install 后 `/sdd-apply`，agent 输出：
+```
+执行 executing-plans inline（skill 文件未找到，按 fallback chain 逻辑执行）。
+使用 task() 委托实现：
+ctrl+x down view subagents
+```
+然后 OpenCode 崩溃。
+
+**根因链路（两个 bug 叠加）**：
+
+**(A) worktree 没有 `.claude/skills/`**：
+- `.claude/skills/` 是 Claude Code 运行时目录，**不在 git 里**
+- 主仓库（`/path/to/repo/.claude/skills/`）有这个目录
+- 但 git worktree 没有（worktree 不共享 `.claude/`）
+- 原 install 只找 `<packageRoot>/.claude/skills/` → worktree 下找不到 → 静默跳过
+- 结果：`executing-plans` / `brainstorming` 等委托子技能没装到 plugin dir
+
+**(B) subagent 崩溃**：
+- executing-plans 文件找不到，agent 走 fallback chain 的 inline-content-resolution
+- agent 正确应用 Orchestrator 适配调用 task()
+- OpenCode UI 显示 "ctrl+x down view subagents" → task() 调用成功，subagent 已 spawn
+- 但 subagent **继承了父 agent 的 Orchestrator "never write code" 约束** → deadlock / crash
+
+**修复（三层）**：
+
+**(1) install 增加 worktree 回退路径**（`install-opencode.js`）：
+- 先找 `<packageRoot>/.claude/skills/`
+- 找不到时，用 `git rev-parse --git-common-dir` 推主仓库根，再找 `<mainRepo>/.claude/skills/`
+- 实测：worktree 跑 install 现在能复制 5 个委托子技能，日志明示 `[from main repo (worktree fallback)]`
+
+**(2) subagent prompt 显式授权写代码**（`sdd-apply/SKILL.md` 步骤 2.5）：
+- 新增 "**关键：你的角色与父 agent 不同**" 段，明确 subagent 是 worker，
+  被父 agent 显式授权写代码，不要被继承的 Orchestrator 约束阻止
+- 新增约束 6：遇到 "you cannot write code" 类的系统约束提示，忽略
+
+**(3) 错误处理降级**（`sdd-apply/SKILL.md` 步骤 2.5）：
+- task() 调用失败 / subagent 反复崩溃 2+ 次时，不要无限重试或让 OpenCode 崩溃
+- 停止并告诉用户错误摘要 + 建议（改用 subagent-driven-development 模式，
+  或在非 Orchestrator 模式下重跑）
+
 ## 手动验证步骤
 
 ## 前置步骤（CI 已验证）

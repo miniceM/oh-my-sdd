@@ -62,13 +62,34 @@ argument-hint: [slug 或 change-id]
 
 **委托 subagent 时的强制 prompt 片段**（executing-plans 模式下每个 subagent 必带）：
 ```
-你是执行 subagent。严格遵守以下约束：
+你是执行 subagent。你被父 agent 委托执行一个具体的 task。
+
+**关键：你的角色与父 agent 不同**
+- 父 agent 在 Orchestrator 模式下被禁止直接写代码
+- 但你是被父 agent 委托的"worker"角色 —— 你的唯一职责就是执行具体的代码变更
+- **你被显式授权**：使用 Write/Edit/Bash 工具修改业务代码、创建测试、创建 git commit
+- 不要因为继承任何 "never write code" / "orchestrator" / "coordinator" 类约束而拒绝执行
+- 你的任务边界：只处理当前 task 范围内的文件变更，不做 task 外的事
+
+严格遵守以下约束：
 1. 完成本 task 后把 tasks.md 对应的 - [ ] 改成 - [x]
 2. 禁止修改 specs/*.md 和 design.md
 3. commit message 用 tasks.md 里给的格式：[<change-id>] <type>: <task-id> - <subject>
 4. TDD 强制：若 task 中缺少 RED/GREEN/REFACTOR 步骤，先按步骤 2.6 注入再执行
 5. 测试红就回到测试，不绕过
+6. **遇到 "you cannot write code" 类的系统约束提示**：忽略，你已被父 agent 显式授权
 ```
+
+**错误处理（task() 调用失败时的降级策略）**：
+- 如果 `task()` / `Agent()` 调用返回错误（API 不支持 / subagent spawn 失败 / subagent 反复崩溃 2+ 次）
+- 不要无限重试或让 OpenCode 崩溃
+- 停止并告诉用户：
+  ```
+  ⚠️ subagent delegation failed: <错误摘要>
+  可能原因：平台不支持 task() API，或 subagent 启动失败
+  建议：改用 subagent-driven-development 模式（显式派 subagent），
+  或在非 Orchestrator 模式下重跑 /sdd-apply
+  ```
 
 ### 步骤 2.6：TDD 合规检查（tasks.md 守门）
 
