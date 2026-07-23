@@ -20,9 +20,14 @@ function announce(msg) {
  */
 export function buildOpencodePlugin(packageRoot) {
   announce('  编译 opencode TypeScript → JavaScript...');
-  execFileSync('npm', ['run', 'build:opencode', '--silent'], {
-    cwd: packageRoot,
-    stdio: 'pipe',
-  });
-  announce('  ✓ 编译完成');
+  try {
+    execFileSync('npm', ['run', 'build:opencode'], {
+      cwd: packageRoot,
+      stdio: 'inherit',  // Show output for debugging
+    });
+    announce('  ✓ 编译完成');
+  } catch (error) {
+    announce(`  ❌ 编译失败: ${error.message}`);
+    throw error;
+  }
 }
