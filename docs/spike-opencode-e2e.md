@@ -181,6 +181,61 @@ REFACTOR 三阶段**。到 `/sdd-apply` 阶段，agent 按 tasks.md 直接写实
 
 两道门任一生效都能保证 `/sdd-apply` 拿到 TDD 就绪的 tasks.md。
 
+### Issue #8: 命令 wrapper fallback chain 与 Orchestrator 适配两层混淆 ✅ 已修
+
+**现象**：用户在 OpenCode 跑 `/sdd-apply`（Orchestrator 模式 + executing-plans），
+agent 输出自相矛盾的消息：
+
+> 执行 executing-plans inline（skill 文件未找到，按 fallback chain 逻辑执行）。
+> 使用 task() 委托实现
+
+同时声称"inline 执行"和"使用 task() 委托"——这两个路径互斥。
+
+**根因**：agent 收到两条都用了 "inline" 一词的指令，但位于不同抽象层：
+
+| 层 | 指令来源 | "inline" 含义 |
+|----|---------|--------------|
+| Layer 1：内容加载 | 命令 wrapper fallback chain #3 | "skill 文件没找到，从父 skill 描述推断意图" |
+| Layer 2：执行策略 | sdd-apply 步骤 2.5 Orchestrator 适配 | "executing-plans 必须通过 task() 委托 subagent" |
+
+agent 把 Layer 1 的 "inline" 误读成 Layer 2 也走 inline（即当前 agent 直接写代码），
+直接覆盖了 Orchestrator 适配的 task() 委托要求。结果：agent 试图同时做两件矛盾的事
+——"我在 inline 执行"（Layer 1 误导）+ "我在用 task() 委托"（Layer 2 残留）。
+
+这是 Issue #3 的同类 bug：**LLM 对字面词的歧义零容忍**。同一个词（"inline"）出现在
+两个不同的上下文里，被合并理解。
+
+**修复（三处联动）**：
+
+**(A) 命令 wrapper `buildCommandContent()`**：
+- `Agent(...)` 映射从 `execute inline (no subagent spawning)` 改为：
+  **Default**: execute inline (no subagent spawning).
+  **Exception**: 如果当前 skill 含 "Orchestrator 运行环境适配" 节（如 sdd-apply 步骤 2.5），
+  按该节的委托策略执行——此时 `task()` / `Agent()` 委托**允许**。
+- Skill() fallback chain 把 "inline" 改为 **`inline-content-resolution`**，明确这仅是
+  **内容加载策略**，不是任务执行策略
+- 新增 **CRITICAL 消歧义块**，明确列出两个 "inline" 的含义：
+  ```
+  CRITICAL — disambiguate two "inline" meanings (Issue #8):
+  - "inline-content-resolution" (this fallback #3) answers: where does the skill
+    content come from? → from parent skill description, not from file.
+  - "inline task execution" answers: who performs the work? → current agent vs
+    subagent. This is decided by the parent skill's Orchestrator adaptation section,
+    NOT by this fallback chain.
+  - These two are INDEPENDENT. Fallback #3 triggering does NOT mean "execute tasks
+    in current agent".
+  ```
+
+**(B) `sdd-apply/SKILL.md` 步骤 2.5**：
+- 新增消歧义块，显式说明本节决定的是**任务执行策略**，与 fallback chain 的内容加载
+  完全独立
+- 即便 executing-plans 走 fallback #3（文件未找到），本节 Orchestrator 适配仍生效
+
+**(C) 集成测试 `install.test.js`**：
+- 新增断言验证每个 command wrapper 文件包含：
+  - `inline-content-resolution` 术语（强制使用新词，避免与 "inline execution" 混淆）
+  - `Orchestrator` 提及（允许 subagent 委托例外）
+
 ## 手动验证步骤
 
 ## 前置步骤（CI 已验证）

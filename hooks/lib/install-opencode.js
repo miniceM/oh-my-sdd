@@ -277,6 +277,15 @@ function buildCommandContent(cmd) {
   //   1. plugin/skills/<name>/ — install 时最佳努力复制（用户同机有 Claude Code 时有）
   //   2. ~/.claude/skills/<name>/ — Claude Code 用户全局 runtime 目录（典型路径）
   //   3. inline — 文件都没有就基于主 SKILL.md 描述内联执行
+  //
+  // ⚠️ Issue #8 修复：disambiguate two "inline" meanings
+  //   - "inline content resolution" (fallback #3): 文件没找到，从父 skill 描述推断意图
+  //     → 这是关于**内容从哪里来**
+  //   - "inline task execution": 当前 agent 直接写代码完成任务
+  //     → 这是关于**谁执行工作**
+  //   两者独立。fallback #3 触发不代表任务要在当前 agent 内联执行。
+  //   当父 skill（如 sdd-apply）指定了 Orchestrator 适配（task() 委托 subagent），
+  //   即使 skill 文件走 fallback #3，每个 task 仍必须用 task()/Agent() 委托。
   return `---
 description: ${cmd.description}
 ---
@@ -293,23 +302,44 @@ You are now executing the /${cmd.name} skill for oh-my-sdd (enterprise SDD workf
    - \`Write(content, path)\` → use \`write\` tool
    - \`Edit(path, old, new)\` → use \`edit\` tool
    - \`AskUserQuestion(...)\` → ask user directly in chat
-   - \`Agent(...)\` → execute inline (no subagent spawning)
+   - \`Agent(...)\` / \`task(...)\` → OpenCode has no native subagent API.
+     **Default**: execute inline (no subagent spawning).
+     **Exception**: if the skill you're executing contains an
+     "Orchestrator 运行环境适配" / "Orchestrator adaptation" section
+     (see e.g. sdd-apply Step 2.5), follow THAT section's delegation
+     strategy instead — it will tell you to spawn one subagent per task
+     using \`task(...)\` / \`Agent(...)\`. In that case, subagent spawning
+     IS allowed despite this default mapping.
    - \`Skill(name, args)\` or "delegate to superpowers:xxx" → OpenCode has no
      Skill() API. Do **NOT** skip the step. Instead resolve the delegated skill's
-     content via this fallback chain, then follow ALL instructions in it:
+     content via this fallback chain:
        1. \`${OPENCODE_PLUGIN_DIR}/skills/<name-without-namespace>/SKILL.md\`
           (e.g. \`superpowers:brainstorming\` → \`${OPENCODE_PLUGIN_DIR}/skills/brainstorming/SKILL.md\`)
        2. \`~/.claude/skills/<name-without-namespace>/SKILL.md\`
           (Claude Code's runtime skill directory — present if user also uses Claude Code)
-       3. If neither file exists, perform the step **inline**: use the framework,
-          checklists, and goals described in the parent skill you're currently
-          reading to carry out the intent (e.g. for brainstorming: propose 2-3
-          approaches, present a design, get user approval before coding). Mention
-          in your output that you executed inline because the delegated skill
+       3. If neither file exists, perform the step **inline-content-resolution**:
+          use the framework, checklists, and goals described in the parent skill
+          you're currently reading to reconstruct the delegated skill's intent
+          (e.g. for brainstorming: propose 2-3 approaches, present a design,
+          get user approval before coding). Mention in your output that you
+          executed with inline-content-resolution because the delegated skill
           file was not found.
+
+     **CRITICAL — disambiguate two "inline" meanings** (Issue #8):
+     - "inline-content-resolution" (this fallback #3) answers: **where does the
+       skill content come from?** → from parent skill description, not from file.
+     - "inline task execution" answers: **who performs the work?** → current agent
+       vs subagent. This is decided by the **parent skill's Orchestrator adaptation
+       section**, NOT by this fallback chain.
+     - These two are **independent**. Fallback #3 triggering does NOT mean "execute
+       tasks in current agent". Example: \`/sdd-apply\` in Orchestrator mode →
+       executing-plans content may come from fallback #3 (inline-content-resolution),
+       BUT each task MUST still be delegated to a subagent via \`task(...)\` per
+       sdd-apply Step 2.5. Never merge these two layers.
+
      **CRITICAL**: The delegated skill contains the actual checklists, templates,
-     and step-by-step instructions. Resolving it is mandatory — only the execution
-     location (file vs inline) may change, never the work itself.
+     and step-by-step instructions. Resolving it is mandatory — only the content
+     source (file vs inline) may change, never the work itself.
 4. Execute the SDD workflow as described in the skill file
 
 **Change ID / arguments:** $ARGUMENTS

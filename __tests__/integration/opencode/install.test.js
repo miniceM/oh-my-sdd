@@ -92,6 +92,19 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
       content.includes('CRITICAL') || content.includes('NOT'),
       `${cmdFile} 应强烈提示不能跳过委托步骤`
     );
+    // Issue #8 修复：command wrapper 必须区分 "inline content resolution" 与
+    // "inline task execution"（两个独立层），避免 agent 把 fallback #3 触发
+    // 误当成"在当前 agent 内联执行所有 task"——这会与 sdd-apply 的 Orchestrator
+    // 适配（task() 委托）冲突，产生自相矛盾的输出（实测发现 agent 同时说
+    // "inline 执行" 和 "使用 task() 委托"）。
+    assert.ok(
+      content.includes('inline-content-resolution') || content.includes('inline content resolution'),
+      `${cmdFile} 应使用 "inline-content-resolution" 术语（区分内容加载 vs 任务执行两层）`
+    );
+    assert.ok(
+      content.includes('Orchestrator') || content.includes('orchestrator'),
+      `${cmdFile} 应提及 Orchestrator 适配场景（允许 subagent 委托例外）`
+    );
   }
 
   // sdd-constitution 必须不注册为 OpenCode 命令（治理不变量）：

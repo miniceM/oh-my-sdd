@@ -47,11 +47,17 @@ argument-hint: [slug 或 change-id]
 - 系统 prompt 自述为 "orchestrator" / "coordinator" / "planner"，要求通过子 agent 完成实现
 - 当前 session 已通过 `Agent(...)` / `task(...)` 调用本 skill
 
+> ⚠️ **关键区分（Issue #8 修复）**：本节决定的是**任务执行策略**（谁写代码），
+> 与命令 wrapper 的 fallback chain（**内容加载策略**，skill 文件从哪里来）**完全独立**。
+> 即便 executing-plans 内容走 fallback #3（inline-content-resolution，因文件未找到），
+> 本节的 Orchestrator 适配仍然生效——每个 task 仍必须用 `task()` / `Agent()` 委托
+> subagent 执行。绝不要因为"内容来自 fallback #3"就把任务也改成 inline 执行。
+
 **适配策略**：
 
 | 选定模式 | Orchestrator 下的执行方式 | 原因 |
 |---------|-------------------------|------|
-| `executing-plans` | **不要 inline 写文件**。对 tasks.md 中每个 task，用 `Agent(...)` / `task(...)` 委托一个 `build` 或 `quick` 类型 subagent 执行（每个 subagent 处理一个 task）。subagent 的 prompt 必须包含下方"执行约束"4 条 + 对应 task 的完整内容。 | executing-plans 原生假设当前 agent 直接写代码，与 Orchestrator 的"不直接写代码" HARD_RULE 冲突；委托 subagent 是唯一的合规路径 |
+| `executing-plans` | **不要 inline 写文件**。对 tasks.md 中每个 task，用 `Agent(...)` / `task(...)` 委托一个 `build` 或 `quick` 类型 subagent 执行（每个 subagent 处理一个 task）。subagent 的 prompt 必须包含下方"执行约束"5 条 + 对应 task 的完整内容。 | executing-plans 原生假设当前 agent 直接写代码，与 Orchestrator 的"不直接写代码" HARD_RULE 冲突；委托 subagent 是唯一的合规路径 |
 | `subagent-driven-development` | **保持不变** —— 原本就是每 task 派 fresh subagent 执行 | 与 Orchestrator 无冲突 |
 
 **委托 subagent 时的强制 prompt 片段**（executing-plans 模式下每个 subagent 必带）：
