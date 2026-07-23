@@ -5,6 +5,7 @@
   "type": "module",
   "main": "install.js",
   "bin": {
+    "hello-sdd": "bin/hello-sdd.js",
     "oms-install": "./bin/oms-install.js",
     "oms-uninstall": "./bin/oms-uninstall.js",
     "oms-login": "./bin/oms-login.js",
