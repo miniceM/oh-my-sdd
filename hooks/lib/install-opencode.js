@@ -15,7 +15,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, readdirSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { OPENCODE_PLUGIN_DIR, OPENCODE_COMMANDS_DIR } from './paths.js';
+import { OPENCODE_PLUGIN_DIR, OPENCODE_COMMANDS_DIR, OPENCODE_CONFIG_DIR } from './paths.js';
 import { buildOpencodePlugin } from './builder.js';
 import { copyDir } from './copy-utils.js';
 import { installSuperpowersZh, findDelegatedSkillsSource } from './superpowers-installer.js';
@@ -40,7 +40,7 @@ export function isOpenCodeInstalled() {
     return true;
   } catch {
     // fallback: 检测 ~/.config/opencode/ 目录
-    return existsSync(join(process.env.HOME, '.config', 'opencode'));
+    return existsSync(OPENCODE_CONFIG_DIR);
   }
 }
 
