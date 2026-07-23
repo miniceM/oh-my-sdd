@@ -306,6 +306,49 @@ ctrl+x down view subagents
 - 停止并告诉用户错误摘要 + 建议（改用 subagent-driven-development 模式，
   或在非 Orchestrator 模式下重跑）
 
+### Issue #11: 委托子技能来源不可靠（没装 Claude Code 拿不到）✅ 已修
+
+**背景**：用户质疑"当前能复制委托子技能的前提条件是什么？如果用户没装 Claude 呢？"
+
+**问题链路**：
+- oh-my-sdd 的 SDD 流程（sdd-plan → brainstorming → writing-plans；
+  sdd-apply → executing-plans / subagent-driven-development）依赖 5 个委托子技能
+- 这些技能原本只在 Claude Code 的 `.claude/skills/`（**运行时目录，不在 git 里**）
+- 没装 Claude Code / 没启用 superpowers 的用户根本拿不到
+- install 的 worktree fallback（Issue #10 修）也依赖 `.claude/skills/` 存在
+- 最终 agent 走 fallback chain 的 inline-content-resolution，质量大幅下降
+
+**修复**：集成第三方工具 [superpowers-zh](https://github.com/jnMetaCode/superpowers-zh)
+（superpowers 完整汉化 + 4 个中国原创 skills，20 个 skills 总量）。
+
+**新 install 流程**：
+1. **新增 `installSuperpowersZh()` 步骤**（在 `copySkillsToPluginDir` 之前）：
+   - 创建 staging 区 `<plugin>/.superpowers-staging/`
+   - 跑 `npx superpowers-zh --tool opencode --force`，cwd = staging
+   - 20 个 skills 装到 `<staging>/.opencode/skills/`
+   - 失败兜底：打印警告，不阻塞 install；后续步骤仍尝试 .claude/skills/ fallback
+2. **委托子技能来源优先级**（`copySkillsToPluginDir` (B) 段）：
+   - **1st**: `<plugin>/.superpowers-staging/.opencode/skills/`（superpowers-zh 产物）
+   - **2nd**: `<packageRoot>/.claude/skills/`（Claude Code 运行时，主仓库才有）
+   - **3rd**: `<mainRepo>/.claude/skills/`（worktree 兼容，从 git common-dir 推主仓库根）
+3. **staging 区用完清理**：复制完成后自动删除
+
+**实测结果**（从 worktree 跑 install）：
+```
+通过 superpowers-zh 安装委托子技能（20 个 superpowers 汉化 + 中国原创 skills）...
+  ✓ superpowers-zh 安装完成：20 个 skills 进入 staging 区
+  ✓ 委托子技能复制到: .../skills (5 个: brainstorming, writing-plans, executing-plans, ...)
+    [from superpowers-zh]
+```
+
+**用户影响**：
+| 用户类型 | 之前 | 现在 |
+|---------|------|------|
+| 装 Claude Code + 启用 superpowers | ✅ 完整（走 .claude/skills/） | ✅ 完整（走 superpowers-zh，内容更新） |
+| 装 Claude Code + 未启用 superpowers | ⚠️ inline 降级 | ✅ 完整（superpowers-zh 兜底） |
+| 没装 Claude Code，纯 OpenCode | ⚠️ inline 降级 | ✅ 完整（superpowers-zh 兜底） |
+| 没网 + 没 Claude Code | ⚠️ inline 降级 | ⚠️ inline 降级（superpowers-zh 失败，走后续 fallback） |
+
 ## 手动验证步骤
 
 ## 前置步骤（CI 已验证）

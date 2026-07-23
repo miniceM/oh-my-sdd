@@ -12,3 +12,4 @@ __pycache__/
 .claude/settings.local.json
 openspec/
 .sisyphus/
+.opencode/          # superpowers-zh runtime dir (OpenCode equivalent of .claude/skills/)

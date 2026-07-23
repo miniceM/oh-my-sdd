@@ -135,6 +135,67 @@ function copyHooksToPluginDir(packageRoot) {
 }
 
 // ============================================
+// 通过 superpowers-zh 安装委托子技能
+//
+// 背景：oh-my-sdd 的 SDD 流程（sdd-plan → brainstorming → writing-plans；
+// sdd-apply → executing-plans / subagent-driven-development）依赖 5 个委托子技能。
+// 这些技能原本在 Claude Code 的 `.claude/skills/`（运行时目录，不在 git 里），
+// 没装 Claude Code 的用户根本拿不到，install 会静默跳过，agent 走 fallback chain
+// 的 inline-content-resolution，质量大幅下降。
+//
+// superpowers-zh (https://github.com/jnMetaCode/superpowers-zh) 是第三方工具，
+// 提供 superpowers 完整汉化 + 4 个中国原创 skills，支持 opencode 安装目标。
+// 我们用它来稳定提供委托子技能，让所有用户（含纯 OpenCode 用户）都能拿到完整功能。
+//
+// 流程：
+//   1. 创建 staging 区 `<plugin>/.superpowers-staging/`
+//   2. 跑 `npx superpowers-zh --tool opencode --force`，cwd = staging
+//      → 把 20 个 skills 装到 `<staging>/.opencode/skills/`
+//   3. copySkillsToPluginDir 会优先从 `<staging>/.opencode/skills/` 复制委托子技能
+//   4. 清理 staging 区
+//
+// 失败兜底：
+//   - npx 不可用 / 网络错误 / superpowers-zh 失败 → 打印警告，不阻塞 install
+//   - 后续 copySkillsToPluginDir 仍会尝试 .claude/skills/ fallback
+//   - 命令 wrapper 的 fallback chain 最终 inline-content-resolution
+// ============================================
+const SUPERPOWERS_STAGING_DIR = join(OPENCODE_PLUGIN_DIR, '.superpowers-staging');
+
+function installSuperpowersZh() {
+  // 清理可能遗留的旧 staging（上一次 install 失败遗留）
+  if (existsSync(SUPERPOWERS_STAGING_DIR)) {
+    try { rmSync(SUPERPOWERS_STAGING_DIR, { recursive: true, force: true }); } catch {}
+  }
+  mkdirSync(SUPERPOWERS_STAGING_DIR, { recursive: true });
+
+  announce('  通过 superpowers-zh 安装委托子技能（20 个 superpowers 汉化 + 中国原创 skills）...');
+  try {
+    execFileSync('npx', ['superpowers-zh', '--tool', 'opencode', '--force'], {
+      cwd: SUPERPOWERS_STAGING_DIR,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60000, // 60s 超时：npx 首次下载包可能较慢
+    });
+    const installedDir = join(SUPERPOWERS_STAGING_DIR, '.opencode', 'skills');
+    if (existsSync(installedDir)) {
+      const count = readdirSync(installedDir).filter(e =>
+        existsSync(join(installedDir, e, 'SKILL.md'))
+      ).length;
+      announce(`  ✓ superpowers-zh 安装完成：${count} 个 skills 进入 staging 区`);
+      // staging 区保留到 copySkillsToPluginDir 复制完成后再清理（见下）
+      return;
+    }
+    throw new Error('superpowers-zh 运行成功但 .opencode/skills/ 目录未生成');
+  } catch (e) {
+    const errMsg = e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e);
+    announce(`  ⚠️  superpowers-zh 失败：${errMsg}`);
+    announce(`      委托子技能将尝试从 .claude/skills/ 复制；若仍失败，agent 走 fallback chain 的 inline 执行`);
+    announce(`      手动安装：npx superpowers-zh --tool opencode`);
+    // 清理失败的 staging
+    try { rmSync(SUPERPOWERS_STAGING_DIR, { recursive: true, force: true }); } catch {}
+  }
+}
+
+// ============================================
 // 复制 skills → ~/.config/opencode/plugins/oh-my-sdd/skills/
 // OpenCode 的 slash command 通过 ~/.config/opencode/commands/*.md 注册，
 // 但 command 文件引用 skill 内容，所以要把 skills 复制到 plugin 目录
@@ -180,14 +241,16 @@ function copySkillsToPluginDir(packageRoot) {
     announce('  ⚠️  skills/ 目录不存在，跳过 SDD skill 复制');
   }
 
-  // (B) 委托子技能（.claude/skills/ 目录）
+  // (B) 委托子技能
   // 这些是 sdd-plan/sdd-apply/sdd-review/sdd-task 内部 "委托 superpowers:xxx" 引用的技能
   //
-  // 关键：`.claude/skills/` 是 Claude Code 运行时目录，**不在 git 里**。
-  // 主仓库有这个目录，但 git worktree 没有（worktree 不共享 .claude/）。
-  // 所以在 worktree 里跑 install 会找不到这些技能。
-  // 解决：如果 packageRoot/.claude/skills/ 不存在，用 git rev-parse --git-common-dir
-  // 找到主仓库的 .git 路径，从它的 parent 推出主仓库根，再试 <mainRepo>/.claude/skills/。
+  // 来源优先级（第一个存在的目录被使用）：
+  //   1. <plugin>/.superpowers-staging/.opencode/skills/ — superpowers-zh 安装产物
+  //      （最可靠：所有用户都能拿到，含纯 OpenCode 用户。superpowers-zh 提供完整汉化）
+  //   2. <packageRoot>/.claude/skills/ — Claude Code 运行时目录（主仓库才有）
+  //   3. <mainRepo>/.claude/skills/ — worktree 兼容（从 git common-dir 推主仓库根）
+  //
+  // 复制完成后清理 staging 区（installSuperpowersZh 创建的临时目录）
   const delegatedSkills = [
     'brainstorming',              // sdd-plan 委托
     'writing-plans',              // sdd-task 委托
@@ -195,8 +258,11 @@ function copySkillsToPluginDir(packageRoot) {
     'subagent-driven-development',// sdd-apply 委托（复杂任务）
     'requesting-code-review',     // sdd-review 委托
   ];
-  const candidateDirs = [join(packageRoot, '.claude', 'skills')];
-  if (!existsSync(candidateDirs[0])) {
+  const stagingSkills = join(SUPERPOWERS_STAGING_DIR, '.opencode', 'skills');
+  const candidateDirs = [];
+  if (existsSync(stagingSkills)) candidateDirs.push({ path: stagingSkills, source: 'superpowers-zh' });
+  candidateDirs.push({ path: join(packageRoot, '.claude', 'skills'), source: 'packageRoot .claude/skills' });
+  if (!existsSync(candidateDirs[candidateDirs.length - 1].path)) {
     // Worktree 兼容：从 git common-dir 推主仓库根
     try {
       const commonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], {
@@ -208,15 +274,15 @@ function copySkillsToPluginDir(packageRoot) {
       const mainRepoRoot = dirname(commonDirAbs);
       const mainRepoSkills = join(mainRepoRoot, '.claude', 'skills');
       if (existsSync(mainRepoSkills)) {
-        candidateDirs.push(mainRepoSkills);
+        candidateDirs.push({ path: mainRepoSkills, source: 'main repo .claude/skills (worktree fallback)' });
       }
     } catch { /* not in a git repo or git not installed — ignore */ }
   }
-  const claudeSkillsDir = candidateDirs.find(existsSync);
-  if (claudeSkillsDir) {
+  const chosen = candidateDirs.find(c => existsSync(c.path));
+  if (chosen) {
     let copied = 0;
     for (const skill of delegatedSkills) {
-      const srcSkill = join(claudeSkillsDir, skill);
+      const srcSkill = join(chosen.path, skill);
       if (existsSync(srcSkill)) {
         const targetSkill = join(targetSkillsDir, skill);
         mkdirSync(targetSkill, { recursive: true });
@@ -232,11 +298,15 @@ function copySkillsToPluginDir(packageRoot) {
         copied++;
       }
     }
-    const sourceNote = claudeSkillsDir === candidateDirs[0] ? 'packageRoot' : 'main repo (worktree fallback)';
-    announce(`  ✓ 委托子技能复制到: ${targetSkillsDir} (${copied} 个: ${delegatedSkills.join(', ')}) [from ${sourceNote}]`);
+    announce(`  ✓ 委托子技能复制到: ${targetSkillsDir} (${copied} 个: ${delegatedSkills.join(', ')}) [from ${chosen.source}]`);
   } else {
-    announce(`  ⚠️  .claude/skills/ 目录不存在（packageRoot 与主仓库都无），跳过委托子技能复制`);
+    announce(`  ⚠️  委托子技能来源均不可用（superpowers-zh staging / packageRoot / mainRepo 都无 .claude/skills/）`);
     announce(`      OpenCode 运行时 agent 会按命令 wrapper 的 fallback chain 走 inline-content-resolution`);
+    announce(`      手动安装委托子技能：npx superpowers-zh --tool opencode`);
+  }
+  // 清理 staging 区（installSuperpowersZh 创建，本函数用完）
+  if (existsSync(SUPERPOWERS_STAGING_DIR)) {
+    try { rmSync(SUPERPOWERS_STAGING_DIR, { recursive: true, force: true }); } catch {}
   }
 }
 
@@ -441,6 +511,9 @@ export async function installForOpencode({ PACKAGE_ROOT, announce: ann = announc
   copyDistToPluginDir(PACKAGE_ROOT);
   copyHooksToPluginDir(PACKAGE_ROOT);
   copyContentToPluginDir(PACKAGE_ROOT);
+  // superpowers-zh 优先：跑第三方工具把 20 个 superpowers 技能装到 staging 区
+  // 这样即使纯 OpenCode 用户（没装 Claude Code / 没启用 superpowers）也能拿到委托子技能
+  installSuperpowersZh();
   copySkillsToPluginDir(PACKAGE_ROOT);
   installCommandFiles();
   patchOpencodeJson();
