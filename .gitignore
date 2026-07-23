@@ -4,6 +4,7 @@ node_modules/
 .idea/
 .vscode/
 dist/
+!opencode/dist/  # Allow OpenCode dist to be committed (pre-compiled)
 coverage/
 .oh-my-sdd/
 *.tgz

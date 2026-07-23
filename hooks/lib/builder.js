@@ -21,9 +21,12 @@ function announce(msg) {
 export function buildOpencodePlugin(packageRoot) {
   announce('  编译 opencode TypeScript → JavaScript...');
   try {
-    execFileSync('npm', ['run', 'build:opencode'], {
+    // On Windows, npm is npm.cmd, not npm
+    const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    execFileSync(npmCmd, ['run', 'build:opencode'], {
       cwd: packageRoot,
       stdio: 'inherit',  // Show output for debugging
+      shell: process.platform === 'win32',  // Use shell on Windows
     });
     announce('  ✓ 编译完成');
   } catch (error) {
