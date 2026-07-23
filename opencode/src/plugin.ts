@@ -16,7 +16,8 @@ import {
   mapUserPromptSubmit,
 } from './mappers.js';
 import { loadBaseline, buildSystemPrompt } from './baseline.js';
-import { log } from './logger.js';
+// 注意：plugin 层不再直接 log —— loadBaseline() 内部处理自己的日志策略
+// （首次 info，mtime 变化 debug，cache hit 静默）
 
 const HOOK_TIMEOUT_MS = Number(process.env.OMS_HOOK_TIMEOUT_MS ?? 5000);
 
@@ -26,7 +27,9 @@ export async function handleSystemTransform(
 ): Promise<void> {
   const sections = await loadBaseline();
   buildSystemPrompt(sections, output);
-  log('debug', 'baseline injected', { count: sections.length });
+  // 注意：不再在这里 log "baseline injected"。
+  // loadBaseline() 内部已实现日志策略：首次 info，mtime 变化 debug，cache hit 静默。
+  // 这里再打 log 会让每条用户消息都产生一条日志（handleSystemTransform 每条消息都触发）。
 }
 
 export async function handleToolExecuteBefore(

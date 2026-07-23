@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,6 +8,7 @@ import {
   buildSystemPrompt,
   writeAgentsMdFallback,
   detectExperimentalHook,
+  _resetBaselineCache,
 } from '../../../opencode/dist/baseline.js';
 
 // 保存原始 env（测试结束时恢复）
@@ -39,6 +40,11 @@ HARD_RULE: no sk-
 ## Section C: Operations
 Use OVERRIDE sparingly
 `;
+
+// 每个测试前重置 baseline 缓存，避免测试间 mtime 相同导致读到旧数据
+beforeEach(() => {
+  _resetBaselineCache();
+});
 
 test('baseline: loadBaseline reads file and removes frontmatter', async () => {
   fs.writeFileSync(process.env.OMS_BASELINE_PATH, SAMPLE);
@@ -101,6 +107,19 @@ test('baseline: detectExperimentalHook returns true for current SDK', () => {
   const supported = detectExperimentalHook();
   assert.equal(typeof supported, 'boolean');
   assert.equal(supported, true);
+});
+
+test('baseline: loadBaseline caches sections in memory (no re-read on repeated call)', async () => {
+  fs.writeFileSync(process.env.OMS_BASELINE_PATH, SAMPLE);
+  const first = await loadBaseline();
+  // 删掉文件后再调一次 —— 如果缓存生效，应该还能返回上次的内容（不去读盘）
+  fs.unlinkSync(process.env.OMS_BASELINE_PATH);
+  const second = await loadBaseline();
+  assert.deepEqual(second, first, 'cache hit should return cached sections even if file gone');
+  // 重置缓存后再调，应该返回 []（文件确实没了）
+  _resetBaselineCache();
+  const third = await loadBaseline();
+  assert.deepEqual(third, [], 'after cache reset + missing file, should return []');
 });
 
 // 测试结束清理：恢复 env + 删 temp 目录
