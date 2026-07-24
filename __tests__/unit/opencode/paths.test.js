@@ -35,7 +35,8 @@ test('paths: getPluginRoot falls back to opencode/ plugin dir when env unset', (
 test('paths: getHooksDir is <pluginRoot>/hooks (installed layout)', () => {
   process.env.OMS_PLUGIN_ROOT = '/x/oh-my-sdd';
   try {
-    assert.equal(getHooksDir(), path.normalize('/x/oh-my-sdd/hooks'));
+    const expected = path.join('/x/oh-my-sdd', 'hooks');
+    assert.equal(getHooksDir(), expected);
   } finally {
     delete process.env.OMS_PLUGIN_ROOT;
   }
@@ -52,7 +53,8 @@ test('paths: getHooksDir fallback resolves to actual hooks/ dir', () => {
 test('paths: getBaselinePath is <pluginRoot>/content/enterprise-baseline.md (installed layout)', () => {
   process.env.OMS_PLUGIN_ROOT = '/x/oh-my-sdd';
   try {
-    assert.equal(getBaselinePath(), path.normalize('/x/oh-my-sdd/content/enterprise-baseline.md'));
+    const expected = path.join('/x/oh-my-sdd', 'content', 'enterprise-baseline.md');
+    assert.equal(getBaselinePath(), expected);
   } finally {
     delete process.env.OMS_PLUGIN_ROOT;
   }
