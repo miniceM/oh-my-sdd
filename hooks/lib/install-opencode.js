@@ -13,7 +13,7 @@
 // Windows 不支持：OpenCode 主要跑在 macOS/Linux。
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, readdirSync, copyFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, readdirSync, copyFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { OPENCODE_PLUGIN_DIR, OPENCODE_COMMANDS_DIR, OPENCODE_CONFIG_DIR } from './paths.js';
 import { buildOpencodePlugin } from './builder.js';
@@ -118,8 +118,14 @@ function copyDelegatedSkill(srcSkill, targetSkill) {
     const src = join(srcSkill, entry);
     const dst = join(targetSkill, entry);
     try {
-      copyFileSync(src, dst);
-      copied++;
+      const stat = statSync(src);
+      if (stat.isDirectory()) {
+        // 递归复制子目录（如 scripts/）
+        copied += copyDir(src, dst, { recursive: true });
+      } else {
+        copyFileSync(src, dst);
+        copied++;
+      }
     } catch (copyErr) {
       announce(`  ⚠️  复制文件失败: ${src} → ${dst} (${copyErr.message})`);
     }

@@ -35,9 +35,16 @@ export function copyDir(srcDir, targetDir, options = {}) {
     const srcPath = join(srcDir, entry);
     const targetPath = join(targetDir, entry);
 
-    if (options.recursive && statSync(srcPath).isDirectory()) {
-      copied += copyDir(srcPath, targetPath, options);
+    const isDir = statSync(srcPath).isDirectory();
+
+    if (isDir) {
+      // 目录：只有在 recursive: true 时才处理
+      if (options.recursive) {
+        copied += copyDir(srcPath, targetPath, options);
+      }
+      // 否则跳过目录（不报错，不复制）
     } else {
+      // 文件：始终复制
       try {
         copyFileSync(srcPath, targetPath);
         copied++;
