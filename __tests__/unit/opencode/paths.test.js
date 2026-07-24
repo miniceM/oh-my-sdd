@@ -35,8 +35,13 @@ test('paths: getPluginRoot falls back to opencode/ plugin dir when env unset', (
 test('paths: getHooksDir is <pluginRoot>/hooks (installed layout)', () => {
   process.env.OMS_PLUGIN_ROOT = '/x/oh-my-sdd';
   try {
-    const expected = path.join('/x/oh-my-sdd', 'hooks');
-    assert.equal(getHooksDir(), expected);
+    const result = getHooksDir();
+    // On Windows, path.resolve adds drive letter (D:\x\oh-my-sdd\hooks)
+    // On Unix, it stays absolute (/x/oh-my-sdd/hooks)
+    // Just verify it ends with the expected path components
+    assert.ok(result.endsWith('x' + path.sep + 'oh-my-sdd' + path.sep + 'hooks') ||
+               result.endsWith('x/oh-my-sdd/hooks'),
+      `Expected to end with x/oh-my-sdd/hooks, got ${result}`);
   } finally {
     delete process.env.OMS_PLUGIN_ROOT;
   }
@@ -53,8 +58,12 @@ test('paths: getHooksDir fallback resolves to actual hooks/ dir', () => {
 test('paths: getBaselinePath is <pluginRoot>/content/enterprise-baseline.md (installed layout)', () => {
   process.env.OMS_PLUGIN_ROOT = '/x/oh-my-sdd';
   try {
-    const expected = path.join('/x/oh-my-sdd', 'content', 'enterprise-baseline.md');
-    assert.equal(getBaselinePath(), expected);
+    const result = getBaselinePath();
+    // On Windows, path.resolve adds drive letter
+    // Just verify it ends with the expected path components
+    assert.ok(result.endsWith('oh-my-sdd' + path.sep + 'content' + path.sep + 'enterprise-baseline.md') ||
+               result.endsWith('oh-my-sdd/content/enterprise-baseline.md'),
+      `Expected to end with oh-my-sdd/content/enterprise-baseline.md, got ${result}`);
   } finally {
     delete process.env.OMS_PLUGIN_ROOT;
   }
