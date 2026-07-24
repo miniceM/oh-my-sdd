@@ -5,6 +5,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
  * Announce message to stderr.
@@ -19,6 +21,13 @@ function announce(msg) {
  * @param {string} packageRoot - Package root directory
  */
 export function buildOpencodePlugin(packageRoot) {
+  // Check if opencode/dist already exists (pre-compiled)
+  const distDir = join(packageRoot, 'opencode', 'dist');
+  if (existsSync(distDir)) {
+    announce('  ✓ 使用预编译的 opencode/dist（跳过编译）');
+    return;
+  }
+
   announce('  编译 opencode TypeScript → JavaScript...');
   try {
     // On Windows, npm is npm.cmd, not npm
