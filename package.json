@@ -19,7 +19,10 @@
     "test": "node scripts/run-tests.js",
     "test:glob": "node --test \"__tests__/**/*.test.js\"",
     "lint:baseline": "node scripts/check-baseline-tokens.mjs",
-    "build:opencode": "cd opencode && npm install --no-audit --no-fund && npm run build"
+    "build:opencode": "cd opencode && npm install --no-audit --no-fund && npm run build",
+    "build:all": "npm run build:opencode",
+    "prepublishOnly": "npm run build:all && npm test",
+    "publish:opencode": "cd opencode && npm publish"
   },
   "files": [
     ".claude-plugin/",

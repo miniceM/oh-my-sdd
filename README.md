@@ -16,17 +16,46 @@
 
 ### OpenCode
 
-```bash
-# 1. 全局安装
-npm install -g --foreground-scripts @cli-tools/oh-my-sdd
+#### 方式一：npm 插件（推荐）
 
-# 2. 显式选择工具
+OpenCode 会自动安装和更新插件，无需手动管理。
+
+```bash
+# 在 ~/.config/opencode/opencode.json 中配置：
+{
+  "plugin": ["@enterprise/oh-my-sdd-opencode"]
+}
+
+# 启动 OpenCode，插件自动加载
+opencode
+
+# 使用 SDD 命令：
+# /sdd-spec <change-name>
+```
+
+**优点**：
+- OpenCode 自动安装和更新
+- 符合官方插件生态规范
+- 无需手动管理文件
+
+#### 方式二：本地开发模式
+
+用于开发和测试插件功能。
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/your-org/oh-my-sdd.git
+cd oh-my-sdd
+
+# 2. 构建并安装
+npm install
+npm run build:opencode
 oms-install --tool opencode
 
 # 3. 启动 OpenCode
 #    plugin 自动加载到 ~/.config/opencode/plugins/oh-my-sdd/
 #    baseline 通过 experimental.chat.system.transform 注入
-#    /sdd-spec <change-name>
+opencode
 ```
 
 ⚠️ **前置依赖**：OpenCode（`npm install -g opencode` 或从 https://opencode.ai 下载）

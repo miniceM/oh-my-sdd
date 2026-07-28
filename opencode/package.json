@@ -1,19 +1,54 @@
 {
-  "name": "oh-my-sdd-opencode",
-  "version": "0.1.0",
-  "description": "OpenCode plugin adapter for oh-my-sdd (internal, bundled)",
+  "name": "@enterprise/oh-my-sdd-opencode",
+  "version": "0.2.0",
+  "description": "Enterprise SDD Agent - OpenCode Plugin with HARD/SOFT rule enforcement, 7-layer onion architecture, and SDD workflow commands",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
-  "dependencies": {
-    "@opencode-ai/plugin": "^1.15.13"
+  "keywords": [
+    "opencode",
+    "plugin",
+    "sdd",
+    "enterprise",
+    "ai-agent",
+    "rules-engine",
+    "workflow"
+  ],
+  "author": "Enterprise Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-org/oh-my-sdd.git",
+    "directory": "opencode"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/oh-my-sdd/issues"
+  },
+  "homepage": "https://github.com/your-org/oh-my-sdd#readme",
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.15.0",
+    "@opencode-ai/sdk": ">=1.15.0"
   },
   "devDependencies": {
+    "@opencode-ai/plugin": "^1.15.13",
+    "@opencode-ai/sdk": "^1.15.13",
     "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

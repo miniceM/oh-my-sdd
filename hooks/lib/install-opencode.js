@@ -203,6 +203,12 @@ function copySkillsToPluginDir(packageRoot) {
 // ============================================
 export async function installForOpencode({ PACKAGE_ROOT, announce: ann = announce }) {
   ann('→ 安装 OpenCode 适配');
+  ann('');
+  ann('ℹ️  推荐方式：通过 npm 安装插件（自动更新）');
+  ann('    在 opencode.json 中配置: {"plugin": ["@enterprise/oh-my-sdd-opencode"]}');
+  ann('');
+  ann('当前：本地开发模式（手动复制到 ~/.config/opencode/plugins/）');
+  ann('');
 
   if (!isOpenCodeInstalled()) {
     ann('⚠️  未检测到 OpenCode。继续安装，但 OpenCode 不在时不生效。');
@@ -219,12 +225,16 @@ export async function installForOpencode({ PACKAGE_ROOT, announce: ann = announc
   patchOpencodeJson();
 
   ann('');
-  ann('✓ oh-my-sdd (OpenCode) 安装完成');
+  ann('✓ oh-my-sdd (OpenCode) 本地开发模式安装完成');
   ann('');
   ann('下一步：');
   ann('  1. 启动 OpenCode（自动加载 oh-my-sdd 插件）');
   ann('  2. 在 OpenCode 中试 /sdd-spec <change-name>');
   ann('  3. 测试 HARD_RULE：写一个含 AKIA 硬编码的文件，应被阻断');
+  ann('');
+  ann('生产环境推荐：');
+  ann('  npm run publish:opencode');
+  ann('  然后在 opencode.json 中使用: {"plugin": ["@enterprise/oh-my-sdd-opencode"]}');
   ann('');
   ann('卸载：oms-uninstall --tool opencode');
 }
