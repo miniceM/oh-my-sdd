@@ -1,7 +1,8 @@
 /**
  * TypeScript builder for OpenCode plugin.
  *
- * Compiles opencode/src/*.ts → opencode/dist/*.js
+ * Compiles opencode/src/*.ts → opencode/dist/*.js.
+ * Automatically installs opencode dependencies if not present.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -28,11 +29,11 @@ export function buildOpencodePlugin(packageRoot) {
     return;
   }
 
-  announce('  编译 opencode TypeScript → JavaScript...');
+  announce('  安装 opencode 依赖并编译 TypeScript → JavaScript...');
   try {
     // On Windows, npm is npm.cmd, not npm
     const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-    execFileSync(npmCmd, ['run', 'build:opencode'], {
+    execFileSync(npmCmd, ['run', 'build:all'], {
       cwd: packageRoot,
       stdio: 'inherit',  // Show output for debugging
       shell: process.platform === 'win32',  // Use shell on Windows

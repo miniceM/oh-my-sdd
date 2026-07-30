@@ -12,12 +12,21 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    ".opencode",
+    ".agents",
+    "hooks",
+    "content",
+    "skills",
+    "scripts",
+    "README.md"
   ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run build"
+    "sync:resources": "node scripts/copy-resources.mjs",
+    "postinstall": "node scripts/postinstall.mjs",
+    "prepublishOnly": "npm run sync:resources && npm run build"
   },
   "keywords": [
     "opencode",
@@ -32,13 +41,13 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-org/oh-my-sdd.git",
+    "url": "git+https://github.com/enterprise/oh-my-sdd.git",
     "directory": "opencode"
   },
   "bugs": {
-    "url": "https://github.com/your-org/oh-my-sdd/issues"
+    "url": "https://github.com/enterprise/oh-my-sdd/issues"
   },
-  "homepage": "https://github.com/your-org/oh-my-sdd#readme",
+  "homepage": "https://github.com/enterprise/oh-my-sdd#readme",
   "peerDependencies": {
     "@opencode-ai/plugin": ">=1.15.0",
     "@opencode-ai/sdk": ">=1.15.0"

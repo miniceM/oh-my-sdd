@@ -1,7 +1,7 @@
 ---
 name: sdd-task
 description: 本 skill 在 /sdd-plan 产出的 tasks.md 粒度过粗（单 task > 30 分钟）需要拆细时使用。SDD Ring 3 可选环节——粒度合适时直接用 /sdd-apply 即可，无需经过本环。
-argument-hint: [slug 或 change-id]
+argument-hint: "[slug 或 change-id]"
 ---
 
 # /sdd-task —— SDD 第 3 环：任务细化（可选环节）

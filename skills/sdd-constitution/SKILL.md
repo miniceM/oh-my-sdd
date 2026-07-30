@@ -1,7 +1,7 @@
 ---
 name: sdd-constitution
 description: 本 skill 在用户说"改 baseline"/"更新 constitution"/"修原则"/"发布新版本"时使用。创建或更新项目 baseline，确保修订流程（SemVer bump + Sync Impact Report）被遵守。
-argument-hint: [原则变更描述，可选]
+argument-hint: "[原则变更描述，可选]"
 ---
 
 # /sdd-constitution —— 项目 Governance 文档修订

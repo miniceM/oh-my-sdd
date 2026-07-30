@@ -44,13 +44,14 @@ opencode
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/your-org/oh-my-sdd.git
+git clone https://github.com/enterprise/oh-my-sdd.git
 cd oh-my-sdd
 
-# 2. 构建并安装
-npm install
-npm run build:opencode
-oms-install --tool opencode
+# 2. 安装依赖 + 构建 + 注册插件
+npm install                 # 安装根包依赖（触发 install.js 注册 Claude/Lingma）
+npm install:opencode        # 安装 opencode 子包依赖（@opencode-ai/plugin 等）
+npm run build:opencode      # 编译 TypeScript → JavaScript
+oms-install --tool opencode # 注册插件到 OpenCode
 
 # 3. 启动 OpenCode
 #    plugin 自动加载到 ~/.config/opencode/plugins/oh-my-sdd/

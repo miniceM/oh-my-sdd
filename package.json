@@ -5,7 +5,6 @@
   "type": "module",
   "main": "install.js",
   "bin": {
-    "hello-sdd": "bin/hello-sdd.js",
     "oms-install": "./bin/oms-install.js",
     "oms-uninstall": "./bin/oms-uninstall.js",
     "oms-login": "./bin/oms-login.js",
@@ -19,8 +18,9 @@
     "test": "node scripts/run-tests.js",
     "test:glob": "node --test \"__tests__/**/*.test.js\"",
     "lint:baseline": "node scripts/check-baseline-tokens.mjs",
-    "build:opencode": "cd opencode && npm install --no-audit --no-fund && npm run build",
-    "build:all": "npm run build:opencode",
+    "build:opencode": "cd opencode && npm run build",
+    "install:opencode": "cd opencode && npm install --no-audit --no-fund",
+    "build:all": "npm run install:opencode && npm run build:opencode",
     "prepublishOnly": "npm run build:all && npm test",
     "publish:opencode": "cd opencode && npm publish"
   },
@@ -62,7 +62,12 @@
   ],
   "license": "UNLICENSED",
   "private": false,
-  "devDependencies": {
-    "typescript": "^5.9.3"
-  }
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/enterprise/oh-my-sdd.git"
+  },
+  "bugs": {
+    "url": "https://github.com/enterprise/oh-my-sdd/issues"
+  },
+  "homepage": "https://github.com/enterprise/oh-my-sdd#readme"
 }

@@ -1,7 +1,7 @@
 ---
 name: sdd-spec
 description: 本 skill 在用户说"写需求"/"写 spec"/"写规格"/"开始新功能"/"开 SDD 流程"时使用。SDD Ring 1——直调 openspec CLI 产 delta spec（保鲜生效）。
-argument-hint: [change-id 或变更描述，可选]
+argument-hint: "[change-id 或变更描述，可选]"
 ---
 
 # /sdd-spec —— SDD 第 1 环：规格定义

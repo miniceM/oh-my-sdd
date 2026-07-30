@@ -1,7 +1,7 @@
 ---
 name: sdd-plan
 description: 本 skill 在用户说"做 plan"/"写 design"/"拆任务"/"brainstorming"或已完成 spec 需要交互式产 design + tasks 时使用。SDD Ring 2——委托 superpowers:brainstorming（自动 chain 到 writing-plans）。
-argument-hint: [slug 或 change-id]
+argument-hint: "[slug 或 change-id]"
 ---
 
 # /sdd-plan —— SDD 第 2 环：交互式 design + tasks
