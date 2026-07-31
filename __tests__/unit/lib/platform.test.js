@@ -4,7 +4,7 @@ import path from 'node:path';
 import {
   getNodeVersion, checkNodeVersion, getHomeDir,
   getPluginInstallDir, getStateDir, isIamInPath, sessionMetaPath
-} from '../../lib/platform.js';
+} from '../../../lib/platform.js';
 
 test('getNodeVersion returns current Node version string', () => {
   const v = getNodeVersion();

@@ -33,6 +33,7 @@
     "skills/",
     "content/",
     "hooks/",
+    "lib/",
     "README.md",
     "opencode/dist/"
   ],

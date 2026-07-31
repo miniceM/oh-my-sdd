@@ -29,7 +29,7 @@ async function setupConfig(t, overrides = {}) {
   t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
   process.env.HOME = tmpHome;
   process.env.USERPROFILE = tmpHome;
-  const { saveConfig } = await import('../../lib/config.js?' + Date.now());
+  const { saveConfig } = await import('../../../lib/config.js?' + Date.now());
   await saveConfig(overrides);
 }
 
@@ -38,7 +38,7 @@ test('report POSTs event as JSON', async (t) => {
   t.after(() => stub.close());
   await setupConfig(t, { dop_endpoint: `http://localhost:${stub.port}` });
 
-  const { report } = await import('../../lib/dop-client.js?' + Date.now());
+  const { report } = await import('../../../lib/dop-client.js?' + Date.now());
   await report({ event: 'session.start', id: 'x' });
 
   assert.equal(stub.received.length, 1);
@@ -55,13 +55,13 @@ test('report throws on 500', async (t) => {
   t.after(() => new Promise((r) => server.close(r)));
   await setupConfig(t, { dop_endpoint: `http://localhost:${port}` });
 
-  const { report } = await import('../../lib/dop-client.js?' + Date.now());
+  const { report } = await import('../../../lib/dop-client.js?' + Date.now());
   await assert.rejects(() => report({ event: 'x' }));
 });
 
 test('report throws on network error (port closed)', async (t) => {
   await setupConfig(t, { dop_endpoint: 'http://localhost:1' }); // port 1 is reserved/closed
-  const { report } = await import('../../lib/dop-client.js?' + Date.now());
+  const { report } = await import('../../../lib/dop-client.js?' + Date.now());
   await assert.rejects(() => report({ event: 'x' }));
 });
 
@@ -86,7 +86,7 @@ test('reportOrEnqueue retries on transient failure then succeeds', async (t) => 
   t.after(() => new Promise((r) => server.close(r)));
   await setupConfig(t, { dop_endpoint: `http://localhost:${port}` });
 
-  const { reportOrEnqueue } = await import('../../lib/dop-client.js?' + Date.now());
+  const { reportOrEnqueue } = await import('../../../lib/dop-client.js?' + Date.now());
   await reportOrEnqueue({ event: 'x.retry' });
 
   // First attempt failed (500), second succeeded — exactly 2 attempts total.
@@ -105,14 +105,14 @@ test('reportOrEnqueue enqueues after all retries exhausted', async (t) => {
   t.after(() => new Promise((r) => server.close(r)));
   await setupConfig(t, { dop_endpoint: `http://localhost:${port}` });
 
-  const { reportOrEnqueue } = await import('../../lib/dop-client.js?' + Date.now());
+  const { reportOrEnqueue } = await import('../../../lib/dop-client.js?' + Date.now());
   await reportOrEnqueue({ event: 'x.exhaust' });
 
   // MAX_REPORT_RETRIES = 2 → 1 initial + 2 retries = 3 attempts total.
   assert.equal(requestCount, 3);
 
   // Event should have been enqueued to disk for later flush.
-  const { readAll } = await import('../../lib/event-queue.js?' + Date.now());
+  const { readAll } = await import('../../../lib/event-queue.js?' + Date.now());
   const queued = await readAll();
   const found = queued.find((e) => e.event === 'x.exhaust');
   assert.ok(found, 'event should be enqueued after retries exhausted');
@@ -120,7 +120,7 @@ test('reportOrEnqueue enqueues after all retries exhausted', async (t) => {
 
 test('shouldSkipTelemetry returns true when telemetry_disabled', async (t) => {
   await setupConfig(t, { telemetry_disabled: true });
-  const { shouldSkipTelemetry } = await import('../../lib/dop-client.js?' + Date.now());
+  const { shouldSkipTelemetry } = await import('../../../lib/dop-client.js?' + Date.now());
   assert.equal(await shouldSkipTelemetry({ cwd: '/tmp' }), true);
 });
 
@@ -129,12 +129,12 @@ test('shouldSkipTelemetry returns true when .sdd-no-telemetry exists in cwd', as
   t.after(() => rmSync(projectDir, { recursive: true, force: true }));
   writeFileSync(path.join(projectDir, '.sdd-no-telemetry'), '');
   await setupConfig(t);
-  const { shouldSkipTelemetry } = await import('../../lib/dop-client.js?' + Date.now());
+  const { shouldSkipTelemetry } = await import('../../../lib/dop-client.js?' + Date.now());
   assert.equal(await shouldSkipTelemetry({ cwd: projectDir }), true);
 });
 
 test('shouldSkipTelemetry returns false otherwise', async (t) => {
   await setupConfig(t);
-  const { shouldSkipTelemetry } = await import('../../lib/dop-client.js?' + Date.now());
+  const { shouldSkipTelemetry } = await import('../../../lib/dop-client.js?' + Date.now());
   assert.equal(await shouldSkipTelemetry({ cwd: '/tmp' }), false);
 });

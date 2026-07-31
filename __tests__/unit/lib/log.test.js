@@ -10,7 +10,7 @@ test('info writes a line to today log', async (t) => {
   process.env.HOME = tmpHome;
   process.env.USERPROFILE = tmpHome;
 
-  const { info } = await import('../../lib/log.js?' + Date.now());
+  const { info } = await import('../../../lib/log.js?' + Date.now());
   await info('hello world');
 
   const today = new Date().toISOString().slice(0, 10);
@@ -26,7 +26,7 @@ test('error writes to stderr and log file', async (t) => {
   process.env.HOME = tmpHome;
   process.env.USERPROFILE = tmpHome;
 
-  const { error } = await import('../../lib/log.js?' + Date.now());
+  const { error } = await import('../../../lib/log.js?' + Date.now());
   // Capture stderr
   const original = process.stderr.write;
   let captured = '';

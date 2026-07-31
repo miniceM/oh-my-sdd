@@ -5,10 +5,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
 
 // 动态导入 wrapper 模块
-const wrapper = await import('../../wrapper/wrapper.js');
+const wrapper = await import('../../../wrapper/wrapper.js');
 
 // ---------- 目录配置 ----------
 

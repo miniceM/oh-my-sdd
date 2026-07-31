@@ -15,7 +15,7 @@ import {
   isForcePush,
   isProtectedBranch,
   getGitDir,
-} from '../../hooks/git/lib/hook-utils.js';
+} from '../../../../../hooks/git/lib/hook-utils.js';
 
 // ============================================
 // 测试辅助：创建临时 git 仓库

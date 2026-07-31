@@ -11,7 +11,7 @@ import {
   getBodyForInjection,
   REQUIRED_FRONTMATTER_FIELDS,
   ConstitutionError,
-} from '../../lib/constitution.js';
+} from '../../../lib/constitution.js';
 
 function fixture(name, content) {
   const dir = mkdtempSync(path.join(tmpdir(), 'oms-const-'));
