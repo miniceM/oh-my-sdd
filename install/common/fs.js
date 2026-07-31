@@ -1,6 +1,7 @@
 // fs.js — 文件系统工具：目录复制 + skills 复制。
 //
 // 提供：
+//   - rmIfExists (async): 删除路径（若存在），幂等
 //   - copyDirRecursive (async): 递归复制目录（保留结构，跳过 .DS_Store）
 //   - copySkillsToDir (async): 从 oh-my-sdd skills/ 复制到目标目录
 //   - copyDir (sync): 同步目录复制（支持 filter/recursive 选项）
@@ -8,13 +9,26 @@
 //
 // 消费者：install/hosts/lingma-adapter.js（async）、install/hosts/opencode-adapter.js（sync）。
 
-import { readFile, writeFile, mkdir, readdir, copyFile } from 'node:fs/promises';
-import { existsSync, mkdirSync, readdirSync, copyFileSync, statSync } from 'node:fs';
+import { readFile, writeFile, mkdir, readdir, copyFile, rm } from 'node:fs/promises';
+import { existsSync, mkdirSync, readdirSync, copyFileSync, statSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 // ============================================
 // Async utilities (from install-shared.js)
 // ============================================
+
+/**
+ * Remove a path if it exists. Idempotent.
+ * @param {string} p - Path to remove
+ * @returns {Promise<boolean>} true if removed, false if didn't exist
+ */
+export async function rmIfExists(p) {
+  if (existsSync(p)) {
+    await rm(p, { recursive: true, force: true });
+    return true;
+  }
+  return false;
+}
 
 /**
  * 递归复制目录（保留结构，跳过 .DS_Store）。
@@ -67,6 +81,19 @@ export async function copySkillsToDir(skillsSrc, destDir, announce) {
 // ============================================
 // Sync utilities (from copy-utils.js)
 // ============================================
+
+/**
+ * Remove a path if it exists (sync). Idempotent.
+ * @param {string} p - Path to remove
+ * @returns {boolean} true if removed, false if didn't exist
+ */
+export function rmIfExistsSync(p) {
+  if (existsSync(p)) {
+    rmSync(p, { recursive: true, force: true });
+    return true;
+  }
+  return false;
+}
 
 /**
  * Copy directory contents recursively (sync).

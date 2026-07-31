@@ -16,14 +16,15 @@
 //
 // 共享 utilities: install/common/sentinel.js, install/common/fs.js。
 
-import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
-import { execFileSync } from 'node:child_process';
 
 import { writeSentinel, readSentinel, sentinelPathFor } from '../common/sentinel.js';
-import { copySkillsToDir } from '../common/fs.js';
+import { copySkillsToDir, rmIfExists } from '../common/fs.js';
+import { announce } from '../common/announce.js';
+import { isCliInPath, isDirPresent } from '../common/detect.js';
 import { HostAdapter } from '../host-adapter.js';
 
 const HOME = homedir();
@@ -41,10 +42,6 @@ const LINGMA_RULE_FILE = join(LINGMA_RULES_DIR, 'oh-my-sdd.md');
 // 卸载时只删这 4 个事件，保留用户的 CustomEvent 等
 const OOMS_EVENTS = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop'];
 
-function announce(msg) {
-  process.stderr.write(msg + '\n');
-}
-
 function isHomeDir(p) {
   try {
     return resolve(p) === resolve(HOME);
@@ -57,14 +54,9 @@ function isHomeDir(p) {
 // Detect Lingma installation
 // ============================================
 export function isLingmaInstalled() {
-  const cmd = process.platform === 'win32' ? 'where' : 'which';
-  try {
-    execFileSync(cmd, ['lingma'], { stdio: 'ignore' });
-    return true;
-  } catch {
-    // fallback: 通义灵码可能未注册 lingma CLI，检测 ~/.lingma/ 目录
-    return existsSync(LINGMA_DIR);
-  }
+  if (isCliInPath('lingma')) return true;
+  // fallback: 通义灵码可能未注册 lingma CLI，检测 ~/.lingma/ 目录
+  return isDirPresent(LINGMA_DIR);
 }
 
 // ============================================
@@ -144,14 +136,6 @@ export async function installForLingma({ PACKAGE_ROOT, announce }) {
 // ============================================
 // 卸载
 // ============================================
-async function rmIfExists(p) {
-  if (existsSync(p)) {
-    await rm(p, { recursive: true, force: true });
-    return true;
-  }
-  return false;
-}
-
 export async function uninstallForLingma() {
   announce('→ 卸载通义灵码 lingma 适配');
 

@@ -15,27 +15,19 @@
 // 失败语义：Claude CLI 缺失时，调用 ensureStateDir()（smoke-check 依赖此副作用）
 // 然后 process.exit(1)，由 main() 调度器捕获。
 
-import { execFileSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { installWrapper, findClaudeOriginal } from '../../wrapper/wrapper.js';
 import { ensureStateDir } from '../../lib/state-dir.js';
 import { isIamInPath } from '../../lib/platform.js';
 import { HostAdapter } from '../host-adapter.js';
+import { announce } from '../common/announce.js';
+import { isCliInPath } from '../common/detect.js';
 
 const MARKETPLACE_NAME = 'oh-my-sdd';
 const PLUGIN_NAME = 'oh-my-sdd';
 
-function announce(msg) {
-  process.stderr.write(msg + '\n');
-}
-
 export function isClaudeInstalled() {
-  const cmd = process.platform === 'win32' ? 'where' : 'which';
-  try {
-    execFileSync(cmd, ['claude'], { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
+  return isCliInPath('claude');
 }
 
 function runClaude(args) {
@@ -151,10 +143,7 @@ export class ClaudeAdapter extends HostAdapter {
       process.stderr.write('⚠️  未检测到 iam CLI。可继续安装，但首次会话将提示安装。\n');
       process.stderr.write('    安装后请运行 oms-login 完成身份认证。\n');
     }
-    try {
-      const cmd = process.platform === 'win32' ? 'where' : 'which';
-      execFileSync(cmd, ['openspec'], { stdio: 'ignore' });
-    } catch {
+    if (!isCliInPath('openspec')) {
       process.stderr.write('⚠️  未检测到 openspec CLI。可继续安装，但 /sdd-review 归档阶段会阻塞。\n');
       process.stderr.write('    安装：npm install -g @fission-ai/openspec\n');
       process.stderr.write('    作用：archive 时 merge delta 到 openspec/specs/，保持项目 specs 反映系统现状\n');

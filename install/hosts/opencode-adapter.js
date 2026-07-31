@@ -12,37 +12,25 @@
 //
 // Windows 不支持：OpenCode 主要跑在 macOS/Linux。
 
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, readdirSync, copyFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, copyFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { OPENCODE_PLUGIN_DIR, OPENCODE_COMMANDS_DIR, OPENCODE_CONFIG_DIR } from '../../lib/paths.js';
 import { buildOpencodePlugin } from '../../opencode/build.js';
-import { copyDir } from '../common/fs.js';
+import { copyDir, rmIfExistsSync } from '../common/fs.js';
+import { announce } from '../common/announce.js';
+import { isCliInPath, isDirPresent } from '../common/detect.js';
 import { installSuperpowersZh, findDelegatedSkillsSource } from '../common/superpowers-installer.js';
 import { SDD_COMMANDS, installCommandFiles } from '../../lib/command-generator.js';
 import { patchOpencodeJson, unpatchOpencodeJson } from '../common/config-patcher.js';
 import { HostAdapter } from '../host-adapter.js';
 
-/**
- * Announce message to stderr.
- * @param {string} msg - Message to announce
- */
-function announce(msg) {
-  process.stderr.write(msg + '\n');
-}
-
 // ============================================
 // 探测 OpenCode 是否安装
 // ============================================
 export function isOpenCodeInstalled() {
-  const cmd = process.platform === 'win32' ? 'where' : 'which';
-  try {
-    execFileSync(cmd, ['opencode'], { stdio: 'ignore' });
-    return true;
-  } catch {
-    // fallback: 检测 ~/.config/opencode/ 目录
-    return existsSync(OPENCODE_CONFIG_DIR);
-  }
+  if (isCliInPath('opencode')) return true;
+  // fallback: 检测 ~/.config/opencode/ 目录
+  return isDirPresent(OPENCODE_CONFIG_DIR);
 }
 
 // ============================================
@@ -246,19 +234,11 @@ export async function installForOpencode({ PACKAGE_ROOT, announce: ann = announc
 // ============================================
 // 卸载
 // ============================================
-function rmIfExists(p) {
-  if (existsSync(p)) {
-    rmSync(p, { recursive: true, force: true });
-    return true;
-  }
-  return false;
-}
-
 export async function uninstallForOpencode() {
   announce('→ 卸载 OpenCode 适配');
 
   // 1. 删 plugin 目录
-  if (rmIfExists(OPENCODE_PLUGIN_DIR)) {
+  if (rmIfExistsSync(OPENCODE_PLUGIN_DIR)) {
     announce(`  ✓ 已删除: ${OPENCODE_PLUGIN_DIR}`);
   }
 
@@ -267,8 +247,7 @@ export async function uninstallForOpencode() {
     let removed = 0;
     for (const cmd of SDD_COMMANDS) {
       const f = join(OPENCODE_COMMANDS_DIR, `${cmd.name}.md`);
-      if (existsSync(f)) {
-        rmSync(f);
+      if (rmIfExistsSync(f)) {
         removed++;
       }
     }
