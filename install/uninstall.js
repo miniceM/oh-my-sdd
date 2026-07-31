@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import { getPluginInstallDir, getStateDir } from '../lib/platform.js';
 import { uninstallWrapper } from '../wrapper/wrapper.js';
+import { getAdapter } from './host-registry.js';
 
 const MARKETPLACE_NAME = 'oh-my-sdd';
 const PLUGIN_NAME = 'oh-my-sdd';
@@ -122,34 +123,29 @@ async function uninstallForClaude({ announce }) {
 }
 
 async function main({ purge = false, tool } = {}) {
-  // 1. 卸载指定工具的钩子/配置（如果指定了 tool）
+  // 1. Uninstall hooks/config for specified tool (if --tool given)
   if (tool) {
-    if (tool === 'lingma') {
-      const { uninstallForLingma: fn } = await import('./hosts/lingma-adapter.js');
-      await fn();
+    if (tool === 'claude') {
+      // Claude uninstall goes through the dedicated path below
+    } else {
+      // Use registry for lingma/opencode
+      const Adapter = getAdapter(tool);
+      await Adapter.uninstall({ announce });
       return;
     }
-    if (tool === 'opencode') {
-      const { uninstallForOpencode: fn } = await import('./hosts/opencode-adapter.js');
-      await fn();
-      return;
-    }
-    if (tool !== 'claude') {
-      process.stderr.write(`❌ 未知工具: ${tool}\n`);
-      process.exit(1);
-    }
-    // tool === 'claude' 走下面的 Claude 卸载路径
   }
 
-  // 2. 默认：完整卸载 Claude Code 路径
+  // 2. Default: full uninstall for Claude Code path
   await uninstallForClaude({ announce });
 
-  // 3. 工具未指定时，也清理 lingma / opencode（如果装过）
+  // 3. If tool not specified, also clean lingma/opencode (if installed)
   if (!tool) {
-    const { uninstallForLingma: fn } = await import('./hosts/lingma-adapter.js');
-    await fn();
-    const { uninstallForOpencode: fn2 } = await import('./hosts/opencode-adapter.js');
-    await fn2();
+    for (const hostId of ['lingma', 'opencode']) {
+      const Adapter = getAdapter(hostId);
+      if (Adapter.isInstalled()) {
+        await Adapter.uninstall({ announce });
+      }
+    }
   }
 
   if (purge) {
