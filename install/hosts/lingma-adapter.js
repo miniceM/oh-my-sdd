@@ -1,6 +1,6 @@
-// install-lingma.js — 通义灵码 lingma CN 的安装/卸载实现。
+// install/hosts/lingma-adapter.js — 通义灵码 lingma CN 的安装/卸载实现。
 //
-// 与 install-claude.js 对称：每个工具一个独立模块。
+// 与 claude-adapter.js 对称：每个工具一个独立模块。
 //
 // lingma 路径特有逻辑：
 //   1. skills 复制到 ~/.lingma/skills/
@@ -14,16 +14,15 @@
 //   3. 从 settings.json 精准删除 oms 注入的 4 个 hook 事件
 //   4. 删哨兵文件
 //
-// 共享 utilities 见 install-shared.js。
+// 共享 utilities: install/common/sentinel.js, install/common/fs.js。
 
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 
-import {
-  writeSentinel, readSentinel, sentinelPathFor, copySkillsToDir,
-} from './install-shared.js';
+import { writeSentinel, readSentinel, sentinelPathFor } from '../common/sentinel.js';
+import { copySkillsToDir } from '../common/fs.js';
 
 const HOME = homedir();
 

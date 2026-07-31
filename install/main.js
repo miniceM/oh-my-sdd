@@ -1,15 +1,22 @@
 #!/usr/bin/env node
-// install.js — oh-my-sdd 多工具调度入口。
+// install/main.js — oh-my-sdd 多工具调度入口。
 //
 // 架构：
-//   install.js (本文件)        ← 纯调度：preflightFor(tool) + main(options) + detectDefaultTool
-//     ├── hooks/lib/install-claude.js    ← Claude Code 路径（marketplace + plugin + wrapper）
-//     ├── hooks/lib/install-lingma.js    ← 通义灵码 Lingma CN 路径（skills 复制 + rules 写入 + settings.json 合并）
-//     └── hooks/lib/install-shared.js   ← 共享 utilities（哨兵、copyDirRecursive、copySkillsToDir）
+//   install/main.js (本文件)   ← 纯调度：preflightFor(tool) + main(options) + detectDefaultTool
+//     ├── install/hosts/claude-adapter.js    ← Claude Code 路径（marketplace + plugin + wrapper）
+//     ├── install/hosts/lingma-adapter.js    ← 通义灵码 Lingma CN 路径（skills 复制 + rules 写入 + settings.json 合并）
+//     └── install/hosts/opencode-adapter.js  ← OpenCode 路径（plugin + hooks + content + skills）
+//
+// 共享 utilities:
+//   - install/common/sentinel.js — 哨兵系统（记录 baseline 注入位置）
+//   - install/common/fs.js — 文件复制工具（sync/async）
+//   - install/common/config-patcher.js — opencode.json 修改
+//   - install/common/superpowers-installer.js — superpowers-zh 集成
 //
 // 工具特定前置检查（preflightFor）：
 //   - claude:   iam CLI（oms-login）+ openspec CLI（/sdd-review 归档用）
-//   - lingma:    lingma CLI / ~/.lingma/ 目录检测（不在则提示装通义灵码）
+//   - lingma:   lingma CLI / ~/.lingma/ 目录检测（不在则提示装通义灵码）
+//   - opencode: opencode CLI / ~/.config/opencode/ 目录检测
 //
 // 向后兼容：
 //   - 不传 --tool: 等价于 v0.1.0 的 npm postinstall 行为（自动检测 → claude）
@@ -22,9 +29,9 @@ import { fileURLToPath } from 'node:url';
 
 import { checkNodeVersion, isIamInPath } from '../hooks/lib/platform.js';
 import { ensureStateDir } from '../hooks/lib/state-dir.js';
-import { installForClaude, isClaudeInstalled } from '../hooks/lib/install-claude.js';
-import { installForLingma } from '../hooks/lib/install-lingma.js';
-import { installForOpencode, isOpenCodeInstalled } from '../hooks/lib/install-opencode.js';
+import { installForClaude, isClaudeInstalled } from './hosts/claude-adapter.js';
+import { installForLingma } from './hosts/lingma-adapter.js';
+import { installForOpencode, isOpenCodeInstalled } from './hosts/opencode-adapter.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, '..');

@@ -13,8 +13,8 @@ const SKILLS_SRC = join(PACKAGE_ROOT, 'skills');
 // 集成测试：把 Lingma 安装/卸载的副作用
 // 重定向到临时 HOME 目录，避免污染真实用户环境。
 //
-// 策略：通过设置 HOME env 调用 install-shared.js 中的导出函数。
-// install-shared.js 用 homedir() 而非 process.env.HOME，
+// 策略：通过设置 HOME env 调用 install/common/fs.js 中的导出函数。
+// fs.js 用 homedir() 而非 process.env.HOME，
 // 所以我们必须实际改 homedir 或 mock。最简方案：
 // 直接用真实 homedir() 路径前缀的临时子目录。
 // ============================================
@@ -27,7 +27,7 @@ function makeFakeHome() {
 test('integration: skills copy creates expected files for lingma install', async () => {
   const fakeHome = makeFakeHome();
   try {
-    const { copySkillsToDir } = await import('../../hooks/lib/install-shared.js');
+    const { copySkillsToDir } = await import('../../install/common/fs.js');
 
     const destSkills = join(fakeHome, 'fake-lingma-skills');
     const messages = [];
@@ -46,7 +46,7 @@ test('integration: skills copy creates expected files for lingma install', async
 });
 
 test('integration: AGENTS.md sentinel block is idempotent (re-install does not duplicate)', async () => {
-  // Sentinel strings (kept in sync with hooks/lib/install-shared.js)
+  // Sentinel strings (kept in sync with install/common/sentinel.js)
   const SENTINEL_BEGIN = '<!-- OH-MY-SDD:BEGIN (do not edit between these markers) -->';
   const SENTINEL_END = '<!-- OH-MY-SDD:END -->';
   const SENTINEL_RE = /<!-- OH-MY-SDD:BEGIN[\s\S]*?<!-- OH-MY-SDD:END -->\n?/g;
@@ -174,7 +174,7 @@ test('integration: Lingma uninstall removes only oms events', async () => {
 });
 
 test('integration: skills directory contains all 17 SKILL.md files', async () => {
-  const { copySkillsToDir } = await import('../../hooks/lib/install-shared.js');
+  const { copySkillsToDir } = await import('../../install/common/fs.js');
   const dest = makeFakeHome();
   const count = await copySkillsToDir(SKILLS_SRC, dest, () => {});
   // 应至少 17 个（可能有 18+ 如果后续新增）

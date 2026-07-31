@@ -1,6 +1,6 @@
-// install-claude.js — Claude Code 路径的安装/卸载实现。
+// install/hosts/claude-adapter.js — Claude Code 路径的安装/卸载实现。
 //
-// 与 install-lingma.js 对称：每个工具一个独立模块。
+// 与 lingma-adapter.js 对称：每个工具一个独立模块。
 //
 // Claude 路径特有逻辑：
 //   1. 注册 marketplace（`claude plugin marketplace add`）
@@ -17,7 +17,7 @@
 
 import { execFileSync, spawn } from 'node:child_process';
 import { installWrapper, findClaudeOriginal } from '../../wrapper/wrapper.js';
-import { ensureStateDir } from './state-dir.js';
+import { ensureStateDir } from '../../hooks/lib/state-dir.js';
 
 const MARKETPLACE_NAME = 'oh-my-sdd';
 const PLUGIN_NAME = 'oh-my-sdd';

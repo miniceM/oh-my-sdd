@@ -1,5 +1,5 @@
 /**
- * Tests for copy-utils.js - File copy utilities
+ * Tests for install/common/fs.js - File copy utilities (sync variants)
  *
  * Focus: recursive directory copying (bug fix for brainstorming/scripts/)
  */
@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { copyDir } from '../../hooks/lib/copy-utils.js';
+import { copyDir } from '../../install/common/fs.js';
 
 test('copyDir: copies files recursively when recursive: true', async () => {
   const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'copy-test-'));

@@ -7,8 +7,8 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, readdirSync } from 'node:fs';
 import { join, dirname, isAbsolute } from 'node:path';
-import { OTHER } from './constants.js';
-import { SUPERPOWERS_STAGING_DIR } from './paths.js';
+import { OTHER } from '../../hooks/lib/constants.js';
+import { SUPERPOWERS_STAGING_DIR } from '../../hooks/lib/paths.js';
 
 /**
  * Announce message to stderr.

@@ -1,26 +1,26 @@
-// install-opencode.js — OpenCode 安装/卸载入口。
+// install/hosts/opencode-adapter.js — OpenCode 安装/卸载入口。
 //
 // 主入口：协调各子模块完成安装流程。
 // 具体逻辑已拆分到：
-//   - constants.js — 命名常量
-//   - paths.js — 路径常量
-//   - builder.js — TypeScript 编译
-//   - copy-utils.js — 文件复制工具
-//   - superpowers-installer.js — superpowers-zh 集成
-//   - command-generator.js — 命令 wrapper 模板
-//   - config-patcher.js — opencode.json 修改
+//   - hooks/lib/constants.js — 命名常量
+//   - hooks/lib/paths.js — 路径常量
+//   - opencode/build.js — TypeScript 编译
+//   - install/common/fs.js — 文件复制工具
+//   - install/common/superpowers-installer.js — superpowers-zh 集成
+//   - hooks/lib/command-generator.js — 命令 wrapper 模板
+//   - install/common/config-patcher.js — opencode.json 修改
 //
 // Windows 不支持：OpenCode 主要跑在 macOS/Linux。
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, readdirSync, copyFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { OPENCODE_PLUGIN_DIR, OPENCODE_COMMANDS_DIR, OPENCODE_CONFIG_DIR } from './paths.js';
+import { OPENCODE_PLUGIN_DIR, OPENCODE_COMMANDS_DIR, OPENCODE_CONFIG_DIR } from '../../hooks/lib/paths.js';
 import { buildOpencodePlugin } from '../../opencode/build.js';
-import { copyDir } from './copy-utils.js';
-import { installSuperpowersZh, findDelegatedSkillsSource } from './superpowers-installer.js';
-import { SDD_COMMANDS, installCommandFiles } from './command-generator.js';
-import { patchOpencodeJson, unpatchOpencodeJson } from './config-patcher.js';
+import { copyDir } from '../common/fs.js';
+import { installSuperpowersZh, findDelegatedSkillsSource } from '../common/superpowers-installer.js';
+import { SDD_COMMANDS, installCommandFiles } from '../../hooks/lib/command-generator.js';
+import { patchOpencodeJson, unpatchOpencodeJson } from '../common/config-patcher.js';
 
 /**
  * Announce message to stderr.
