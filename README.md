@@ -1,6 +1,6 @@
 # @cli-tools/oh-my-sdd
 
-企业级 SDD 工作流插件。**支持 3 种 AI 编程工具**：Claude Code、通义灵码 Lingma、OpenCode。skills + HARD_RULE 安全门禁跨工具复用。
+企业级 SDD 工作流插件。**支持 4 种 AI 编程工具**：Claude Code、通义灵码 Lingma、OpenCode、KiloCode。skills + HARD_RULE 安全门禁跨工具复用。
 
 **核心能力：**
 - 5 个 SDD 斜杠命令：`/sdd-spec` `/sdd-plan` `/sdd-task` `/sdd-apply` `/sdd-review`
@@ -63,6 +63,22 @@ opencode
 ⚠️ **baseline 注入**：依赖 `@opencode-ai/plugin` 1.15+ 的 `experimental.chat.system.transform` hook
 ⚠️ **HARD_RULE 强制**：通过自维护 TypeScript 适配层，`permissionDecision: "deny"` 转译为 OpenCode 的 `throw new Error()`
 
+### KiloCode
+
+```bash
+# 1. 全局安装
+npm install -g --foreground-scripts @cli-tools/oh-my-sdd
+
+# 2. 显式选择工具
+oms-install --tool kilocode
+
+# 3. 重启 KiloCode IDE
+#    skills 已加载到 ~/.kilocode/skills/
+#    /sdd-spec <change-name>
+```
+
+⚠️ **重要限制**：KiloCode 当前无 hook 机制（无 PreToolUse/PostToolUse）。HARD_RULE 强制仅为**建议性**（baseline 注入到 system prompt，无运行期阻断）。安全敏感场景建议使用 Claude Code 或 OpenCode。
+
 ### Claude Code（默认）
 
 ```bash
@@ -95,7 +111,8 @@ oms-install --tool lingma
 ```bash
 oms-install                       # 装 Claude（自动检测）
 oms-install --tool lingma          # 再装 lingma
-# 两套独立，互不覆盖——skills 各自复制到工具专属目录
+oms-install --tool kilocode        # 再装 KiloCode
+# 三套独立，互不覆盖——skills 各自复制到工具专属目录
 ```
 
 > 💡 **关于 `--foreground-scripts`**：npm 默认静默 postinstall 输出（即使 stderr 也吞），加这个 flag 才能看到安装进度和"下一步"提示。**不加也能装成功**，只是看不到提示——安装失败时 npm 会自动显示所有输出。
@@ -282,7 +299,7 @@ oh-my-sdd v0.2+ 支持在多种 AI 编程工具中加载。skills + hooks + HARD
 | **Claude Code** | ✅ 完整支持（默认） | `npm install -g @cli-tools/oh-my-sdd` | `~/.claude/skills/` | JSON hooks + wrapper |
 | **OpenCode** | ✅ 完整支持（v0.3+） | `oms-install --tool opencode` | `~/.config/opencode/plugins/oh-my-sdd/` | TypeScript adapter + experimental hook |
 | **通义灵码 Lingma** | ✅ 完整支持（基于文档解读） | `oms-install --tool lingma` | `~/.lingma/skills/` | JSON hooks（与 Claude Code 同构） |
-| **KiloCode** | ❌ 暂不支持 | — | — | 无 hook 机制，HARD_RULE 无法强制 |
+| **KiloCode** | ⚠️ 部分支持（无 hook 强制） | `oms-install --tool kilocode` | `~/.kilocode/skills/` | 无 hook 机制，HARD_RULE 仅 advisory |
 | **Cursor** | 📋 v0.3 路线 | — | — | — |
 | **Windsurf** | 📋 v0.3 路线 | — | — | — |
 
