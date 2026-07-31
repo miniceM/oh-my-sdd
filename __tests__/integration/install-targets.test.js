@@ -114,7 +114,7 @@ test('integration: Lingma settings.json merge preserves user custom events', asy
   };
   writeFileSync(settingsPath, JSON.stringify(existing, null, 2));
 
-  // 模拟 oms 注入
+  // 模拟 oms 注入：同事件数组追加 OMS handler，不覆盖用户 handler
   const omsEvents = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop'];
   const omsHooks = {
     PreToolUse: [{ matcher: 'Edit|Write|MultiEdit', hooks: [{ command: 'oms-pre' }] }],
@@ -126,15 +126,16 @@ test('integration: Lingma settings.json merge preserves user custom events', asy
   const parsed = JSON.parse(readFileSync(settingsPath, 'utf8'));
   if (!parsed.hooks) parsed.hooks = {};
   for (const evt of omsEvents) {
-    parsed.hooks[evt] = omsHooks[evt];
+    parsed.hooks[evt] = [...(parsed.hooks[evt] ?? []), ...omsHooks[evt]];
   }
   writeFileSync(settingsPath, JSON.stringify(parsed, null, 2) + '\n');
 
   // 验证
   const after = JSON.parse(readFileSync(settingsPath, 'utf8'));
-  // PreToolUse 被 oms 覆盖
-  assert.ok(after.hooks.PreToolUse[0].matcher.includes('Edit|Write|MultiEdit'));
-  assert.equal(after.hooks.PreToolUse[0].hooks[0].command, 'oms-pre');
+  // PreToolUse 同时保留用户与 OMS handler
+  assert.equal(after.hooks.PreToolUse[0].hooks[0].command, 'user-bash-hook');
+  assert.ok(after.hooks.PreToolUse[1].matcher.includes('Edit|Write|MultiEdit'));
+  assert.equal(after.hooks.PreToolUse[1].hooks[0].command, 'oms-pre');
   // CustomUserEvent 保留
   assert.ok(after.hooks.CustomUserEvent);
   // someOtherConfig 保留
@@ -145,12 +146,15 @@ test('integration: Lingma settings.json merge preserves user custom events', asy
   }
 });
 
-test('integration: Lingma uninstall removes only oms events', async () => {
+test('integration: Lingma uninstall removes only oms handlers within shared events', async () => {
   const fakeLingmaDir = makeFakeHome();
   const settingsPath = join(fakeLingmaDir, 'settings.json');
   const initial = {
     hooks: {
-      PreToolUse: [{ matcher: 'Edit|Write|MultiEdit', hooks: [{ command: 'oms-pre' }] }],
+      PreToolUse: [
+        { matcher: 'Bash', hooks: [{ command: 'user-pre' }] },
+        { matcher: 'Edit|Write|MultiEdit', hooks: [{ command: 'oms-pre' }] },
+      ],
       PostToolUse: [{ matcher: 'Edit|Write|MultiEdit', hooks: [{ command: 'oms-post' }] }],
       CustomUserEvent: [{ matcher: '*', hooks: [{ command: 'user-custom' }] }],
     },
@@ -160,15 +164,20 @@ test('integration: Lingma uninstall removes only oms events', async () => {
   // 模拟卸载
   const omsEvents = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop'];
   const parsed = JSON.parse(readFileSync(settingsPath, 'utf8'));
+  const omsCommands = new Set(['oms-pre', 'oms-post', 'oms-ups', 'oms-stop']);
   for (const evt of omsEvents) {
-    delete parsed.hooks[evt];
+    parsed.hooks[evt] = (parsed.hooks[evt] ?? []).flatMap(entry => {
+      const hooks = entry.hooks.filter(hook => !omsCommands.has(hook.command));
+      return hooks.length > 0 ? [{ ...entry, hooks }] : [];
+    });
+    if (parsed.hooks[evt].length === 0) delete parsed.hooks[evt];
   }
   if (Object.keys(parsed.hooks).length === 0) delete parsed.hooks;
   writeFileSync(settingsPath, JSON.stringify(parsed, null, 2) + '\n');
 
   // 验证
   const after = JSON.parse(readFileSync(settingsPath, 'utf8'));
-  assert.ok(!after.hooks.PreToolUse, 'PreToolUse 应被删除');
+  assert.equal(after.hooks.PreToolUse[0].hooks[0].command, 'user-pre', '用户 PreToolUse 应保留');
   assert.ok(!after.hooks.PostToolUse, 'PostToolUse 应被删除');
   assert.ok(after.hooks.CustomUserEvent, 'CustomUserEvent 应保留');
 });

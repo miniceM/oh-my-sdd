@@ -90,61 +90,74 @@ function fileContentEqual(a, b) {
   }
 }
 
-function copyDirSafe(srcDir, dstDir, filterFn, label) {
-  if (!existsSync(srcDir) || !statSync(srcDir).isDirectory()) {
-    console.warn(`[postinstall] ${label}: source missing ${srcDir}`);
+export function copyDirSafe(srcDir, dstDir, filterFn, label, ops = {}) {
+  const exists = ops.existsSync ?? existsSync;
+  const stat = ops.statSync ?? statSync;
+  const mkdir = ops.mkdirSync ?? mkdirSync;
+  const readdir = ops.readdirSync ?? readdirSync;
+  const copy = ops.cpSync ?? cpSync;
+  const contentEqual = ops.fileContentEqual ?? fileContentEqual;
+  const warn = ops.warn ?? console.warn;
+  const now = ops.now ?? Date.now;
+
+  if (!exists(srcDir) || !stat(srcDir).isDirectory()) {
+    warn(`[postinstall] ${label}: source missing ${srcDir}`);
     return 0;
   }
-  mkdirSync(dstDir, { recursive: true });
+  mkdir(dstDir, { recursive: true });
 
-  const entries = readdirSync(srcDir);
+  const entries = readdir(srcDir);
   let installed = 0;
   for (const name of entries) {
     if (!filterFn(name)) continue;
     const src = join(srcDir, name);
     const dst = join(dstDir, name);
 
-    if (existsSync(dst)) {
+    if (exists(dst)) {
       // directory (skill) or file (command)?
-      const srcStat = statSync(src);
+      const srcStat = stat(src);
+      let backupSucceeded = true;
       if (srcStat.isDirectory()) {
         // compare SKILL.md only — cheapest signal
         const srcSkill = join(src, 'SKILL.md');
         const dstSkill = join(dst, 'SKILL.md');
-        if (existsSync(srcSkill) && existsSync(dstSkill) && fileContentEqual(srcSkill, dstSkill)) {
+        if (exists(srcSkill) && exists(dstSkill) && contentEqual(srcSkill, dstSkill)) {
           continue; // identical, skip
         }
         // backup existing then overwrite
-        const backup = `${dst}.oh-my-sdd-backup-${Date.now()}`;
+        const backup = `${dst}.oh-my-sdd-backup-${now()}`;
         try {
-          cpSync(dst, backup, { recursive: true });
-          console.warn(`[postinstall] ${label}: backed up ${name} -> ${backup}`);
+          copy(dst, backup, { recursive: true });
+          warn(`[postinstall] ${label}: backed up ${name} -> ${backup}`);
         } catch (e) {
-          console.warn(`[postinstall] ${label}: backup failed for ${name}: ${e.message}`);
+          backupSucceeded = false;
+          warn(`[postinstall] ${label}: backup failed for ${name}; preserving existing target: ${e.message}`);
         }
       } else {
-        if (fileContentEqual(src, dst)) continue;
-        const backup = `${dst}.oh-my-sdd-backup-${Date.now()}`;
+        if (contentEqual(src, dst)) continue;
+        const backup = `${dst}.oh-my-sdd-backup-${now()}`;
         try {
-          cpSync(src, backup);
-          console.warn(`[postinstall] ${label}: backed up ${name} -> ${backup}`);
+          copy(src, backup);
+          warn(`[postinstall] ${label}: backed up ${name} -> ${backup}`);
         } catch (e) {
-          console.warn(`[postinstall] ${label}: backup failed for ${name}: ${e.message}`);
+          backupSucceeded = false;
+          warn(`[postinstall] ${label}: backup failed for ${name}; preserving existing target: ${e.message}`);
         }
       }
+      if (!backupSucceeded) continue;
     }
 
     try {
-      cpSync(src, dst, { recursive: true });
+      copy(src, dst, { recursive: true });
       installed++;
     } catch (e) {
-      console.warn(`[postinstall] ${label}: copy failed ${name}: ${e.message}`);
+      warn(`[postinstall] ${label}: copy failed ${name}: ${e.message}`);
     }
   }
   return installed;
 }
 
-function main() {
+export function main() {
   const results = [];
 
   const n1 = copyDirSafe(PLUGIN_SKILLS_SRC, OPENCODE_SKILLS_DIR, isOwnedSkill, 'opencode-skills');
@@ -163,9 +176,11 @@ function main() {
   console.log(`[postinstall] oh-my-sdd installed: ${results.join(', ')}`);
 }
 
-try {
-  main();
-} catch (e) {
-  // Never break `npm install`.
-  console.warn(`[postinstall] oh-my-sdd: ${e.message}`);
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    main();
+  } catch (e) {
+    // Never break `npm install`.
+    console.warn(`[postinstall] oh-my-sdd: ${e.message}`);
+  }
 }

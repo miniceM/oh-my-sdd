@@ -45,49 +45,58 @@ test('lingma hook merge preserves user custom events', () => {
     },
   };
 
-  // 模拟 generateLingmaSettings 的合并逻辑
+  // 模拟 handler 级合并逻辑
   if (!existing.hooks) existing.hooks = {};
   for (const evt of omsEvents) {
     if (oms.hooks[evt]) {
-      existing.hooks[evt] = oms.hooks[evt];
+      existing.hooks[evt] = [...(existing.hooks[evt] ?? []), ...oms.hooks[evt]];
     }
   }
 
-  // PreToolUse 应被 oms 覆盖
-  assert.ok(existing.hooks.PreToolUse[0].matcher.includes('Edit'));
+  // PreToolUse 同时保留用户与 OMS handler
+  assert.equal(existing.hooks.PreToolUse[0].hooks[0].command, 'user-hook');
+  assert.ok(existing.hooks.PreToolUse[1].matcher.includes('Edit'));
   // CustomEvent 应保留
   assert.ok(existing.hooks.CustomEvent);
 });
 
-test('lingma hook removal keeps non-oms events intact', () => {
-  // 卸载后：oms 4 个事件被删，但用户的 CustomEvent 保留
+test('lingma hook removal keeps user handlers in shared events intact', () => {
+  // 卸载后：只删除 OMS handler，用户同事件 handler 与 CustomEvent 均保留
   const settings = {
     hooks: {
-      PreToolUse: [{ matcher: 'Edit', hooks: [{}] }],
+      PreToolUse: [
+        { matcher: 'Bash', hooks: [{ command: 'user-hook' }] },
+        { matcher: 'Edit', hooks: [{ command: 'oms-hook' }] },
+      ],
       CustomEvent: [{ matcher: '*', hooks: [{}] }],
     },
   };
   const omsEvents = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop'];
   for (const evt of omsEvents) {
-    delete settings.hooks[evt];
+    settings.hooks[evt] = (settings.hooks[evt] ?? []).filter(entry =>
+      entry.hooks.every(hook => hook.command !== 'oms-hook'));
+    if (settings.hooks[evt].length === 0) delete settings.hooks[evt];
   }
 
-  // hooks 容器保留（CustomEvent 还在）
+  // hooks 容器与用户同事件 handler 保留
   assert.ok(settings.hooks, 'hooks 容器应保留');
-  assert.deepEqual(Object.keys(settings.hooks), ['CustomEvent']);
+  assert.equal(settings.hooks.PreToolUse[0].hooks[0].command, 'user-hook');
+  assert.ok(settings.hooks.CustomEvent);
 });
 
 test('lingma hook removal deletes hooks container when fully empty', () => {
   // 当只有 oms 事件时，全部删除后 hooks 容器应被清除
   const settings = {
     hooks: {
-      PreToolUse: [{ matcher: 'Edit', hooks: [{}] }],
-      PostToolUse: [],
+      PreToolUse: [{ matcher: 'Edit', hooks: [{ command: 'oms-hook' }] }],
+      PostToolUse: [{ matcher: 'Edit', hooks: [{ command: 'oms-hook' }] }],
     },
   };
   const omsEvents = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop'];
   for (const evt of omsEvents) {
-    delete settings.hooks[evt];
+    settings.hooks[evt] = (settings.hooks[evt] ?? []).filter(entry =>
+      entry.hooks.every(hook => hook.command !== 'oms-hook'));
+    if (settings.hooks[evt].length === 0) delete settings.hooks[evt];
   }
   if (Object.keys(settings.hooks).length === 0) delete settings.hooks;
 

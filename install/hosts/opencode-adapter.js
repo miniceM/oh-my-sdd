@@ -15,7 +15,7 @@
 //
 // Windows 不支持：OpenCode 主要跑在 macOS/Linux。
 
-import { existsSync, mkdirSync, readdirSync, copyFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, copyFileSync, statSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { HostAdapter } from '../host-adapter.js';
@@ -25,10 +25,12 @@ import { buildOpencodePlugin } from '../../opencode/build.js';
 import { installSuperpowersZh, findDelegatedSkillsSource } from '../common/superpowers-installer.js';
 import { SDD_COMMANDS, installCommandFiles } from '../../lib/command-generator.js';
 import { patchOpencodeJson, unpatchOpencodeJson } from '../common/config-patcher.js';
+import { removeSentinelBlock } from '../common/sentinel.js';
 import {
   OPENCODE_PLUGIN_DIR,
   OPENCODE_COMMANDS_DIR,
   OPENCODE_CONFIG_DIR,
+  OPENCODE_AGENTS_MD,
 } from '../../lib/paths.js';
 
 export class OpenCodeAdapter extends HostAdapter {
@@ -110,7 +112,15 @@ export class OpenCodeAdapter extends HostAdapter {
     // 3. 从 opencode.json 移除
     unpatchOpencodeJson();
 
-    // 4. 保留 ~/.oh-my-sdd/（除非 --purge 由 caller 处理）
+    // 4. 精准移除 fallback AGENTS.md 中的 OMS 区块，保留用户内容
+    if (existsSync(OPENCODE_AGENTS_MD)) {
+      const existing = readFileSync(OPENCODE_AGENTS_MD, 'utf8');
+      const preserved = removeSentinelBlock(existing);
+      if (preserved.length === 0) unlinkSync(OPENCODE_AGENTS_MD);
+      else writeFileSync(OPENCODE_AGENTS_MD, preserved);
+    }
+
+    // 5. 保留 ~/.oh-my-sdd/（除非 --purge 由 caller 处理）
   }
 
   // ============================================

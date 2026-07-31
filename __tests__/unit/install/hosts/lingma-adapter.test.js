@@ -1,7 +1,37 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { LingmaAdapter } from '../../../../install/hosts/lingma-adapter.js';
 import { HostAdapter } from '../../../../install/host-adapter.js';
+
+const TEST_DIR = dirname(fileURLToPath(import.meta.url));
+const PACKAGE_ROOT = resolve(TEST_DIR, '..', '..', '..', '..');
+const ADAPTER_URL = new URL('../../../../install/hosts/lingma-adapter.js', import.meta.url).href;
+
+function runAdapter(homeDir, method) {
+  const script = `
+    import { LingmaAdapter } from ${JSON.stringify(ADAPTER_URL)};
+    await LingmaAdapter.${method}({
+      PACKAGE_ROOT: ${JSON.stringify(PACKAGE_ROOT)},
+      announce: () => {},
+    });
+  `;
+  execFileSync(process.execPath, ['--input-type=module', '--eval', script], {
+    env: { ...process.env, HOME: homeDir },
+    stdio: 'pipe',
+  });
+}
 
 describe('LingmaAdapter', () => {
   it('extends HostAdapter', () => {
@@ -27,5 +57,114 @@ describe('LingmaAdapter', () => {
 
   it('uninstall() is an async function', () => {
     assert.equal(LingmaAdapter.uninstall.constructor.name, 'AsyncFunction');
+  });
+
+  it('preserves same-event user handlers and is idempotent on reinstall', () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), 'oms-lingma-home-'));
+    const settingsPath = join(fakeHome, '.lingma', 'settings.json');
+    try {
+      mkdirSync(dirname(settingsPath), { recursive: true });
+      writeFileSync(settingsPath, JSON.stringify({
+        hooks: {
+          PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'user-pre-hook' }] }],
+          Stop: [{ matcher: '*', hooks: [{ type: 'command', command: 'user-stop-hook' }] }],
+        },
+        userSetting: true,
+      }));
+
+      runAdapter(fakeHome, 'install');
+      runAdapter(fakeHome, 'install');
+
+      const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
+      const preCommands = settings.hooks.PreToolUse.flatMap(entry => entry.hooks.map(hook => hook.command));
+      const stopCommands = settings.hooks.Stop.flatMap(entry => entry.hooks.map(hook => hook.command));
+
+      assert.equal(preCommands.filter(command => command === 'user-pre-hook').length, 1);
+      assert.equal(preCommands.filter(command => command.includes('/hooks/pre-tool-use.js')).length, 1);
+      assert.equal(stopCommands.filter(command => command === 'user-stop-hook').length, 1);
+      assert.equal(stopCommands.filter(command => command.includes('/hooks/session-end.js')).length, 1);
+      assert.equal(settings.userSetting, true);
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  it('uninstall removes only owned skills and OMS hook handlers', () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), 'oms-lingma-home-'));
+    const lingmaDir = join(fakeHome, '.lingma');
+    const settingsPath = join(lingmaDir, 'settings.json');
+    const customSkill = join(lingmaDir, 'skills', 'my-private-skill', 'SKILL.md');
+    try {
+      mkdirSync(dirname(settingsPath), { recursive: true });
+      mkdirSync(dirname(customSkill), { recursive: true });
+      writeFileSync(customSkill, '# user-owned skill\n');
+      writeFileSync(settingsPath, JSON.stringify({
+        hooks: {
+          PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'user-pre-hook' }] }],
+          Stop: [{ matcher: '*', hooks: [{ type: 'command', command: 'user-stop-hook' }] }],
+        },
+      }));
+
+      runAdapter(fakeHome, 'install');
+      assert.ok(existsSync(join(lingmaDir, 'skills', 'sdd-spec', 'SKILL.md')));
+      const ownership = JSON.parse(readFileSync(
+        join(fakeHome, '.oh-my-sdd', 'baseline-lingma.sentinel'),
+        'utf8',
+      ));
+      assert.ok(ownership.skill_names.includes('sdd-spec'));
+      assert.ok(ownership.hook_commands.some(command => command.includes('/hooks/pre-tool-use.js')));
+
+      runAdapter(fakeHome, 'uninstall');
+
+      assert.ok(existsSync(customSkill), 'user-owned skill must survive uninstall');
+      assert.ok(!existsSync(join(lingmaDir, 'skills', 'sdd-spec')), 'OMS-owned skill must be removed');
+
+      const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
+      const preCommands = settings.hooks.PreToolUse.flatMap(entry => entry.hooks.map(hook => hook.command));
+      const stopCommands = settings.hooks.Stop.flatMap(entry => entry.hooks.map(hook => hook.command));
+      assert.deepEqual(preCommands, ['user-pre-hook']);
+      assert.deepEqual(stopCommands, ['user-stop-hook']);
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  it('uninstall cleans legacy OMS hooks when sentinel lacks ownership metadata', () => {
+    // Arrange: simulate an installation created before hook_commands existed.
+    const fakeHome = mkdtempSync(join(tmpdir(), 'oms-lingma-legacy-home-'));
+    const lingmaDir = join(fakeHome, '.lingma');
+    const settingsPath = join(lingmaDir, 'settings.json');
+    const sentinelPath = join(fakeHome, '.oh-my-sdd', 'baseline-lingma.sentinel');
+    try {
+      mkdirSync(dirname(settingsPath), { recursive: true });
+      mkdirSync(dirname(sentinelPath), { recursive: true });
+      const template = JSON.parse(readFileSync(
+        join(PACKAGE_ROOT, 'install', 'common', 'fixtures', 'lingma-settings.json'),
+        'utf8',
+      ).replaceAll('<PLUGIN_ROOT>', PACKAGE_ROOT));
+      writeFileSync(settingsPath, JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            { matcher: 'Bash', hooks: [{ type: 'command', command: 'user-pre-hook' }] },
+            ...template.hooks.PreToolUse,
+          ],
+        },
+      }));
+      writeFileSync(sentinelPath, JSON.stringify({
+        tool: 'lingma',
+        dest: join(lingmaDir, 'rules', 'oh-my-sdd.md'),
+        block_marker: null,
+      }));
+
+      // Act
+      runAdapter(fakeHome, 'uninstall');
+
+      // Assert
+      const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
+      const commands = settings.hooks.PreToolUse.flatMap(entry => entry.hooks.map(hook => hook.command));
+      assert.deepEqual(commands, ['user-pre-hook']);
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
   });
 });

@@ -3,7 +3,8 @@
 // 提供：
 //   - SENTINEL_BEGIN/END 标记（HTML 注释包裹）
 //   - sentinelPathFor(tool): 哨兵文件路径
-//   - writeSentinel(tool, dest, blockMarker, announce): 写入哨兵元数据
+//   - upsertSentinelBlock/removeSentinelBlock: 精准合并/移除 OMS 内容块
+//   - writeSentinel(tool, dest, blockMarker, announce, metadata): 写入哨兵元数据
 //   - readSentinel(tool): 读取哨兵元数据
 //
 // 用法：install/hosts/lingma-adapter.js 在注入 baseline 后调用 writeSentinel，
@@ -20,6 +21,21 @@ export const SENTINEL_END = '<!-- OH-MY-SDD:END -->';
 export const SENTINEL_RE = /<!-- OH-MY-SDD:BEGIN[\s\S]*?<!-- OH-MY-SDD:END -->\n?/g;
 
 /**
+ * 将 OMS 内容块合并进已有文件。重复执行只保留一个 OMS 块。
+ * 除了为无结尾换行的文件补充分隔换行，不改写用户内容。
+ */
+export function upsertSentinelBlock(existingContent, blockContent) {
+  const cleaned = removeSentinelBlock(existingContent);
+  const separator = cleaned.length > 0 && !cleaned.endsWith('\n') ? '\n' : '';
+  return `${cleaned}${separator}${SENTINEL_BEGIN}\n${blockContent.trimEnd()}\n${SENTINEL_END}\n`;
+}
+
+/** 精准移除 OMS 内容块，保留块外的用户内容。 */
+export function removeSentinelBlock(content) {
+  return content.replace(SENTINEL_RE, '');
+}
+
+/**
  * 哨兵文件路径：~/.oh-my-sdd/baseline-{tool}.sentinel
  * 卸载时通过此文件知道 baseline 注入到哪里（可能与默认位置不同）。
  */
@@ -33,10 +49,11 @@ export function sentinelPathFor(tool) {
  * 写入哨兵文件，记录 baseline 注入位置和元数据。
  * 卸载时通过此文件精准定位清理。
  */
-export async function writeSentinel(tool, dest, blockMarker, announce) {
+export async function writeSentinel(tool, dest, blockMarker, announce, metadata = {}) {
   const p = sentinelPathFor(tool);
   await mkdir(dirname(p), { recursive: true });
   const meta = {
+    ...metadata,
     tool,
     dest,
     block_marker: blockMarker,

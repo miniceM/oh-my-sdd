@@ -3,16 +3,17 @@
 // Lingma-specific logic:
 //   1. Copy skills to ~/.lingma/skills/
 //   2. Write baseline to ~/.lingma/rules/oh-my-sdd.md (Always-type rule)
-//   3. Deep-merge hooks into ~/.lingma/settings.json (preserve user's other hooks)
+//   3. Merge OMS handlers into ~/.lingma/settings.json (preserve user handlers)
 //   4. Write sentinel to ~/.oh-my-sdd/baseline-lingma.sentinel
+//   5. Record OMS-owned skills and hook commands for precise uninstall
 //
 // Uninstall:
-//   1. Delete skills dir
+//   1. Delete only OMS-owned skill subdirectories
 //   2. Delete rule file
-//   3. Surgically remove the 4 OMS hook events from settings.json
+//   3. Surgically remove OMS handlers from hook events
 //   4. Delete sentinel
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
@@ -31,7 +32,8 @@ const LINGMA_SETTINGS = join(LINGMA_DIR, 'settings.json');
 const LINGMA_RULES_DIR = join(LINGMA_DIR, 'rules');
 const LINGMA_RULE_FILE = join(LINGMA_RULES_DIR, 'oh-my-sdd.md');
 
-// Hook events OMS injects (uninstall removes only these)
+// Hook events OMS injects. The event itself is shared with users; only OMS
+// command handlers inside these arrays belong to this plugin.
 const OOMS_EVENTS = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop'];
 
 export class LingmaAdapter extends HostAdapter {
@@ -60,9 +62,13 @@ export class LingmaAdapter extends HostAdapter {
 
     announce('→ 安装通义灵码 lingma CN 适配');
     await copySkillsToDir(join(PACKAGE_ROOT, 'skills'), LINGMA_SKILLS_DIR, announce);
+    const skillNames = await this.#listSkillNames(join(PACKAGE_ROOT, 'skills'));
     await this.#injectBaseline(announce);
-    await writeSentinel('lingma', LINGMA_RULE_FILE, null, announce);
-    await this.#generateSettings(PACKAGE_ROOT, announce);
+    const hookCommands = await this.#generateSettings(PACKAGE_ROOT, announce);
+    await writeSentinel('lingma', LINGMA_RULE_FILE, null, announce, {
+      skill_names: skillNames,
+      hook_commands: hookCommands,
+    });
 
     announce('');
     announce('✓ oh-my-sdd (通义灵码) 安装完成');
@@ -82,9 +88,24 @@ export class LingmaAdapter extends HostAdapter {
 
     announce('→ 卸载通义灵码 lingma 适配');
 
-    // 1. Delete skills directory
-    if (await rmIfExists(LINGMA_SKILLS_DIR)) {
-      announce(`  ✓ 已删除: ${LINGMA_SKILLS_DIR}`);
+    const sentinel = await readSentinel('lingma');
+    const packageRoot = ctx.PACKAGE_ROOT;
+    const fallbackSkillsSource = packageRoot
+      ? join(packageRoot, 'skills')
+      : resolve(dirname(new URL(import.meta.url).pathname), '..', '..', 'skills');
+    const skillNames = Array.isArray(sentinel?.skill_names)
+      ? sentinel.skill_names
+      : await this.#listSkillNames(fallbackSkillsSource);
+
+    // 1. Delete only skill directories installed by OMS. ~/.lingma/skills is
+    // shared with user-created skills and other plugins and must survive.
+    let removedSkills = 0;
+    for (const skillName of skillNames) {
+      if (!this.#isSafeSkillName(skillName)) continue;
+      if (await rmIfExists(join(LINGMA_SKILLS_DIR, skillName))) removedSkills++;
+    }
+    if (removedSkills > 0) {
+      announce(`  ✓ 已删除 ${removedSkills} 个 oh-my-sdd skills`);
     }
 
     // 2. Delete rule file
@@ -93,10 +114,13 @@ export class LingmaAdapter extends HostAdapter {
     }
 
     // 3. Remove OMS hooks from settings.json
-    await this.#removeOmsHooksFromSettings(announce);
+    let hookCommands = Array.isArray(sentinel?.hook_commands) ? sentinel.hook_commands : [];
+    if (hookCommands.length === 0 && packageRoot) {
+      hookCommands = await this.#readTemplateHookCommands(packageRoot);
+    }
+    await this.#removeOmsHooksFromSettings(hookCommands, announce);
 
     // 4. Clean up sentinel file
-    const sentinel = await readSentinel('lingma');
     if (sentinel) {
       await rmIfExists(sentinelPathFor('lingma'));
       announce('  ✓ 已删除哨兵文件');
@@ -131,6 +155,12 @@ export class LingmaAdapter extends HostAdapter {
     // Replace <PLUGIN_ROOT> with absolute path
     const tplStr = JSON.stringify(tpl).replaceAll('<PLUGIN_ROOT>', packageRoot);
     const omsHooks = JSON.parse(tplStr).hooks;
+    const currentCommands = this.#hookCommands(omsHooks);
+    const previousOwnership = await readSentinel('lingma');
+    const ownedCommands = new Set([
+      ...currentCommands,
+      ...(previousOwnership?.hook_commands ?? []),
+    ]);
 
     // Deep merge into ~/.lingma/settings.json
     let existing = {};
@@ -144,17 +174,21 @@ export class LingmaAdapter extends HostAdapter {
     }
 
     if (!existing.hooks) existing.hooks = {};
-    // Overwrite OMS-injected 4 events (don't delete user's other events)
+    // Remove only previously installed OMS handlers, then append the current
+    // template. This makes reinstall idempotent without taking ownership of an
+    // entire event array that may also contain user handlers.
     for (const evt of OOMS_EVENTS) {
-      existing.hooks[evt] = omsHooks[evt];
+      const userEntries = this.#withoutOwnedHandlers(existing.hooks[evt], ownedCommands);
+      existing.hooks[evt] = [...userEntries, ...(omsHooks[evt] ?? [])];
     }
 
     await mkdir(LINGMA_DIR, { recursive: true });
     await writeFile(LINGMA_SETTINGS, JSON.stringify(existing, null, 2) + '\n', { mode: 0o644 });
     announce(`  ✓ 通义灵码 settings.json 已更新: ${LINGMA_SETTINGS}`);
+    return currentCommands;
   }
 
-  static async #removeOmsHooksFromSettings(announce) {
+  static async #removeOmsHooksFromSettings(hookCommands, announce) {
     if (!existsSync(LINGMA_SETTINGS)) return;
 
     let settings;
@@ -166,10 +200,18 @@ export class LingmaAdapter extends HostAdapter {
     }
     if (!settings.hooks) return;
 
+    const ownedCommands = new Set(hookCommands);
     let changed = false;
     for (const evt of OOMS_EVENTS) {
-      if (settings.hooks[evt]) {
+      if (!settings.hooks[evt]) continue;
+      const before = JSON.stringify(settings.hooks[evt]);
+      const remaining = this.#withoutOwnedHandlers(settings.hooks[evt], ownedCommands);
+      if (remaining.length === 0) {
         delete settings.hooks[evt];
+      } else {
+        settings.hooks[evt] = remaining;
+      }
+      if (JSON.stringify(remaining) !== before) {
         changed = true;
       }
     }
@@ -183,5 +225,47 @@ export class LingmaAdapter extends HostAdapter {
     } else {
       announce('  (settings.json 无 oh-my-sdd hooks，跳过)');
     }
+  }
+
+  static #hookCommands(hooks) {
+    return OOMS_EVENTS.flatMap(evt => hooks[evt] ?? [])
+      .flatMap(entry => Array.isArray(entry.hooks) ? entry.hooks : [])
+      .map(hook => hook?.command)
+      .filter(command => typeof command === 'string');
+  }
+
+  static #withoutOwnedHandlers(entries, ownedCommands) {
+    if (!Array.isArray(entries)) return [];
+    return entries.flatMap(entry => {
+      if (!Array.isArray(entry?.hooks)) return [entry];
+      const hooks = entry.hooks.filter(hook => !ownedCommands.has(hook?.command));
+      return hooks.length > 0 ? [{ ...entry, hooks }] : [];
+    });
+  }
+
+  static async #listSkillNames(skillsSrc) {
+    if (!existsSync(skillsSrc)) return [];
+    const entries = await readdir(skillsSrc, { withFileTypes: true });
+    return entries
+      .filter(entry => entry.isDirectory() && existsSync(join(skillsSrc, entry.name, 'SKILL.md')))
+      .map(entry => entry.name);
+  }
+
+  static async #readTemplateHookCommands(packageRoot) {
+    try {
+      const tplPath = join(packageRoot, 'install', 'common', 'fixtures', 'lingma-settings.json');
+      const tpl = JSON.parse((await readFile(tplPath, 'utf8')).replaceAll('<PLUGIN_ROOT>', packageRoot));
+      return this.#hookCommands(tpl.hooks ?? {});
+    } catch {
+      return [];
+    }
+  }
+
+  static #isSafeSkillName(skillName) {
+    return typeof skillName === 'string'
+      && skillName !== '.'
+      && skillName !== '..'
+      && !skillName.includes('/')
+      && !skillName.includes('\\');
   }
 }

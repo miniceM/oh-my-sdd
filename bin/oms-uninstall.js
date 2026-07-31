@@ -2,7 +2,7 @@
 // Manual uninstaller entry point
 //
 // CLI flags:
-//   --tool <claude|lingma>   Uninstall only the specified tool (default: all)
+//   --tool <name>            Uninstall only one registered host (default: all)
 //   --purge                  Also remove ~/.oh-my-sdd/ state directory
 //   -h, --help               Show this help and exit
 //   -V, --version            Print version and exit
@@ -42,7 +42,7 @@ function printHelp() {
   kilocode     KiloCode AI 编程工具
 
 选项:
-  --tool <name>    仅卸载指定工具。默认卸载所有工具（Claude + lingma）
+  --tool <name>    仅卸载指定工具。默认卸载所有已检测到的工具
   --purge          同时删除 ~/.oh-my-sdd/ 状态目录
   -h, --help       显示此帮助并退出
   -V, --version    显示版本并退出

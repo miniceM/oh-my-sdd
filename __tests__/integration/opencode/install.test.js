@@ -127,6 +127,16 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
   const constitutionSkill = path.join(skillsDir, 'sdd-constitution', 'SKILL.md');
   assert.ok(!fs.existsSync(constitutionSkill), 'sdd-constitution skill 必须不被复制到 plugin 目录');
 
+  // 模拟旧 SDK fallback 写入：卸载只能移除 OMS 区块，不能删除用户内容。
+  const agentsPath = path.join(tmpHome, '.config', 'opencode', 'AGENTS.md');
+  fs.writeFileSync(agentsPath, [
+    '# User instructions',
+    '<!-- OH-MY-SDD:BEGIN (do not edit between these markers) -->',
+    'OMS baseline',
+    '<!-- OH-MY-SDD:END -->',
+    '',
+  ].join('\n'));
+
   // Step 2: uninstall
   execFileSync('node', ['bin/oms-uninstall.js', '--tool', 'opencode'], {
     cwd: worktreeRoot,
@@ -140,6 +150,7 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
   assert.ok(!plugins.includes('./plugins/oh-my-sdd/index.js'), 'uninstall 应清掉 ./plugins/oh-my-sdd/index.js');
   assert.ok(!plugins.includes('oh-my-sdd'), 'uninstall 应清掉裸字符串 oh-my-sdd');
   assert.ok(!plugins.includes('./plugins/oh-my-sdd/plugin.js'), 'uninstall 应清掉旧 ./plugins/oh-my-sdd/plugin.js');
+  assert.equal(fs.readFileSync(agentsPath, 'utf8'), '# User instructions\n');
 
   // command 文件应被清理
   for (const cmdFile of expectedCommands) {

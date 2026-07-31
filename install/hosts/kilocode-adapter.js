@@ -6,13 +6,19 @@
 // Implementation based on research notes at:
 // docs/superpowers/research/2026-07-31-kilocode-plugin-model.md
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 
 import { HostAdapter } from '../host-adapter.js';
-import { writeSentinel, readSentinel, sentinelPathFor } from '../common/sentinel.js';
+import {
+  removeSentinelBlock,
+  upsertSentinelBlock,
+  writeSentinel,
+  readSentinel,
+  sentinelPathFor,
+} from '../common/sentinel.js';
 import { copySkillsToDir, rmIfExists } from '../common/fs.js';
 import { isCliInPath, isDirPresent } from '../common/detect.js';
 
@@ -56,13 +62,17 @@ export class KiloCodeAdapter extends HostAdapter {
     announce('→ 安装 Kilo Code 适配');
 
     // Step 1: Copy skills to ~/.kilo/skills/
-    await copySkillsToDir(join(PACKAGE_ROOT, 'skills'), KILO_SKILLS_DIR, announce);
+    const skillsSource = join(PACKAGE_ROOT, 'skills');
+    const installedSkillNames = await this.#getSkillNames(skillsSource);
+    await copySkillsToDir(skillsSource, KILO_SKILLS_DIR, announce);
 
     // Step 2: Inject baseline via AGENTS.md (advisory only)
     await this.#injectBaseline(PACKAGE_ROOT, announce);
 
     // Step 3: Write sentinel for uninstall tracking
-    await writeSentinel('kilocode', KILO_AGENTS_MD, null, announce);
+    await writeSentinel('kilocode', KILO_AGENTS_MD, null, announce, {
+      skill_names: installedSkillNames,
+    });
 
     announce('');
     announce('✓ oh-my-sdd (Kilo Code) 安装完成');
@@ -84,18 +94,32 @@ export class KiloCodeAdapter extends HostAdapter {
 
     announce('→ 卸载 Kilo Code 适配');
 
-    // Step 1: Delete skills directory
-    if (await rmIfExists(KILO_SKILLS_DIR)) {
-      announce(`  ✓ 已删除: ${KILO_SKILLS_DIR}`);
+    const sentinel = await readSentinel('kilocode');
+
+    // Step 1: Delete only skill directories installed by oh-my-sdd.
+    // Never remove the shared ~/.kilo/skills directory.
+    const fallbackSkillsSource = resolve(
+      dirname(new URL(import.meta.url).pathname),
+      '..',
+      '..',
+      'skills'
+    );
+    const skillNames = Array.isArray(sentinel?.skill_names)
+      ? sentinel.skill_names
+      : await this.#getSkillNames(fallbackSkillsSource);
+    let removedSkills = 0;
+    for (const skillName of skillNames) {
+      if (!this.#isSafeSkillName(skillName)) continue;
+      if (await rmIfExists(join(KILO_SKILLS_DIR, skillName))) removedSkills++;
+    }
+    if (removedSkills > 0) {
+      announce(`  ✓ 已删除 ${removedSkills} 个 oh-my-sdd skills`);
     }
 
-    // Step 2: Delete AGENTS.md baseline
-    if (await rmIfExists(KILO_AGENTS_MD)) {
-      announce(`  ✓ 已删除: ${KILO_AGENTS_MD}`);
-    }
+    // Step 2: Remove only the OMS block from AGENTS.md.
+    await this.#removeBaselineBlock(sentinel?.dest ?? KILO_AGENTS_MD, announce);
 
     // Step 3: Clean up sentinel file
-    const sentinel = await readSentinel('kilocode');
     if (sentinel) {
       await rmIfExists(sentinelPathFor('kilocode'));
       announce('  ✓ 已删除哨兵文件');
@@ -117,8 +141,56 @@ export class KiloCodeAdapter extends HostAdapter {
     // Kilo Code AGENTS.md doesn't accept frontmatter — strip it
     const bodyOnly = baseline.replace(/^---[\s\S]*?---\n/, '');
 
+    let existing = '';
+    try {
+      existing = await readFile(KILO_AGENTS_MD, 'utf8');
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+
     await mkdir(KILO_CONFIG_DIR, { recursive: true });
-    await writeFile(KILO_AGENTS_MD, bodyOnly, { mode: 0o644 });
+    await writeFile(KILO_AGENTS_MD, upsertSentinelBlock(existing, bodyOnly), { mode: 0o644 });
     announce(`  ✓ baseline 已写入: ${KILO_AGENTS_MD}`);
+  }
+
+  static async #removeBaselineBlock(agentsPath, announce) {
+    let existing;
+    try {
+      existing = await readFile(agentsPath, 'utf8');
+    } catch (error) {
+      if (error.code === 'ENOENT') return;
+      throw error;
+    }
+
+    const cleaned = removeSentinelBlock(existing);
+    if (cleaned.length === 0) {
+      await rmIfExists(agentsPath);
+    } else {
+      await writeFile(agentsPath, cleaned, { mode: 0o644 });
+    }
+    announce(`  ✓ 已移除 baseline 块: ${agentsPath}`);
+  }
+
+  static async #getSkillNames(skillsSource) {
+    let entries;
+    try {
+      entries = await readdir(skillsSource, { withFileTypes: true });
+    } catch (error) {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    }
+
+    return entries
+      .filter((entry) => entry.isDirectory())
+      .filter((entry) => existsSync(join(skillsSource, entry.name, 'SKILL.md')))
+      .map((entry) => entry.name);
+  }
+
+  static #isSafeSkillName(skillName) {
+    return typeof skillName === 'string'
+      && skillName !== '.'
+      && skillName !== '..'
+      && !skillName.includes('/')
+      && !skillName.includes('\\');
   }
 }

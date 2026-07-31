@@ -25,7 +25,7 @@
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkNodeVersion } from '../lib/platform.js';
+import { checkNodeVersion, MIN_NODE_VERSION } from '../lib/platform.js';
 import { ensureStateDir } from '../lib/state-dir.js';
 import { getAdapter, detectDefault } from './host-registry.js';
 import { ClaudeAdapter } from './hosts/claude-adapter.js';
@@ -54,8 +54,8 @@ function isOpenCodeInstalled() { return OpenCodeAdapter.isInstalled(); }
 // ============================================
 async function main(options = {}) {
   // 共享前置：Node 版本
-  if (!checkNodeVersion('18.0.0')) {
-    process.stderr.write(`❌ Node 版本过低。需要 >= 18.0.0，当前 ${process.version}\n`);
+  if (!checkNodeVersion(MIN_NODE_VERSION)) {
+    process.stderr.write(`❌ Node 版本过低。需要 >= ${MIN_NODE_VERSION}，当前 ${process.version}\n`);
     process.exit(1);
   }
 
@@ -78,8 +78,8 @@ async function main(options = {}) {
 // 向后兼容导出：preflightFor
 // ============================================
 function preflightFor(tool) {
-  if (!checkNodeVersion('18.0.0')) {
-    process.stderr.write(`❌ Node 版本过低。需要 >= 18.0.0，当前 ${process.version}\n`);
+  if (!checkNodeVersion(MIN_NODE_VERSION)) {
+    process.stderr.write(`❌ Node 版本过低。需要 >= ${MIN_NODE_VERSION}，当前 ${process.version}\n`);
     process.exit(1);
   }
   const Adapter = getAdapter(tool);

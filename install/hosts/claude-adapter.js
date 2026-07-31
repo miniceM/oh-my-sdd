@@ -4,16 +4,19 @@
 //   1. Register marketplace (`claude plugin marketplace add`)
 //   2. Install plugin (`claude plugin install oh-my-sdd@oh-my-sdd`)
 //   3. Install Claude CLI wrapper (intercepts `claude`, injects enterprise baseline)
-//   4. Uninstall: remove plugin + wrapper
+//   4. Uninstall: remove plugin, marketplace registration, legacy artifacts + wrapper
 
 import { spawn } from 'node:child_process';
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { readFile, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import { HostAdapter } from '../host-adapter.js';
 import { isCliInPath } from '../common/detect.js';
-import { installWrapper, findClaudeOriginal } from '../../wrapper/wrapper.js';
+import { installWrapper, findClaudeOriginal, uninstallWrapper } from '../../wrapper/wrapper.js';
 import { ensureStateDir } from '../../lib/state-dir.js';
-import { isIamInPath } from '../../lib/platform.js';
+import { getPluginInstallDir, isIamInPath } from '../../lib/platform.js';
 
 const MARKETPLACE_NAME = 'oh-my-sdd';
 const PLUGIN_NAME = 'oh-my-sdd';
@@ -84,22 +87,28 @@ export class ClaudeAdapter extends HostAdapter {
   }
 
   static async uninstall(ctx) {
-    ctx.announce('→ 卸载 Claude Code 适配');
+    const { announce } = ctx;
+    announce('→ 卸载 Claude Code 适配');
 
-    // 1. Uninstall plugin via claude CLI
-    const result = await this.#runClaude(['plugin', 'uninstall', `${PLUGIN_NAME}@${MARKETPLACE_NAME}`]);
-    if (result.code !== 0) {
-      const out = (result.stderr + result.stdout).toLowerCase();
-      if (!out.includes('not installed') && !out.includes('not found')) {
-        ctx.announce(`  ⚠️  claude plugin uninstall 失败 (exit ${result.code})`);
-      }
+    if (this.isInstalled()) {
+      announce('→ 卸载 plugin');
+      await this.#uninstallPlugin(announce);
+
+      announce('→ 注销 marketplace');
+      await this.#removeMarketplace(announce);
     } else {
-      ctx.announce(`  ✓ 已卸载 plugin: ${PLUGIN_NAME}@${MARKETPLACE_NAME}`);
+      announce('⚠️  未检测到 claude CLI。请手动卸载：');
+      announce(`  claude plugin uninstall ${PLUGIN_NAME}@${MARKETPLACE_NAME}`);
+      announce('⚠️  请手动注销 marketplace：');
+      announce(`  claude plugin marketplace remove ${MARKETPLACE_NAME}`);
     }
 
-    // 2. Remove wrapper
-    const { uninstallWrapper } = await import('../../wrapper/wrapper.js');
-    await uninstallWrapper(ctx.announce);
+    announce('→ 清理 legacy 安装产物');
+    await this.#cleanupLegacyFiles(announce);
+    await this.#cleanupLegacySettings(announce);
+
+    announce('→ 卸载 Claude CLI wrapper');
+    await uninstallWrapper(announce);
   }
 
   // ============================================
@@ -116,6 +125,61 @@ export class ClaudeAdapter extends HostAdapter {
       child.on('close', (code) => resolve({ code, stdout, stderr }));
       child.on('error', (err) => resolve({ code: -1, stdout: '', stderr: err.message }));
     });
+  }
+
+  static async #uninstallPlugin(announce) {
+    const result = await this.#runClaude(['plugin', 'uninstall', `${PLUGIN_NAME}@${MARKETPLACE_NAME}`]);
+    if (result.code !== 0) {
+      const out = (result.stderr + result.stdout).toLowerCase();
+      if (out.includes('not installed') || out.includes('not found')) {
+        announce('  (plugin 未安装，跳过)');
+      } else {
+        announce(`⚠️  claude plugin uninstall 失败 (exit ${result.code}):`);
+        announce('  ' + (result.stderr || result.stdout || '(no output)'));
+      }
+      return;
+    }
+    announce(`  ✓ 已卸载 plugin：${PLUGIN_NAME}@${MARKETPLACE_NAME}`);
+  }
+
+  static async #removeMarketplace(announce) {
+    const result = await this.#runClaude(['plugin', 'marketplace', 'remove', MARKETPLACE_NAME]);
+    if (result.code !== 0) {
+      announce(`⚠️  claude plugin marketplace remove 失败 (exit ${result.code}):`);
+      announce('  ' + (result.stderr || result.stdout || '(no output)'));
+      return;
+    }
+    announce(`  ✓ 已注销 marketplace：${MARKETPLACE_NAME}`);
+  }
+
+  static async #cleanupLegacyFiles(announce) {
+    const dest = getPluginInstallDir();
+    if (existsSync(dest)) {
+      await rm(dest, { recursive: true, force: true });
+      announce('  ✓ 已清理 legacy 插件目录');
+    }
+  }
+
+  static async #cleanupLegacySettings(announce) {
+    const settingsPath = path.join(path.dirname(getPluginInstallDir()), '..', 'settings.json');
+    if (!existsSync(settingsPath)) return;
+
+    let settings;
+    try {
+      settings = JSON.parse(await readFile(settingsPath, 'utf8'));
+    } catch {
+      return;
+    }
+
+    if (settings.extraKnownMarketplaces?.[MARKETPLACE_NAME]) {
+      delete settings.extraKnownMarketplaces[MARKETPLACE_NAME];
+      try {
+        await writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        announce('  ✓ 已清理 legacy settings.json 条目');
+      } catch (err) {
+        announce(`  ⚠️  清理 settings.json 失败：${err.message}`);
+      }
+    }
   }
 
   static async #registerMarketplace(packageRoot, announce) {

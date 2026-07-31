@@ -21,7 +21,7 @@
  */
 
 import { cpSync, existsSync, rmSync, statSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -47,13 +47,22 @@ const EXCLUDE_BASENAMES = new Set([
   'coverage',
 ]);
 
-function shouldCopy(name) {
+export function shouldCopy(name) {
   return !EXCLUDE_BASENAMES.has(name);
 }
 
-let failed = false;
+export function syncResourceTree(src, dst) {
+  rmSync(dst, { recursive: true, force: true });
+  cpSync(src, dst, {
+    recursive: true,
+    force: true,
+    filter: (source) => shouldCopy(basename(source)),
+  });
+}
 
-for (const [fromRel, toRel] of SYNC_MAP) {
+export function main() {
+  let failed = false;
+  for (const [fromRel, toRel] of SYNC_MAP) {
   const src = join(ROOT_DIR, fromRel);
   const dst = join(OPENCODE_DIR, toRel);
 
@@ -63,29 +72,27 @@ for (const [fromRel, toRel] of SYNC_MAP) {
     continue;
   }
 
-  // Wipe destination for idempotency. Ignore errors if it doesn't exist yet.
-  rmSync(dst, { recursive: true, force: true });
-
   try {
-    cpSync(src, dst, {
-      recursive: true,
-      force: true,
-      filter: (source) => shouldCopy(dirname(source).split('/').pop() ?? '') || true,
-      // ^ The filter above is applied per-entry; basename filtering is best-effort
-      //   here because cpSync's filter signature passes the full source path. For
-      //   precise exclusion, a post-walk cleanup would be needed — but the parent
-      //   repo is already clean (no node_modules / __tests__ inside skills|content|hooks).
-    });
+    syncResourceTree(src, dst);
     console.log(`[copy-resources] OK  ${fromRel} -> ${toRel}`);
   } catch (err) {
     console.error(`[copy-resources] FAIL ${fromRel} -> ${toRel}: ${err.message}`);
     failed = true;
   }
+  }
+
+  if (failed) {
+    throw new Error('[copy-resources] one or more syncs failed');
+  }
+
+  console.log('[copy-resources] all resources synced');
 }
 
-if (failed) {
-  console.error('[copy-resources] one or more syncs failed');
-  process.exit(1);
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
 }
-
-console.log('[copy-resources] all resources synced');
