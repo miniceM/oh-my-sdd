@@ -4,8 +4,8 @@ import { rm, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
-import { getPluginInstallDir, getStateDir } from './hooks/lib/platform.js';
-import { uninstallWrapper } from './wrapper/wrapper.js';
+import { getPluginInstallDir, getStateDir } from '../hooks/lib/platform.js';
+import { uninstallWrapper } from '../wrapper/wrapper.js';
 
 const MARKETPLACE_NAME = 'oh-my-sdd';
 const PLUGIN_NAME = 'oh-my-sdd';
@@ -125,12 +125,12 @@ async function main({ purge = false, tool } = {}) {
   // 1. 卸载指定工具的钩子/配置（如果指定了 tool）
   if (tool) {
     if (tool === 'lingma') {
-      const { uninstallForLingma: fn } = await import('./hooks/lib/install-lingma.js');
+      const { uninstallForLingma: fn } = await import('../hooks/lib/install-lingma.js');
       await fn();
       return;
     }
     if (tool === 'opencode') {
-      const { uninstallForOpencode: fn } = await import('./hooks/lib/install-opencode.js');
+      const { uninstallForOpencode: fn } = await import('../hooks/lib/install-opencode.js');
       await fn();
       return;
     }
@@ -146,9 +146,9 @@ async function main({ purge = false, tool } = {}) {
 
   // 3. 工具未指定时，也清理 lingma / opencode（如果装过）
   if (!tool) {
-    const { uninstallForLingma: fn } = await import('./hooks/lib/install-lingma.js');
+    const { uninstallForLingma: fn } = await import('../hooks/lib/install-lingma.js');
     await fn();
-    const { uninstallForOpencode: fn2 } = await import('./hooks/lib/install-opencode.js');
+    const { uninstallForOpencode: fn2 } = await import('../hooks/lib/install-opencode.js');
     await fn2();
   }
 

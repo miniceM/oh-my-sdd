@@ -7,7 +7,7 @@
 //   -h, --help               Show this help and exit
 //   -V, --version            Print version and exit
 
-import { main } from '../uninstall.js';
+import { main } from '../install/uninstall.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';

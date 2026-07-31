@@ -11,7 +11,7 @@
 //   - 传 --tool <name>：指定工具，明确选择
 //   - 传未知 name：报错并退出 1
 
-import { main } from '../install.js';
+import { main } from '../install/main.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';

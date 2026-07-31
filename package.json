@@ -14,7 +14,7 @@
   },
   "scripts": {
     "postinstall": "node install.js",
-    "preuninstall": "node uninstall.js",
+    "preuninstall": "node install/uninstall.js",
     "test": "node scripts/run-tests.js",
     "test:glob": "node --test \"__tests__/**/*.test.js\"",
     "lint:baseline": "node scripts/check-baseline-tokens.mjs",
@@ -27,7 +27,7 @@
   "files": [
     ".claude-plugin/",
     "install.js",
-    "uninstall.js",
+    "install/",
     "bin/",
     "wrapper/",
     "skills/",
