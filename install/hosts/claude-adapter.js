@@ -18,6 +18,8 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { installWrapper, findClaudeOriginal } from '../../wrapper/wrapper.js';
 import { ensureStateDir } from '../../lib/state-dir.js';
+import { isIamInPath } from '../../lib/platform.js';
+import { HostAdapter } from '../host-adapter.js';
 
 const MARKETPLACE_NAME = 'oh-my-sdd';
 const PLUGIN_NAME = 'oh-my-sdd';
@@ -133,4 +135,32 @@ export async function installForClaude({ PACKAGE_ROOT }) {
   announce('  4. 测试企业约束: claude "你的身份是什么？"');
   announce('');
   announce('绕过企业约束: claude --no-enterprise ...');
+}
+
+// ============================================
+// Class façade for registry (Task 1.2)
+// Delegates to functional exports above.
+// ============================================
+export class ClaudeAdapter extends HostAdapter {
+  static id = 'claude';
+  static displayName = 'Claude Code';
+  static isInstalled() { return isClaudeInstalled(); }
+  static preflight(ctx) {
+    // Claude-specific preflight: iam + openspec checks
+    if (!isIamInPath()) {
+      process.stderr.write('⚠️  未检测到 iam CLI。可继续安装，但首次会话将提示安装。\n');
+      process.stderr.write('    安装后请运行 oms-login 完成身份认证。\n');
+    }
+    try {
+      const cmd = process.platform === 'win32' ? 'where' : 'which';
+      execFileSync(cmd, ['openspec'], { stdio: 'ignore' });
+    } catch {
+      process.stderr.write('⚠️  未检测到 openspec CLI。可继续安装，但 /sdd-review 归档阶段会阻塞。\n');
+      process.stderr.write('    安装：npm install -g @fission-ai/openspec\n');
+      process.stderr.write('    作用：archive 时 merge delta 到 openspec/specs/，保持项目 specs 反映系统现状\n');
+    }
+  }
+  static async install(ctx) {
+    return installForClaude({ PACKAGE_ROOT: ctx.PACKAGE_ROOT });
+  }
 }

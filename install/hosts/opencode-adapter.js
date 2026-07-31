@@ -21,6 +21,7 @@ import { copyDir } from '../common/fs.js';
 import { installSuperpowersZh, findDelegatedSkillsSource } from '../common/superpowers-installer.js';
 import { SDD_COMMANDS, installCommandFiles } from '../../lib/command-generator.js';
 import { patchOpencodeJson, unpatchOpencodeJson } from '../common/config-patcher.js';
+import { HostAdapter } from '../host-adapter.js';
 
 /**
  * Announce message to stderr.
@@ -280,4 +281,26 @@ export async function uninstallForOpencode() {
   unpatchOpencodeJson();
 
   // 4. 保留 ~/.oh-my-sdd/（除非 --purge 由 caller 处理）
+}
+
+// ============================================
+// Class façade for registry (Task 1.2)
+// Delegates to functional exports above.
+// ============================================
+export class OpenCodeAdapter extends HostAdapter {
+  static id = 'opencode';
+  static displayName = 'OpenCode';
+  static isInstalled() { return isOpenCodeInstalled(); }
+  static preflight(ctx) {
+    if (!isOpenCodeInstalled()) {
+      process.stderr.write('⚠️  未检测到 OpenCode。继续安装（plugin 写到目录里等用户用），但 OpenCode 不在时不生效。\n');
+      process.stderr.write('    安装：https://opencode.ai\n');
+    }
+  }
+  static async install(ctx) {
+    return installForOpencode({ PACKAGE_ROOT: ctx.PACKAGE_ROOT, announce: ctx.announce });
+  }
+  static async uninstall(ctx) {
+    return uninstallForOpencode();
+  }
 }

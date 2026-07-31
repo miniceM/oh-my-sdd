@@ -20,9 +20,11 @@ import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 import { writeSentinel, readSentinel, sentinelPathFor } from '../common/sentinel.js';
 import { copySkillsToDir } from '../common/fs.js';
+import { HostAdapter } from '../host-adapter.js';
 
 const HOME = homedir();
 
@@ -48,6 +50,20 @@ function isHomeDir(p) {
     return resolve(p) === resolve(HOME);
   } catch {
     return false;
+  }
+}
+
+// ============================================
+// Detect Lingma installation
+// ============================================
+export function isLingmaInstalled() {
+  const cmd = process.platform === 'win32' ? 'where' : 'which';
+  try {
+    execFileSync(cmd, ['lingma'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    // fallback: 通义灵码可能未注册 lingma CLI，检测 ~/.lingma/ 目录
+    return existsSync(LINGMA_DIR);
   }
 }
 
@@ -182,5 +198,27 @@ export async function uninstallForLingma() {
   if (sentinel) {
     await rmIfExists(sentinelPathFor('lingma'));
     announce(`  ✓ 已删除哨兵文件`);
+  }
+}
+
+// ============================================
+// Class façade for registry (Task 1.2)
+// Delegates to functional exports above.
+// ============================================
+export class LingmaAdapter extends HostAdapter {
+  static id = 'lingma';
+  static displayName = '通义灵码';
+  static isInstalled() { return isLingmaInstalled(); }
+  static preflight(ctx) {
+    if (!isLingmaInstalled()) {
+      process.stderr.write('⚠️  未检测到通义灵码 (lingma) IDE。已写入 rules + 合并 settings.json，但 IDE 不在时不生效。\n');
+      process.stderr.write('    安装：https://lingma.aliyun.com\n');
+    }
+  }
+  static async install(ctx) {
+    return installForLingma({ PACKAGE_ROOT: ctx.PACKAGE_ROOT, announce: ctx.announce });
+  }
+  static async uninstall(ctx) {
+    return uninstallForLingma();
   }
 }
