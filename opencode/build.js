@@ -33,7 +33,7 @@ export function buildOpencodePlugin(packageRoot) {
   try {
     // On Windows, npm is npm.cmd, not npm
     const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-    execFileSync(npmCmd, ['run', 'build:all'], {
+    execFileSync(npmCmd, ['run', 'build:opencode'], {
       cwd: packageRoot,
       stdio: 'inherit',  // Show output for debugging
       shell: process.platform === 'win32',  // Use shell on Windows
