@@ -5,9 +5,14 @@ import path from 'node:path';
 
 const workflow = readFileSync(path.join(process.cwd(), '.github', 'workflows', 'ci.yml'), 'utf8');
 
-test('CI runs the Node 18/20/22 matrix and enforces coverage', () => {
+test('CI runs the Node 18/20/22 matrix and enforces coverage in a stable dedicated job', () => {
   assert.match(workflow, /node:\s*\[18,\s*20,\s*22\]/);
-  assert.match(workflow, /npm run test:coverage/);
+  const testJob = workflow.slice(workflow.indexOf('  test:'), workflow.indexOf('  coverage:'));
+  const coverageJob = workflow.slice(workflow.indexOf('  coverage:'), workflow.indexOf('  smoke-check:'));
+  assert.match(testJob, /npm test/);
+  assert.doesNotMatch(testJob, /test:coverage/);
+  assert.match(coverageJob, /node-version:\s*22/);
+  assert.match(coverageJob, /npm run test:coverage/);
 });
 
 test('smoke-check runs for pull requests with an isolated HOME and the current uninstall entry', () => {

@@ -31,7 +31,7 @@ function runAdapter(homeDir, method) {
     });
   `;
   execFileSync(process.execPath, ['--input-type=module', '--eval', script], {
-    env: { ...process.env, HOME: homeDir },
+    env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
     stdio: 'pipe',
   });
 }
@@ -141,10 +141,10 @@ describe('LingmaAdapter', () => {
     try {
       mkdirSync(dirname(settingsPath), { recursive: true });
       mkdirSync(dirname(sentinelPath), { recursive: true });
-      const template = JSON.parse(readFileSync(
+      const template = replacePluginRoot(JSON.parse(readFileSync(
         join(PACKAGE_ROOT, 'install', 'common', 'fixtures', 'lingma-settings.json'),
         'utf8',
-      ).replaceAll('<PLUGIN_ROOT>', PACKAGE_ROOT));
+      )), PACKAGE_ROOT);
       writeFileSync(settingsPath, JSON.stringify({
         hooks: {
           PreToolUse: [

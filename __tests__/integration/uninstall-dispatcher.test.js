@@ -69,7 +69,9 @@ test('--tool claude uses the adapter for plugin, marketplace, legacy and wrapper
   const claudeDir = path.join(fakeHome, '.claude');
   const legacyPluginDir = path.join(claudeDir, 'plugins', 'oh-my-sdd');
   const settingsPath = path.join(claudeDir, 'settings.json');
-  const wrapperDir = path.join(fakeHome, '.local', 'bin');
+  const wrapperDir = process.platform === 'win32'
+    ? path.join(fakeHome, 'bin')
+    : path.join(fakeHome, '.local', 'bin');
 
   fs.mkdirSync(fakeBin, { recursive: true });
   if (process.platform === 'win32') {

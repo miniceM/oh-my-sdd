@@ -33,7 +33,10 @@ describe('ClaudeAdapter', () => {
   });
 
   it('uses direct parameterized execution on POSIX', () => {
-    assert.deepEqual(buildClaudeInvocation(['plugin', 'install', 'oh-my-sdd']), {
+    assert.deepEqual(buildClaudeInvocation(
+      ['plugin', 'install', 'oh-my-sdd'],
+      { platform: 'linux' },
+    ), {
       command: 'claude',
       args: ['plugin', 'install', 'oh-my-sdd'],
     });
