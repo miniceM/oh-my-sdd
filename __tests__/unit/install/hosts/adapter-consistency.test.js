@@ -1,25 +1,28 @@
+// __tests__/unit/install/hosts/adapter-consistency.test.js
+//
+// This test uses the registry dynamically (listTools + getAdapter) so that
+// adding a new adapter (e.g., KiloCode) requires ZERO changes here.
+// The test automatically picks up any adapter registered in host-registry.js.
+
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { ClaudeAdapter } from '../../../../install/hosts/claude-adapter.js';
-import { LingmaAdapter } from '../../../../install/hosts/lingma-adapter.js';
-import { OpenCodeAdapter } from '../../../../install/hosts/opencode-adapter.js';
+import { listTools, getAdapter } from '../../../../install/host-registry.js';
 import { HostAdapter } from '../../../../install/host-adapter.js';
 
-const ALL_ADAPTERS = [
-  { name: 'Claude', Adapter: ClaudeAdapter, expectedId: 'claude' },
-  { name: 'Lingma', Adapter: LingmaAdapter, expectedId: 'lingma' },
-  { name: 'OpenCode', Adapter: OpenCodeAdapter, expectedId: 'opencode' },
-];
+describe('HostAdapter interface consistency', () => {
+  const toolIds = listTools();
 
-describe('adapter interface consistency', () => {
-  for (const { name, Adapter, expectedId } of ALL_ADAPTERS) {
-    describe(`${name}Adapter`, () => {
+  // Verify all registered adapters conform to HostAdapter interface
+  for (const id of toolIds) {
+    const Adapter = getAdapter(id);
+
+    describe(`${id}Adapter`, () => {
       it('extends HostAdapter', () => {
         assert.equal(Object.getPrototypeOf(Adapter), HostAdapter);
       });
 
-      it(`has id = "${expectedId}"`, () => {
-        assert.equal(Adapter.id, expectedId);
+      it(`has id = "${id}"`, () => {
+        assert.equal(Adapter.id, id);
       });
 
       it('has a non-empty displayName', () => {
@@ -42,11 +45,12 @@ describe('adapter interface consistency', () => {
       it('uninstall() is an async function', () => {
         assert.equal(Adapter.uninstall.constructor.name, 'AsyncFunction');
       });
-
-      it('has unique id among all adapters', () => {
-        const ids = ALL_ADAPTERS.map((a) => a.Adapter.id);
-        assert.equal(new Set(ids).size, ids.length);
-      });
     });
   }
+
+  // Single test for uniqueness across all adapters
+  it('all adapter ids are unique', () => {
+    const ids = toolIds;
+    assert.equal(new Set(ids).size, ids.length, 'Duplicate adapter ids found');
+  });
 });
