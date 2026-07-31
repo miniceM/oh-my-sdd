@@ -91,15 +91,18 @@ function copyHooksToPluginDir(packageRoot) {
     filter: (f) => f.endsWith('.js')
   });
 
-  // 复制 lib/*.js
-  const srcLibDir = join(srcHooksDir, 'lib');
+  // 复制顶层 lib/*.js → <plugin>/lib/ (hooks now import via ../lib/X.js)
+  const srcLibDir = join(packageRoot, 'lib');
   if (existsSync(srcLibDir)) {
-    const libCount = copyDir(srcLibDir, join(targetHooksDir, 'lib'), {
+    const targetLibDir = join(OPENCODE_PLUGIN_DIR, 'lib');
+    const libCount = copyDir(srcLibDir, targetLibDir, {
       filter: (f) => f.endsWith('.js')
     });
-    announce(`  ✓ hooks 复制到: ${targetHooksDir} (${topLevelCount} + ${libCount} 文件)`);
+    announce(`  ✓ hooks 复制到: ${targetHooksDir} (${topLevelCount} 文件)`);
+    announce(`  ✓ lib 复制到: ${targetLibDir} (${libCount} 文件)`);
   } else {
     announce(`  ✓ hooks 复制到: ${targetHooksDir} (${topLevelCount} 文件)`);
+    announce('  ⚠️  lib/ 目录不存在，跳过 lib 复制');
   }
 }
 

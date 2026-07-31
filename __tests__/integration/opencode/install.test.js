@@ -48,6 +48,18 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
     assert.ok(content.includes('SKILL.md'), `${cmdFile} 应指示 agent 读 SKILL.md`);
     assert.ok(content.includes('$ARGUMENTS'), `${cmdFile} 应支持 $ARGUMENTS 占位符`);
   }
+
+  // hooks + lib: hooks/*.js → <plugin>/hooks/, lib/*.js → <plugin>/lib/
+  // (Phase 0 restructure: hooks import via '../lib/X.js', so lib must be at plugin level)
+  const hooksDir = path.join(pluginDir, 'hooks');
+  assert.ok(fs.existsSync(hooksDir), 'hooks dir should exist in plugin dir');
+  const sessionStartJs = path.join(hooksDir, 'session-start.js');
+  assert.ok(fs.existsSync(sessionStartJs), 'hooks/session-start.js should exist');
+  // lib/ 应在 <plugin>/lib/ 而非 <plugin>/hooks/lib/（hooks 通过 ../lib/X.js 导入）
+  const libDir = path.join(pluginDir, 'lib');
+  assert.ok(fs.existsSync(libDir), 'lib dir should exist at plugin level (<plugin>/lib/)');
+  const wrongLibDir = path.join(hooksDir, 'lib');
+  assert.ok(!fs.existsSync(wrongLibDir), 'lib should NOT be inside hooks/ (hooks import via ../lib/X.js)');
   // skills 复制（主 SDD skills 必须存在）
   const skillsDir = path.join(pluginDir, 'skills');
   assert.ok(fs.existsSync(skillsDir), 'skills dir should exist in plugin dir');
