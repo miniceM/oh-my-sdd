@@ -1,5 +1,5 @@
 @echo off
-REM enterprise-wrapper/wrappers/claude.bat
+REM enterprise-wrapper/wrapper/claude.bat
 REM CMD fallback wrapper for Claude CLI with enterprise constraints
 REM
 REM 无需管理员权限，用户级部署

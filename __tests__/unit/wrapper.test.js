@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 
 // 动态导入 wrapper 模块
-const wrapper = await import('../../hooks/lib/wrapper.js');
+const wrapper = await import('../../wrapper/wrapper.js');
 
 // ---------- 目录配置 ----------
 
@@ -54,16 +54,16 @@ test('verifyWrapper returns boolean', async () => {
 
 // ---------- wrapper scripts 存在性 ----------
 
-test('wrappers directory contains required scripts', () => {
-  const wrappersDir = path.join(PROJECT_ROOT, 'wrappers');
-  assert.ok(existsSync(wrappersDir), 'wrappers directory must exist');
+test('wrapper directory contains required scripts', () => {
+  const wrapperDir = path.join(PROJECT_ROOT, 'wrapper');
+  assert.ok(existsSync(wrapperDir), 'wrapper directory must exist');
 
   // POSIX wrapper
-  assert.ok(existsSync(path.join(wrappersDir, 'claude.sh')), 'claude.sh must exist');
+  assert.ok(existsSync(path.join(wrapperDir, 'claude.sh')), 'claude.sh must exist');
 
   // Windows wrappers
-  assert.ok(existsSync(path.join(wrappersDir, 'claude.ps1')), 'claude.ps1 must exist');
-  assert.ok(existsSync(path.join(wrappersDir, 'claude.bat')), 'claude.bat must exist');
+  assert.ok(existsSync(path.join(wrapperDir, 'claude.ps1')), 'claude.ps1 must exist');
+  assert.ok(existsSync(path.join(wrapperDir, 'claude.bat')), 'claude.bat must exist');
 });
 
 // ---------- content/ baseline 存在性（content/ 是唯一源，session-start + wrapper 共享）----------
@@ -79,7 +79,7 @@ test('content directory contains enterprise-baseline.md (single source of truth)
 // ---------- wrapper script 内容验证 ----------
 
 test('claude.sh references baseline.md', () => {
-  const shPath = path.join(PROJECT_ROOT, 'wrappers', 'claude.sh');
+  const shPath = path.join(PROJECT_ROOT, 'wrapper', 'claude.sh');
   const content = readFileSync(shPath, 'utf8');
   assert.ok(content.includes('baseline.md'), 'must reference baseline.md');
   assert.ok(content.includes('CLAUDE_ENTERPRISE_RULES'), 'must support env override');
@@ -87,7 +87,7 @@ test('claude.sh references baseline.md', () => {
 });
 
 test('claude.ps1 references baseline.md', () => {
-  const ps1Path = path.join(PROJECT_ROOT, 'wrappers', 'claude.ps1');
+  const ps1Path = path.join(PROJECT_ROOT, 'wrapper', 'claude.ps1');
   const content = readFileSync(ps1Path, 'utf8');
   assert.ok(content.includes('baseline.md'), 'must reference baseline.md');
   assert.ok(content.includes('CLAUDE_ENTERPRISE_RULES'), 'must support env override');

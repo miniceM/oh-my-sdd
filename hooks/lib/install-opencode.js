@@ -16,7 +16,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, readdirSync, copyFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { OPENCODE_PLUGIN_DIR, OPENCODE_COMMANDS_DIR, OPENCODE_CONFIG_DIR } from './paths.js';
-import { buildOpencodePlugin } from './builder.js';
+import { buildOpencodePlugin } from '../../opencode/build.js';
 import { copyDir } from './copy-utils.js';
 import { installSuperpowersZh, findDelegatedSkillsSource } from './superpowers-installer.js';
 import { SDD_COMMANDS, installCommandFiles } from './command-generator.js';

@@ -1,4 +1,4 @@
-# enterprise-wrapper/wrappers/claude.ps1
+# enterprise-wrapper/wrapper/claude.ps1
 # PowerShell wrapper for Claude CLI with enterprise constraints
 #
 # 无需管理员权限，用户级部署

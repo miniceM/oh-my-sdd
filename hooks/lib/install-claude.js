@@ -16,7 +16,7 @@
 // 然后 process.exit(1)，由 main() 调度器捕获。
 
 import { execFileSync, spawn } from 'node:child_process';
-import { installWrapper, findClaudeOriginal } from './wrapper.js';
+import { installWrapper, findClaudeOriginal } from '../../wrapper/wrapper.js';
 import { ensureStateDir } from './state-dir.js';
 
 const MARKETPLACE_NAME = 'oh-my-sdd';

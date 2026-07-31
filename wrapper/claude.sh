@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# enterprise-wrapper/wrappers/claude.sh
+# enterprise-wrapper/wrapper/claude.sh
 # POSIX-compatible wrapper for Claude CLI with enterprise constraints
 #
 # 无需管理员权限，用户级部署

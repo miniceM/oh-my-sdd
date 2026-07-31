@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { getPluginInstallDir, getStateDir } from './hooks/lib/platform.js';
-import { uninstallWrapper } from './hooks/lib/wrapper.js';
+import { uninstallWrapper } from './wrapper/wrapper.js';
 
 const MARKETPLACE_NAME = 'oh-my-sdd';
 const PLUGIN_NAME = 'oh-my-sdd';

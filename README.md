@@ -188,7 +188,7 @@ oh-my-sdd 采用 **7 层洋葱模型** 实现强制约束，借鉴自 spec-kit �
 - Token 预算：正文 ≤ 1000 token（`scripts/check-baseline-tokens.mjs` 校验）
 
 **Layer 2: 注入层**（按工具机制不同）
-- **Claude Code**：`wrappers/claude.sh` / `wrappers/claude.ps1` → `claude` 命令入口；wrapper 启动时通过 `--append-system-prompt-file` 自动注入 baseline（运行期位置：`~/.config/claude-enterprise/baseline.md` / `~/AppData/Roaming/ClaudeEnterprise/baseline.md`；构建期源在 `content/enterprise-baseline.md`）。绕过：`claude --no-enterprise`。
+- **Claude Code**：`wrapper/claude.sh` / `wrapper/claude.ps1` → `claude` 命令入口；wrapper 启动时通过 `--append-system-prompt-file` 自动注入 baseline（运行期位置：`~/.config/claude-enterprise/baseline.md` / `~/AppData/Roaming/ClaudeEnterprise/baseline.md`；构建期源在 `content/enterprise-baseline.md`）。绕过：`claude --no-enterprise`。
 - **Lingma**：baseline 写入 `~/.lingma/rules/oh-my-sdd.md`（Always 类型规则，IDE 启动自动加载）。hooks 合并到 `~/.lingma/settings.json` 的 `PreToolUse/PostToolUse/UserPromptSubmit/Stop` 4 个事件。
 
 **Layer 3: Plan gate**

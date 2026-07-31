@@ -75,7 +75,7 @@ content/                 ← versioned governance content
   ├── welcome-message.md
   └── auth-required.md
 
-wrappers/                ← claude.sh / claude.ps1 / claude.bat
+wrapper/                 ← claude.sh / claude.ps1 / claude.bat
                            inject baseline via --append-system-prompt-file at launch
 
 bin/                     ← CLI: oms-install, oms-uninstall, oms-login, oms-update, oms-git-hooks, oms-welcome, oms-wrapper-verify
@@ -97,7 +97,7 @@ Layers run outer→inner; each layer tightens enforcement. Source: README §"强
 | 5 | Mandatory hooks | `hooks/pre-tool-use.js` | **`permissionDecision: "deny"` actually blocks writes** |
 | 4 | Analyze CRITICAL | `skills/sdd-review/SKILL.md` | HARD_RULE violation → Critical; `[OVERRIDE] <rule>: <reason>` in PR body downgrades |
 | 3 | Plan gate | `skills/sdd-plan/SKILL.md` step 1.5 | forces `## Constitution Check` in design.md |
-| 2 | Injection | `wrappers/claude.{sh,ps1}` (Claude) / `~/.lingma/rules/oh-my-sdd.md` (Lingma) | inject baseline into system prompt |
+| 2 | Injection | `wrapper/claude.{sh,ps1}` (Claude) / `~/.lingma/rules/oh-my-sdd.md` (Lingma) | inject baseline into system prompt |
 | 1 | Data | `content/enterprise-baseline.md` | versioned source of truth (frontmatter + body + Sync Report) |
 
 **Edit order matters**: data → (test layer 7) → inject on next install → next SDD ring picks it up.
@@ -106,7 +106,7 @@ Layers run outer→inner; each layer tightens enforcement. Source: README §"强
 
 1. **PreToolUse, NOT PostToolUse, is the real gate.** PostToolUse fires AFTER the file is on disk — its `permissionDecision: "deny"` is silently ignored by Claude Code. The whole rule engine lives in `pre-tool-use.js`. Proven by spike 2026-06-29; see `docs/spike-posttooluse-deny.md`. Do not move rules to PostToolUse thinking it'll work.
 
-2. **SessionStart `additionalContext` is silently dropped** (Anthropic bug #16538). Workaround: `wrappers/claude.sh` and `.ps1` copy `content/enterprise-baseline.md` to `~/.config/claude-enterprise/baseline.md` and pass it via `--append-system-prompt-file` at launch. On Lingma, baseline goes to `~/.lingma/rules/oh-my-sdd.md` (Always rule).
+2. **SessionStart `additionalContext` is silently dropped** (Anthropic bug #16538). Workaround: `wrapper/claude.sh` and `.ps1` copy `content/enterprise-baseline.md` to `~/.config/claude-enterprise/baseline.md` and pass it via `--append-system-prompt-file` at launch. On Lingma, baseline goes to `~/.lingma/rules/oh-my-sdd.md` (Always rule).
 
 3. **Plugin cache is sticky.** `npm install` alone does NOT refresh Claude Code's plugin cache. Use `./scripts/dev-reinstall.sh` after editing hooks/skills/baseline.
 
@@ -131,10 +131,10 @@ Layers run outer→inner; each layer tightens enforcement. Source: README §"强
 | Add/edit a HARD or SOFT rule | `content/enterprise-baseline.md` → then `hooks/lib/rules.js` → run `npm run lint:baseline` + `node --test __tests__/integration/pre-tool-use.test.js` |
 | Change what `/sdd-plan` does | `skills/sdd-plan/SKILL.md` (delegates to `superpowers:brainstorming` → `writing-plans`) |
 | Change what `/sdd-apply` does | `skills/sdd-apply/SKILL.md` (delegates to `superpowers:subagent-driven-development` or `executing-plans` based on task count) |
-| Add a new tool (KiloCode/Cursor/Windsurf) | `hooks/lib/install-<tool>.js` + `install.js` dispatcher + `wrappers/` if it has a CLI |
+| Add a new tool (KiloCode/Cursor/Windsurf) | `hooks/lib/install-<tool>.js` + `install.js` dispatcher + `wrapper/` if it has a CLI |
 | Add a new enterprise reference skill (api-design, security-check, …) | `skills/<name>/SKILL.md` — same frontmatter + scripts/ subdir convention as superpowers; **use `scripts/` and relative paths, NOT `${CLAUDE_SKILL_DIR}`** |
 | Touch git hooks | `hooks/git/<event>-check.js` + `hooks/git/lib/hook-installer.js` |
-| Change wrapper (baseline injection) | `wrappers/claude.{sh,ps1,bat}` (all three must stay in sync) |
+| Change wrapper (baseline injection) | `wrapper/claude.{sh,ps1,bat}` (all three must stay in sync) |
 | Change install/uninstall | `install.js` (entry) + `uninstall.js` (mirror) + `hooks/lib/install-{claude,lingma,shared}.js` |
 | Add a CLI subcommand | `bin/<name>.js` (each exports a function, runnable directly) |
 | Investigate a hook failure | `scripts/diag-session.sh` first, then `__tests__/helpers/spawn-hook.js` for reproducible spawn |

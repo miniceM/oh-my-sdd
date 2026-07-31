@@ -29,7 +29,7 @@
     "install.js",
     "uninstall.js",
     "bin/",
-    "wrappers/",
+    "wrapper/",
     "skills/",
     "content/",
     "hooks/",
