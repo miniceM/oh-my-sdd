@@ -137,7 +137,7 @@ export async function installWrapper(packageRoot, announce = console.log) {
   }
 
   // 安装 wrapper scripts
-  const wrapperSourceDir = path.join(packageRoot, 'wrappers');
+  const wrapperSourceDir = path.join(packageRoot, 'wrapper');
 
   if (isWindows()) {
     // Windows: 安装 .ps1 和 .bat

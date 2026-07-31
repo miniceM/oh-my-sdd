@@ -72,7 +72,7 @@ npm install -g --foreground-scripts @cli-tools/oh-my-sdd
 oms-install --tool kilocode
 
 # 3. 重启 KiloCode IDE
-#    skills 已加载到 ~/.kilocode/skills/
+#    skills 已加载到 ~/.kilo/skills/
 #    /sdd-spec <change-name>
 ```
 
@@ -298,7 +298,7 @@ oh-my-sdd v0.2+ 支持在多种 AI 编程工具中加载。skills + hooks + HARD
 | **Claude Code** | ✅ 完整支持（默认） | `npm install -g @cli-tools/oh-my-sdd` | `~/.claude/skills/` | JSON hooks + wrapper |
 | **OpenCode** | ✅ 完整支持（v0.3+） | `oms-install --tool opencode` | `~/.config/opencode/plugins/oh-my-sdd/` | TypeScript adapter + experimental hook |
 | **通义灵码 Lingma** | ✅ 完整支持（基于文档解读） | `oms-install --tool lingma` | `~/.lingma/skills/` | JSON hooks（与 Claude Code 同构） |
-| **KiloCode** | ⚠️ 部分支持（无 hook 强制） | `oms-install --tool kilocode` | `~/.kilocode/skills/` | 无 hook 机制，HARD_RULE 仅 advisory |
+| **KiloCode** | ⚠️ 部分支持（无 hook 强制） | `oms-install --tool kilocode` | `~/.kilo/skills/` | 无 hook 机制，HARD_RULE 仅 advisory |
 | **Cursor** | 📋 v0.3 路线 | — | — | — |
 | **Windsurf** | 📋 v0.3 路线 | — | — | — |
 

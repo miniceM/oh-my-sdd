@@ -6,7 +6,7 @@ import path from 'node:path';
 
 import { getPluginInstallDir, getStateDir } from '../lib/platform.js';
 import { uninstallWrapper } from '../wrapper/wrapper.js';
-import { getAdapter } from './host-registry.js';
+import { getAdapter, listTools } from './host-registry.js';
 
 const MARKETPLACE_NAME = 'oh-my-sdd';
 const PLUGIN_NAME = 'oh-my-sdd';
@@ -138,9 +138,10 @@ async function main({ purge = false, tool } = {}) {
   // 2. Default: full uninstall for Claude Code path
   await uninstallForClaude({ announce });
 
-  // 3. If tool not specified, also clean lingma/opencode (if installed)
+  // 3. If tool not specified, also clean other hosts (if installed)
   if (!tool) {
-    for (const hostId of ['lingma', 'opencode']) {
+    for (const hostId of listTools()) {
+      if (hostId === 'claude') continue; // handled above via legacy path
       const Adapter = getAdapter(hostId);
       if (Adapter.isInstalled()) {
         await Adapter.uninstall({ announce });
