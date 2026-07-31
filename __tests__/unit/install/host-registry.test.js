@@ -27,13 +27,13 @@ describe('host-registry', () => {
 
   it('listTools returns all registered tool ids', () => {
     const tools = listTools();
-    assert.deepEqual(tools.sort(), ['claude', 'lingma', 'opencode']);
+    assert.deepEqual(tools.sort(), ['claude', 'kilocode', 'lingma', 'opencode']);
   });
 
   it('detectDefault returns a string', () => {
     const def = detectDefault();
     assert.equal(typeof def, 'string');
     // In CI, probably no host is installed, so fallback to 'claude'
-    assert.ok(['claude', 'lingma', 'opencode'].includes(def));
+    assert.ok(['claude', 'kilocode', 'lingma', 'opencode'].includes(def));
   });
 });

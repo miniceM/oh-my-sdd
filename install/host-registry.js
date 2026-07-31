@@ -6,11 +6,13 @@
 import { ClaudeAdapter } from './hosts/claude-adapter.js';
 import { LingmaAdapter } from './hosts/lingma-adapter.js';
 import { OpenCodeAdapter } from './hosts/opencode-adapter.js';
+import { KiloCodeAdapter } from './hosts/kilocode-adapter.js';
 
 const REGISTRY = new Map([
   ['claude',   ClaudeAdapter],
   ['lingma',   LingmaAdapter],
   ['opencode', OpenCodeAdapter],
+  ['kilocode', KiloCodeAdapter],
 ]);
 
 /**
