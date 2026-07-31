@@ -4,9 +4,7 @@
 //   1. Register marketplace (`claude plugin marketplace add`)
 //   2. Install plugin (`claude plugin install oh-my-sdd@oh-my-sdd`)
 //   3. Install Claude CLI wrapper (intercepts `claude`, injects enterprise baseline)
-//
-// Claude's uninstall() is intentionally not implemented in Phase 1 —
-// it will be added in Phase 3 to restore symmetry with lingma/opencode.
+//   4. Uninstall: remove plugin + wrapper
 
 import { spawn } from 'node:child_process';
 import { execFileSync } from 'node:child_process';
@@ -85,8 +83,24 @@ export class ClaudeAdapter extends HostAdapter {
     announce('绕过企业约束: claude --no-enterprise ...');
   }
 
-  // uninstall() intentionally NOT implemented in Phase 1.
-  // Will be added in Phase 3 to call `claude plugin uninstall` + remove wrapper.
+  static async uninstall(ctx) {
+    ctx.announce('→ 卸载 Claude Code 适配');
+
+    // 1. Uninstall plugin via claude CLI
+    const result = await this.#runClaude(['plugin', 'uninstall', `${PLUGIN_NAME}@${MARKETPLACE_NAME}`]);
+    if (result.code !== 0) {
+      const out = (result.stderr + result.stdout).toLowerCase();
+      if (!out.includes('not installed') && !out.includes('not found')) {
+        ctx.announce(`  ⚠️  claude plugin uninstall 失败 (exit ${result.code})`);
+      }
+    } else {
+      ctx.announce(`  ✓ 已卸载 plugin: ${PLUGIN_NAME}@${MARKETPLACE_NAME}`);
+    }
+
+    // 2. Remove wrapper
+    const { uninstallWrapper } = await import('../../wrapper/wrapper.js');
+    await uninstallWrapper(ctx.announce);
+  }
 
   // ============================================
   // Private helpers
