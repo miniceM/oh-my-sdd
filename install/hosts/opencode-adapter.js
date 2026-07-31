@@ -1,6 +1,9 @@
 // install/hosts/opencode-adapter.js — OpenCode 安装/卸载入口。
 //
-// 主入口：协调各子模块完成安装流程。
+// OpenCode's plugin model is bespoke (manual file placement rather than a
+// plugin registry), so this adapter is legitimately longer than others.
+// The 5 install steps are OpenCode-specific; they stay as private methods.
+//
 // 具体逻辑已拆分到：
 //   - lib/constants.js — 命名常量
 //   - lib/paths.js — 路径常量
@@ -14,272 +17,260 @@
 
 import { existsSync, mkdirSync, readdirSync, copyFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { OPENCODE_PLUGIN_DIR, OPENCODE_COMMANDS_DIR, OPENCODE_CONFIG_DIR } from '../../lib/paths.js';
-import { buildOpencodePlugin } from '../../opencode/build.js';
-import { copyDir, rmIfExistsSync } from '../common/fs.js';
-import { announce } from '../common/announce.js';
+
+import { HostAdapter } from '../host-adapter.js';
+import { rmIfExistsSync, copyDir } from '../common/fs.js';
 import { isCliInPath, isDirPresent } from '../common/detect.js';
+import { buildOpencodePlugin } from '../../opencode/build.js';
 import { installSuperpowersZh, findDelegatedSkillsSource } from '../common/superpowers-installer.js';
 import { SDD_COMMANDS, installCommandFiles } from '../../lib/command-generator.js';
 import { patchOpencodeJson, unpatchOpencodeJson } from '../common/config-patcher.js';
-import { HostAdapter } from '../host-adapter.js';
+import {
+  OPENCODE_PLUGIN_DIR,
+  OPENCODE_COMMANDS_DIR,
+  OPENCODE_CONFIG_DIR,
+} from '../../lib/paths.js';
 
-// ============================================
-// 探测 OpenCode 是否安装
-// ============================================
-export function isOpenCodeInstalled() {
-  if (isCliInPath('opencode')) return true;
-  // fallback: 检测 ~/.config/opencode/ 目录
-  return isDirPresent(OPENCODE_CONFIG_DIR);
-}
-
-// ============================================
-// 复制 opencode/dist → ~/.config/opencode/plugins/oh-my-sdd/
-// ============================================
-function copyDistToPluginDir(packageRoot) {
-  const distDir = join(packageRoot, 'opencode', 'dist');
-  if (!existsSync(distDir)) {
-    throw new Error(`opencode/dist/ 不存在，请先跑 npm run build:opencode`);
-  }
-  const count = copyDir(distDir, OPENCODE_PLUGIN_DIR);
-  if (count === 0) {
-    throw new Error(`opencode/dist/ 目录为空，请先跑 npm run build:opencode`);
-  }
-  announce(`  ✓ 复制到: ${OPENCODE_PLUGIN_DIR} (${count} 个文件)`);
-}
-
-// ============================================
-// 复制 content/ → ~/.config/opencode/plugins/oh-my-sdd/content/
-// ============================================
-function copyContentToPluginDir(packageRoot) {
-  const srcContentDir = join(packageRoot, 'content');
-  if (!existsSync(srcContentDir)) {
-    announce('  ⚠️  content/ 目录不存在，跳过 content 复制');
-    return;
-  }
-  const targetContentDir = join(OPENCODE_PLUGIN_DIR, 'content');
-  const count = copyDir(srcContentDir, targetContentDir, {
-    filter: (f) => f.endsWith('.md')
-  });
-  announce(`  ✓ content 复制到: ${targetContentDir} (${count} 个文件)`);
-}
-
-// ============================================
-// 复制 hooks/ → ~/.config/opencode/plugins/oh-my-sdd/hooks/
-// ============================================
-function copyHooksToPluginDir(packageRoot) {
-  const srcHooksDir = join(packageRoot, 'hooks');
-  if (!existsSync(srcHooksDir)) {
-    announce('  ⚠️  hooks/ 目录不存在，跳过 hook 复制');
-    return;
-  }
-  const targetHooksDir = join(OPENCODE_PLUGIN_DIR, 'hooks');
-
-  // 复制 hooks/*.js (顶层)
-  const topLevelCount = copyDir(srcHooksDir, targetHooksDir, {
-    filter: (f) => f.endsWith('.js')
-  });
-
-  // 复制顶层 lib/*.js → <plugin>/lib/ (hooks now import via ../lib/X.js)
-  const srcLibDir = join(packageRoot, 'lib');
-  if (existsSync(srcLibDir)) {
-    const targetLibDir = join(OPENCODE_PLUGIN_DIR, 'lib');
-    const libCount = copyDir(srcLibDir, targetLibDir, {
-      filter: (f) => f.endsWith('.js')
-    });
-    announce(`  ✓ hooks 复制到: ${targetHooksDir} (${topLevelCount} 文件)`);
-    announce(`  ✓ lib 复制到: ${targetLibDir} (${libCount} 文件)`);
-  } else {
-    announce(`  ✓ hooks 复制到: ${targetHooksDir} (${topLevelCount} 文件)`);
-    announce('  ⚠️  lib/ 目录不存在，跳过 lib 复制');
-  }
-}
-
-// ============================================
-// 复制单个委托子技能
-// ============================================
-function copyDelegatedSkill(srcSkill, targetSkill) {
-  if (!existsSync(srcSkill)) {
-    return 0;
-  }
-
-  mkdirSync(targetSkill, { recursive: true });
-  let copied = 0;
-
-  for (const entry of readdirSync(srcSkill)) {
-    const src = join(srcSkill, entry);
-    const dst = join(targetSkill, entry);
-    try {
-      const stat = statSync(src);
-      if (stat.isDirectory()) {
-        // 递归复制子目录（如 scripts/）
-        copied += copyDir(src, dst, { recursive: true });
-      } else {
-        copyFileSync(src, dst);
-        copied++;
-      }
-    } catch (copyErr) {
-      announce(`  ⚠️  复制文件失败: ${src} → ${dst} (${copyErr.message})`);
-    }
-  }
-
-  return copied;
-}
-
-// ============================================
-// 复制 skills → ~/.config/opencode/plugins/oh-my-sdd/skills/
-// ============================================
-function copySkillsToPluginDir(packageRoot) {
-  const targetSkillsDir = join(OPENCODE_PLUGIN_DIR, 'skills');
-  mkdirSync(targetSkillsDir, { recursive: true });
-
-  // (A) 主 SDD skills（顶层 skills/ 目录）
-  const skillsDir = join(packageRoot, 'skills');
-  if (existsSync(skillsDir)) {
-    const sddSkills = ['sdd-spec', 'sdd-plan', 'sdd-task', 'sdd-apply', 'sdd-review', 'sdd-doc'];
-    for (const skill of sddSkills) {
-      const srcSkill = join(skillsDir, skill);
-      if (existsSync(srcSkill)) {
-        const targetSkill = join(targetSkillsDir, skill);
-        const skillMd = join(srcSkill, 'SKILL.md');
-        if (existsSync(skillMd)) {
-          mkdirSync(targetSkill, { recursive: true });
-          copyFileSync(skillMd, join(targetSkill, 'SKILL.md'));
-        }
-      }
-    }
-    // 清理遗留 skill 目录
-    const allowedSkills = new Set(sddSkills);
-    for (const entry of readdirSync(targetSkillsDir)) {
-      if (entry.startsWith('sdd-') && !allowedSkills.has(entry)) {
-        rmIfExistsSync(join(targetSkillsDir, entry));
-        announce(`  ✓ 清理遗留 skill 目录: ${entry}`);
-      }
-    }
-    announce(`  ✓ SDD skills 复制到: ${targetSkillsDir}`);
-  } else {
-    announce('  ⚠️  skills/ 目录不存在，跳过 SDD skill 复制');
-  }
-
-  // (B) 委托子技能
-  const delegatedSkills = [
-    'brainstorming',
-    'writing-plans',
-    'executing-plans',
-    'subagent-driven-development',
-    'requesting-code-review',
-  ];
-
-  const chosen = findDelegatedSkillsSource(packageRoot);
-  if (!chosen) {
-    announce(`  ⚠️  委托子技能来源均不可用`);
-    announce(`      OpenCode 运行时 agent 会按 fallback chain 走 inline-content-resolution`);
-    return;
-  }
-
-  let copied = 0;
-  for (const skill of delegatedSkills) {
-    const srcSkill = join(chosen.path, skill);
-    const targetSkill = join(targetSkillsDir, skill);
-    if (copyDelegatedSkill(srcSkill, targetSkill) > 0) {
-      copied++;
-    }
-  }
-  announce(`  ✓ 委托子技能复制到: ${targetSkillsDir} (${copied} 个) [from ${chosen.source}]`);
-
-  // 清理 staging 区（已在 superpowers-installer.js 中处理）
-}
-
-// ============================================
-// 安装主入口
-// ============================================
-export async function installForOpencode({ PACKAGE_ROOT, announce: ann = announce }) {
-  ann('→ 安装 OpenCode 适配');
-  ann('');
-  ann('ℹ️  推荐方式：通过 npm 安装插件（自动更新）');
-  ann('    在 opencode.json 中配置: {"plugin": ["@enterprise/oh-my-sdd-opencode"]}');
-  ann('');
-  ann('当前：本地开发模式（手动复制到 ~/.config/opencode/plugins/）');
-  ann('');
-
-  if (!isOpenCodeInstalled()) {
-    ann('⚠️  未检测到 OpenCode。继续安装，但 OpenCode 不在时不生效。');
-    ann('    安装: https://opencode.ai');
-  }
-
-  buildOpencodePlugin(PACKAGE_ROOT);
-  copyDistToPluginDir(PACKAGE_ROOT);
-  copyHooksToPluginDir(PACKAGE_ROOT);
-  copyContentToPluginDir(PACKAGE_ROOT);
-  installSuperpowersZh();
-  copySkillsToPluginDir(PACKAGE_ROOT);
-  installCommandFiles();
-  patchOpencodeJson();
-
-  ann('');
-  ann('✓ oh-my-sdd (OpenCode) 本地开发模式安装完成');
-  ann('');
-  ann('下一步：');
-  ann('  1. 启动 OpenCode（自动加载 oh-my-sdd 插件）');
-  ann('  2. 在 OpenCode 中试 /sdd-spec <change-name>');
-  ann('  3. 测试 HARD_RULE：写一个含 AKIA 硬编码的文件，应被阻断');
-  ann('');
-  ann('生产环境推荐：');
-  ann('  npm run publish:opencode');
-  ann('  然后在 opencode.json 中使用: {"plugin": ["@enterprise/oh-my-sdd-opencode"]}');
-  ann('');
-  ann('卸载：oms-uninstall --tool opencode');
-}
-
-// ============================================
-// 卸载
-// ============================================
-export async function uninstallForOpencode() {
-  announce('→ 卸载 OpenCode 适配');
-
-  // 1. 删 plugin 目录
-  if (rmIfExistsSync(OPENCODE_PLUGIN_DIR)) {
-    announce(`  ✓ 已删除: ${OPENCODE_PLUGIN_DIR}`);
-  }
-
-  // 2. 删 command 文件
-  if (existsSync(OPENCODE_COMMANDS_DIR)) {
-    let removed = 0;
-    for (const cmd of SDD_COMMANDS) {
-      const f = join(OPENCODE_COMMANDS_DIR, `${cmd.name}.md`);
-      if (rmIfExistsSync(f)) {
-        removed++;
-      }
-    }
-    if (removed > 0) {
-      announce(`  ✓ 已删除 ${removed} 个 slash command 文件`);
-    }
-  }
-
-  // 3. 从 opencode.json 移除
-  unpatchOpencodeJson();
-
-  // 4. 保留 ~/.oh-my-sdd/（除非 --purge 由 caller 处理）
-}
-
-// ============================================
-// Class façade for registry (Task 1.2)
-// Delegates to functional exports above.
-// ============================================
 export class OpenCodeAdapter extends HostAdapter {
   static id = 'opencode';
   static displayName = 'OpenCode';
-  static isInstalled() { return isOpenCodeInstalled(); }
+
+  static isInstalled() {
+    if (isCliInPath('opencode')) return true;
+    // fallback: 检测 ~/.config/opencode/ 目录
+    return isDirPresent(OPENCODE_CONFIG_DIR);
+  }
+
   static preflight(ctx) {
-    if (!isOpenCodeInstalled()) {
-      process.stderr.write('⚠️  未检测到 OpenCode。继续安装（plugin 写到目录里等用户用），但 OpenCode 不在时不生效。\n');
-      process.stderr.write('    安装：https://opencode.ai\n');
+    if (!this.isInstalled()) {
+      ctx.announce('⚠️  未检测到 OpenCode。继续安装，但 OpenCode 不在时不生效。');
+      ctx.announce('    安装: https://opencode.ai');
     }
   }
+
   static async install(ctx) {
-    return installForOpencode({ PACKAGE_ROOT: ctx.PACKAGE_ROOT, announce: ctx.announce });
+    const { PACKAGE_ROOT, announce } = ctx;
+
+    announce('→ 安装 OpenCode 适配');
+    announce('');
+    announce('ℹ️  推荐方式：通过 npm 安装插件（自动更新）');
+    announce('    在 opencode.json 中配置: {"plugin": ["@enterprise/oh-my-sdd-opencode"]}');
+    announce('');
+    announce('当前：本地开发模式（手动复制到 ~/.config/opencode/plugins/）');
+    announce('');
+
+    buildOpencodePlugin(PACKAGE_ROOT);
+    this.#copyDistToPluginDir(PACKAGE_ROOT, announce);
+    this.#copyHooksToPluginDir(PACKAGE_ROOT, announce);
+    this.#copyContentToPluginDir(PACKAGE_ROOT, announce);
+    installSuperpowersZh();
+    this.#copySkillsToPluginDir(PACKAGE_ROOT, announce);
+    installCommandFiles();
+    patchOpencodeJson();
+
+    announce('');
+    announce('✓ oh-my-sdd (OpenCode) 本地开发模式安装完成');
+    announce('');
+    announce('下一步：');
+    announce('  1. 启动 OpenCode（自动加载 oh-my-sdd 插件）');
+    announce('  2. 在 OpenCode 中试 /sdd-spec <change-name>');
+    announce('  3. 测试 HARD_RULE：写一个含 AKIA 硬编码的文件，应被阻断');
+    announce('');
+    announce('生产环境推荐：');
+    announce('  npm run publish:opencode');
+    announce('  然后在 opencode.json 中使用: {"plugin": ["@enterprise/oh-my-sdd-opencode"]}');
+    announce('');
+    announce('卸载：oms-uninstall --tool opencode');
   }
+
   static async uninstall(ctx) {
-    return uninstallForOpencode();
+    const { announce } = ctx;
+
+    announce('→ 卸载 OpenCode 适配');
+
+    // 1. 删 plugin 目录
+    if (rmIfExistsSync(OPENCODE_PLUGIN_DIR)) {
+      announce(`  ✓ 已删除: ${OPENCODE_PLUGIN_DIR}`);
+    }
+
+    // 2. 删 command 文件
+    if (existsSync(OPENCODE_COMMANDS_DIR)) {
+      let removed = 0;
+      for (const cmd of SDD_COMMANDS) {
+        const f = join(OPENCODE_COMMANDS_DIR, `${cmd.name}.md`);
+        if (rmIfExistsSync(f)) {
+          removed++;
+        }
+      }
+      if (removed > 0) {
+        announce(`  ✓ 已删除 ${removed} 个 slash command 文件`);
+      }
+    }
+
+    // 3. 从 opencode.json 移除
+    unpatchOpencodeJson();
+
+    // 4. 保留 ~/.oh-my-sdd/（除非 --purge 由 caller 处理）
+  }
+
+  // ============================================
+  // Private helpers (OpenCode-specific)
+  // ============================================
+
+  /**
+   * 复制 opencode/dist → ~/.config/opencode/plugins/oh-my-sdd/
+   */
+  static #copyDistToPluginDir(packageRoot, announce) {
+    const distDir = join(packageRoot, 'opencode', 'dist');
+    if (!existsSync(distDir)) {
+      throw new Error(`opencode/dist/ 不存在，请先跑 npm run build:opencode`);
+    }
+    const count = copyDir(distDir, OPENCODE_PLUGIN_DIR);
+    if (count === 0) {
+      throw new Error(`opencode/dist/ 目录为空，请先跑 npm run build:opencode`);
+    }
+    announce(`  ✓ 复制到: ${OPENCODE_PLUGIN_DIR} (${count} 个文件)`);
+  }
+
+  /**
+   * 复制 content/ → ~/.config/opencode/plugins/oh-my-sdd/content/
+   */
+  static #copyContentToPluginDir(packageRoot, announce) {
+    const srcContentDir = join(packageRoot, 'content');
+    if (!existsSync(srcContentDir)) {
+      announce('  ⚠️  content/ 目录不存在，跳过 content 复制');
+      return;
+    }
+    const targetContentDir = join(OPENCODE_PLUGIN_DIR, 'content');
+    const count = copyDir(srcContentDir, targetContentDir, {
+      filter: (f) => f.endsWith('.md'),
+    });
+    announce(`  ✓ content 复制到: ${targetContentDir} (${count} 个文件)`);
+  }
+
+  /**
+   * 复制 hooks/ → ~/.config/opencode/plugins/oh-my-sdd/hooks/
+   */
+  static #copyHooksToPluginDir(packageRoot, announce) {
+    const srcHooksDir = join(packageRoot, 'hooks');
+    if (!existsSync(srcHooksDir)) {
+      announce('  ⚠️  hooks/ 目录不存在，跳过 hook 复制');
+      return;
+    }
+    const targetHooksDir = join(OPENCODE_PLUGIN_DIR, 'hooks');
+
+    // 复制 hooks/*.js (顶层)
+    const topLevelCount = copyDir(srcHooksDir, targetHooksDir, {
+      filter: (f) => f.endsWith('.js'),
+    });
+
+    // 复制顶层 lib/*.js → <plugin>/lib/ (hooks now import via ../lib/X.js)
+    const srcLibDir = join(packageRoot, 'lib');
+    if (existsSync(srcLibDir)) {
+      const targetLibDir = join(OPENCODE_PLUGIN_DIR, 'lib');
+      const libCount = copyDir(srcLibDir, targetLibDir, {
+        filter: (f) => f.endsWith('.js'),
+      });
+      announce(`  ✓ hooks 复制到: ${targetHooksDir} (${topLevelCount} 文件)`);
+      announce(`  ✓ lib 复制到: ${targetLibDir} (${libCount} 文件)`);
+    } else {
+      announce(`  ✓ hooks 复制到: ${targetHooksDir} (${topLevelCount} 文件)`);
+      announce('  ⚠️  lib/ 目录不存在，跳过 lib 复制');
+    }
+  }
+
+  /**
+   * 复制 skills → ~/.config/opencode/plugins/oh-my-sdd/skills/
+   */
+  static #copySkillsToPluginDir(packageRoot, announce) {
+    const targetSkillsDir = join(OPENCODE_PLUGIN_DIR, 'skills');
+    mkdirSync(targetSkillsDir, { recursive: true });
+
+    // (A) 主 SDD skills（顶层 skills/ 目录）
+    const skillsDir = join(packageRoot, 'skills');
+    if (existsSync(skillsDir)) {
+      const sddSkills = ['sdd-spec', 'sdd-plan', 'sdd-task', 'sdd-apply', 'sdd-review', 'sdd-doc'];
+      for (const skill of sddSkills) {
+        const srcSkill = join(skillsDir, skill);
+        if (existsSync(srcSkill)) {
+          const targetSkill = join(targetSkillsDir, skill);
+          const skillMd = join(srcSkill, 'SKILL.md');
+          if (existsSync(skillMd)) {
+            mkdirSync(targetSkill, { recursive: true });
+            copyFileSync(skillMd, join(targetSkill, 'SKILL.md'));
+          }
+        }
+      }
+      // 清理遗留 skill 目录
+      const allowedSkills = new Set(sddSkills);
+      for (const entry of readdirSync(targetSkillsDir)) {
+        if (entry.startsWith('sdd-') && !allowedSkills.has(entry)) {
+          rmIfExistsSync(join(targetSkillsDir, entry));
+          announce(`  ✓ 清理遗留 skill 目录: ${entry}`);
+        }
+      }
+      announce(`  ✓ SDD skills 复制到: ${targetSkillsDir}`);
+    } else {
+      announce('  ⚠️  skills/ 目录不存在，跳过 SDD skill 复制');
+    }
+
+    // (B) 委托子技能
+    const delegatedSkills = [
+      'brainstorming',
+      'writing-plans',
+      'executing-plans',
+      'subagent-driven-development',
+      'requesting-code-review',
+    ];
+
+    const chosen = findDelegatedSkillsSource(packageRoot);
+    if (!chosen) {
+      announce(`  ⚠️  委托子技能来源均不可用`);
+      announce(`      OpenCode 运行时 agent 会按 fallback chain 走 inline-content-resolution`);
+      return;
+    }
+
+    let copied = 0;
+    for (const skill of delegatedSkills) {
+      const srcSkill = join(chosen.path, skill);
+      const targetSkill = join(targetSkillsDir, skill);
+      if (this.#copyDelegatedSkill(srcSkill, targetSkill, announce) > 0) {
+        copied++;
+      }
+    }
+    announce(`  ✓ 委托子技能复制到: ${targetSkillsDir} (${copied} 个) [from ${chosen.source}]`);
+
+    // 清理 staging 区（已在 superpowers-installer.js 中处理）
+  }
+
+  /**
+   * 复制单个委托子技能
+   */
+  static #copyDelegatedSkill(srcSkill, targetSkill, announce) {
+    if (!existsSync(srcSkill)) {
+      return 0;
+    }
+
+    mkdirSync(targetSkill, { recursive: true });
+    let copied = 0;
+
+    for (const entry of readdirSync(srcSkill)) {
+      const src = join(srcSkill, entry);
+      const dst = join(targetSkill, entry);
+      try {
+        const stat = statSync(src);
+        if (stat.isDirectory()) {
+          // 递归复制子目录（如 scripts/）
+          copied += copyDir(src, dst, { recursive: true });
+        } else {
+          copyFileSync(src, dst);
+          copied++;
+        }
+      } catch (copyErr) {
+        announce(`  ⚠️  复制文件失败: ${src} → ${dst} (${copyErr.message})`);
+      }
+    }
+
+    return copied;
   }
 }
