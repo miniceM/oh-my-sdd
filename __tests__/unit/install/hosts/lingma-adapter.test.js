@@ -12,7 +12,10 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LingmaAdapter } from '../../../../install/hosts/lingma-adapter.js';
+import {
+  LingmaAdapter,
+  replacePluginRoot,
+} from '../../../../install/hosts/lingma-adapter.js';
 import { HostAdapter } from '../../../../install/host-adapter.js';
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
@@ -163,6 +166,106 @@ describe('LingmaAdapter', () => {
       const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
       const commands = settings.hooks.PreToolUse.flatMap(entry => entry.hooks.map(hook => hook.command));
       assert.deepEqual(commands, ['user-pre-hook']);
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  it('restores a pre-existing same-name user skill on uninstall', () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), 'oms-lingma-conflict-'));
+    const skillFile = join(fakeHome, '.lingma', 'skills', 'sdd-spec', 'SKILL.md');
+    const userSkill = '# User-owned sdd-spec\nDo not delete me.\n';
+    try {
+      mkdirSync(dirname(skillFile), { recursive: true });
+      writeFileSync(skillFile, userSkill);
+
+      runAdapter(fakeHome, 'install');
+      assert.notEqual(readFileSync(skillFile, 'utf8'), userSkill);
+      const sentinel = JSON.parse(readFileSync(
+        join(fakeHome, '.oh-my-sdd', 'baseline-lingma.sentinel'),
+        'utf8',
+      ));
+      assert.deepEqual(
+        sentinel.skill_ownership.find((skill) => skill.name === 'sdd-spec'),
+        { name: 'sdd-spec', had_existing: true },
+      );
+
+      runAdapter(fakeHome, 'uninstall');
+      assert.equal(readFileSync(skillFile, 'utf8'), userSkill);
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  it('backs up malformed settings before replacing it', () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), 'oms-lingma-broken-settings-'));
+    const settingsPath = join(fakeHome, '.lingma', 'settings.json');
+    const malformed = '{ "hooks": broken json';
+    try {
+      mkdirSync(dirname(settingsPath), { recursive: true });
+      writeFileSync(settingsPath, malformed);
+
+      runAdapter(fakeHome, 'install');
+
+      assert.equal(readFileSync(`${settingsPath}.oh-my-sdd-backup`, 'utf8'), malformed);
+      assert.doesNotThrow(() => JSON.parse(readFileSync(settingsPath, 'utf8')));
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  it('does not overwrite malformed settings when backup creation fails', () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), 'oms-lingma-backup-failure-'));
+    const settingsPath = join(fakeHome, '.lingma', 'settings.json');
+    const backupPath = `${settingsPath}.oh-my-sdd-backup`;
+    const malformed = '{ "hooks": broken json';
+    try {
+      mkdirSync(dirname(settingsPath), { recursive: true });
+      writeFileSync(settingsPath, malformed);
+      mkdirSync(backupPath);
+
+      assert.throws(() => runAdapter(fakeHome, 'install'));
+      assert.equal(readFileSync(settingsPath, 'utf8'), malformed);
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  it('inserts Windows plugin paths at the object level without corrupting JSON', () => {
+    const pluginRoot = 'C:\\Program Files\\oh-my-sdd';
+    const template = {
+      hooks: {
+        PreToolUse: [{ hooks: [{ command: 'node "<PLUGIN_ROOT>/hooks/pre-tool-use.js"' }] }],
+      },
+    };
+
+    const result = replacePluginRoot(template, pluginRoot);
+    const roundTripped = JSON.parse(JSON.stringify(result));
+
+    assert.equal(
+      roundTripped.hooks.PreToolUse[0].hooks[0].command,
+      'node "C:\\Program Files\\oh-my-sdd/hooks/pre-tool-use.js"',
+    );
+  });
+
+  it('does not restore an OMS skill recorded by a legacy sentinel after upgrade', () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), 'oms-lingma-legacy-upgrade-'));
+    const skillDir = join(fakeHome, '.lingma', 'skills', 'sdd-spec');
+    const sentinelPath = join(fakeHome, '.oh-my-sdd', 'baseline-lingma.sentinel');
+    try {
+      mkdirSync(skillDir, { recursive: true });
+      mkdirSync(dirname(sentinelPath), { recursive: true });
+      writeFileSync(join(skillDir, 'SKILL.md'), '# old OMS skill\n');
+      writeFileSync(sentinelPath, JSON.stringify({
+        tool: 'lingma',
+        dest: join(fakeHome, '.lingma', 'rules', 'oh-my-sdd.md'),
+        skill_names: ['sdd-spec'],
+      }));
+
+      runAdapter(fakeHome, 'install');
+      runAdapter(fakeHome, 'uninstall');
+
+      assert.ok(!existsSync(skillDir));
     } finally {
       rmSync(fakeHome, { recursive: true, force: true });
     }

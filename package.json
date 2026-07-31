@@ -20,6 +20,7 @@
     "publish:opencode": "cd opencode && npm publish",
     "prepublishOnly": "npm run build && npm run build:opencode",
     "test": "node scripts/run-tests.js",
+    "test:coverage": "node scripts/run-tests.js --coverage",
     "test:glob": "node --test \"__tests__/**/*.test.js\"",
     "lint:baseline": "node scripts/check-baseline-tokens.mjs"
   },
@@ -42,7 +43,7 @@
     "access": "restricted"
   },
   "engines": {
-    "node": ">=22.0.0",
+    "node": ">=18.0.0",
     "npm": ">=9.0.0"
   },
   "os": [

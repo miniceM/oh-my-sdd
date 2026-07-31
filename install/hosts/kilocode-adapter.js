@@ -10,6 +10,7 @@ import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { HostAdapter } from '../host-adapter.js';
 import {
@@ -19,7 +20,12 @@ import {
   readSentinel,
   sentinelPathFor,
 } from '../common/sentinel.js';
-import { copySkillsToDir, rmIfExists } from '../common/fs.js';
+import {
+  installSkillsWithOwnership,
+  restoreSkillsFromOwnership,
+  rmIfExists,
+  skillOwnershipFromSentinel,
+} from '../common/fs.js';
 import { isCliInPath, isDirPresent } from '../common/detect.js';
 
 const HOME = homedir();
@@ -29,6 +35,7 @@ const KILO_DIR = join(HOME, '.kilo');
 const KILO_SKILLS_DIR = join(KILO_DIR, 'skills');
 const KILO_CONFIG_DIR = join(HOME, '.config', 'kilo');
 const KILO_AGENTS_MD = join(KILO_CONFIG_DIR, 'AGENTS.md');
+const KILO_SKILLS_BACKUP_DIR = join(HOME, '.oh-my-sdd', 'backups', 'kilocode', 'skills');
 
 export class KiloCodeAdapter extends HostAdapter {
   static id = 'kilocode';
@@ -64,7 +71,14 @@ export class KiloCodeAdapter extends HostAdapter {
     // Step 1: Copy skills to ~/.kilo/skills/
     const skillsSource = join(PACKAGE_ROOT, 'skills');
     const installedSkillNames = await this.#getSkillNames(skillsSource);
-    await copySkillsToDir(skillsSource, KILO_SKILLS_DIR, announce);
+    const previousSentinel = await readSentinel('kilocode');
+    const skillOwnership = await installSkillsWithOwnership(
+      skillsSource,
+      KILO_SKILLS_DIR,
+      KILO_SKILLS_BACKUP_DIR,
+      skillOwnershipFromSentinel(previousSentinel),
+      announce,
+    );
 
     // Step 2: Inject baseline via AGENTS.md (advisory only)
     await this.#injectBaseline(PACKAGE_ROOT, announce);
@@ -72,6 +86,7 @@ export class KiloCodeAdapter extends HostAdapter {
     // Step 3: Write sentinel for uninstall tracking
     await writeSentinel('kilocode', KILO_AGENTS_MD, null, announce, {
       skill_names: installedSkillNames,
+      skill_ownership: skillOwnership,
     });
 
     announce('');
@@ -99,21 +114,29 @@ export class KiloCodeAdapter extends HostAdapter {
     // Step 1: Delete only skill directories installed by oh-my-sdd.
     // Never remove the shared ~/.kilo/skills directory.
     const fallbackSkillsSource = resolve(
-      dirname(new URL(import.meta.url).pathname),
+      dirname(fileURLToPath(import.meta.url)),
       '..',
       '..',
       'skills'
     );
-    const skillNames = Array.isArray(sentinel?.skill_names)
-      ? sentinel.skill_names
-      : await this.#getSkillNames(fallbackSkillsSource);
-    let removedSkills = 0;
-    for (const skillName of skillNames) {
-      if (!this.#isSafeSkillName(skillName)) continue;
-      if (await rmIfExists(join(KILO_SKILLS_DIR, skillName))) removedSkills++;
-    }
-    if (removedSkills > 0) {
-      announce(`  ✓ 已删除 ${removedSkills} 个 oh-my-sdd skills`);
+    if (Array.isArray(sentinel?.skill_ownership)) {
+      const result = await restoreSkillsFromOwnership(
+        KILO_SKILLS_DIR,
+        KILO_SKILLS_BACKUP_DIR,
+        sentinel.skill_ownership,
+      );
+      if (result.removed > 0) announce(`  ✓ 已删除 ${result.removed} 个 oh-my-sdd skills`);
+      if (result.restored > 0) announce(`  ✓ 已恢复 ${result.restored} 个用户 skills`);
+    } else {
+      const skillNames = Array.isArray(sentinel?.skill_names)
+        ? sentinel.skill_names
+        : await this.#getSkillNames(fallbackSkillsSource);
+      let removedSkills = 0;
+      for (const skillName of skillNames) {
+        if (!this.#isSafeSkillName(skillName)) continue;
+        if (await rmIfExists(join(KILO_SKILLS_DIR, skillName))) removedSkills++;
+      }
+      if (removedSkills > 0) announce(`  ✓ 已删除 ${removedSkills} 个 oh-my-sdd skills`);
     }
 
     // Step 2: Remove only the OMS block from AGENTS.md.
@@ -129,13 +152,7 @@ export class KiloCodeAdapter extends HostAdapter {
   // ---- Private helpers ----
 
   static async #injectBaseline(packageRoot, announce) {
-    const baselinePath = resolve(
-      dirname(new URL(import.meta.url).pathname),
-      '..',
-      '..',
-      'content',
-      'enterprise-baseline.md'
-    );
+    const baselinePath = join(packageRoot, 'content', 'enterprise-baseline.md');
     const baseline = await readFile(baselinePath, 'utf8');
 
     // Kilo Code AGENTS.md doesn't accept frontmatter — strip it

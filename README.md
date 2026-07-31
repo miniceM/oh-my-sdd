@@ -256,7 +256,7 @@ PostToolUse 的 `permissionDecision: "deny"` 经 spike 验证无法阻断落盘�
 ## 系统要求
 
 **通用**（所有工具路径都需要）：
-- Node.js ≥ 22
+- Node.js ≥ 18
 - npm ≥ 9
 - `openspec` CLI —— spec 保鲜的核心，archive 时自动 merge delta 到 `openspec/specs/`，让项目 specs 永远反映系统现状
   ```bash

@@ -36,9 +36,12 @@
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
+  readlinkSync,
   readdirSync,
+  rmSync,
   statSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -90,13 +93,49 @@ function fileContentEqual(a, b) {
   }
 }
 
+/** Compare complete resource trees without following symbolic links. */
+export function treeContentEqual(a, b, ops = {}) {
+  const exists = ops.existsSync ?? existsSync;
+  const lstat = ops.lstatSync ?? lstatSync;
+  const readdir = ops.readdirSync ?? readdirSync;
+  const readlink = ops.readlinkSync ?? readlinkSync;
+  const contentEqual = ops.fileContentEqual ?? fileContentEqual;
+
+  try {
+    if (!exists(a) || !exists(b)) return false;
+    const aStat = lstat(a);
+    const bStat = lstat(b);
+
+    if (aStat.isSymbolicLink() || bStat.isSymbolicLink()) {
+      return aStat.isSymbolicLink()
+        && bStat.isSymbolicLink()
+        && readlink(a) === readlink(b);
+    }
+    if (aStat.isDirectory() !== bStat.isDirectory()) return false;
+    if (aStat.isFile() !== bStat.isFile()) return false;
+    if (aStat.isFile()) return contentEqual(a, b);
+    if (!aStat.isDirectory()) return false;
+
+    const aEntries = [...readdir(a)].sort();
+    const bEntries = [...readdir(b)].sort();
+    if (aEntries.length !== bEntries.length) return false;
+    return aEntries.every((name, index) => (
+      name === bEntries[index]
+      && treeContentEqual(join(a, name), join(b, name), ops)
+    ));
+  } catch {
+    return false;
+  }
+}
+
 export function copyDirSafe(srcDir, dstDir, filterFn, label, ops = {}) {
   const exists = ops.existsSync ?? existsSync;
   const stat = ops.statSync ?? statSync;
   const mkdir = ops.mkdirSync ?? mkdirSync;
   const readdir = ops.readdirSync ?? readdirSync;
   const copy = ops.cpSync ?? cpSync;
-  const contentEqual = ops.fileContentEqual ?? fileContentEqual;
+  const remove = ops.rmSync ?? rmSync;
+  const resourcesEqual = ops.treeContentEqual ?? ((a, b) => treeContentEqual(a, b, ops));
   const warn = ops.warn ?? console.warn;
   const now = ops.now ?? Date.now;
 
@@ -114,37 +153,44 @@ export function copyDirSafe(srcDir, dstDir, filterFn, label, ops = {}) {
     const dst = join(dstDir, name);
 
     if (exists(dst)) {
-      // directory (skill) or file (command)?
-      const srcStat = stat(src);
-      let backupSucceeded = true;
-      if (srcStat.isDirectory()) {
-        // compare SKILL.md only — cheapest signal
-        const srcSkill = join(src, 'SKILL.md');
-        const dstSkill = join(dst, 'SKILL.md');
-        if (exists(srcSkill) && exists(dstSkill) && contentEqual(srcSkill, dstSkill)) {
-          continue; // identical, skip
-        }
-        // backup existing then overwrite
-        const backup = `${dst}.oh-my-sdd-backup-${now()}`;
+      if (resourcesEqual(src, dst)) continue;
+
+      const backupStamp = now();
+      let backup = `${dst}.oh-my-sdd-backup-${backupStamp}`;
+      let suffix = 1;
+      while (exists(backup)) backup = `${dst}.oh-my-sdd-backup-${backupStamp}-${suffix++}`;
+
+      try {
+        // Always copy the existing destination: it is the user data at risk.
+        copy(dst, backup, { recursive: true, force: false, errorOnExist: true });
+        warn(`[postinstall] ${label}: backed up ${name} -> ${backup}`);
+      } catch (e) {
+        warn(`[postinstall] ${label}: backup failed for ${name}; preserving existing target: ${e.message}`);
+        continue;
+      }
+
+      try {
+        // Replace rather than merge so deleted helper resources do not linger.
+        remove(dst, { recursive: true, force: true });
+      } catch (e) {
+        warn(`[postinstall] ${label}: could not replace ${name}; preserving existing target: ${e.message}`);
+        continue;
+      }
+
+      try {
+        copy(src, dst, { recursive: true });
+        installed++;
+      } catch (e) {
+        warn(`[postinstall] ${label}: copy failed ${name}: ${e.message}`);
         try {
-          copy(dst, backup, { recursive: true });
-          warn(`[postinstall] ${label}: backed up ${name} -> ${backup}`);
-        } catch (e) {
-          backupSucceeded = false;
-          warn(`[postinstall] ${label}: backup failed for ${name}; preserving existing target: ${e.message}`);
-        }
-      } else {
-        if (contentEqual(src, dst)) continue;
-        const backup = `${dst}.oh-my-sdd-backup-${now()}`;
-        try {
-          copy(src, backup);
-          warn(`[postinstall] ${label}: backed up ${name} -> ${backup}`);
-        } catch (e) {
-          backupSucceeded = false;
-          warn(`[postinstall] ${label}: backup failed for ${name}; preserving existing target: ${e.message}`);
+          remove(dst, { recursive: true, force: true });
+          copy(backup, dst, { recursive: true });
+          warn(`[postinstall] ${label}: restored existing target ${name} from ${backup}`);
+        } catch (restoreError) {
+          warn(`[postinstall] ${label}: restore failed for ${name}; backup remains at ${backup}: ${restoreError.message}`);
         }
       }
-      if (!backupSucceeded) continue;
+      continue;
     }
 
     try {

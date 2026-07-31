@@ -49,9 +49,37 @@ function isClaudeInstalled() { return ClaudeAdapter.isInstalled(); }
 function isLingmaInstalled() { return LingmaAdapter.isInstalled(); }
 function isOpenCodeInstalled() { return OpenCodeAdapter.isInstalled(); }
 
+/**
+ * Return whether an ES module is the process entry point.
+ * URL decoding plus native path resolution makes the comparison portable to
+ * Windows drive-letter paths and package locations containing spaces.
+ */
+function isDirectExecution(
+  moduleUrl,
+  entryArg,
+  {
+    platform = process.platform,
+    pathApi = path,
+    fileURLToPathFn = fileURLToPath,
+  } = {},
+) {
+  if (!entryArg) return false;
+  const modulePath = pathApi.resolve(fileURLToPathFn(moduleUrl));
+  const entryPath = pathApi.resolve(entryArg);
+  return platform === 'win32'
+    ? modulePath.toLowerCase() === entryPath.toLowerCase()
+    : modulePath === entryPath;
+}
+
 // ============================================
 // 调度入口
 // ============================================
+/**
+ * Install oh-my-sdd for an explicitly selected or auto-detected host.
+ *
+ * @param {{ tool?: string | null }} options installer options
+ * @returns {Promise<unknown>} the selected adapter's installation result
+ */
 async function main(options = {}) {
   // 共享前置：Node 版本
   if (!checkNodeVersion(MIN_NODE_VERSION)) {
@@ -77,6 +105,7 @@ async function main(options = {}) {
 // ============================================
 // 向后兼容导出：preflightFor
 // ============================================
+/** Run only the shared and host-specific prerequisite checks. */
 function preflightFor(tool) {
   if (!checkNodeVersion(MIN_NODE_VERSION)) {
     process.stderr.write(`❌ Node 版本过低。需要 >= ${MIN_NODE_VERSION}，当前 ${process.version}\n`);
@@ -89,6 +118,7 @@ function preflightFor(tool) {
 // ============================================
 // 向后兼容导出：detectDefaultTool
 // ============================================
+/** Return the first supported host detected in the current environment. */
 function detectDefaultTool() {
   return detectDefault();
 }
@@ -96,7 +126,7 @@ function detectDefaultTool() {
 // ============================================
 // CLI 入口
 // ============================================
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isDirectExecution(import.meta.url, process.argv[1])) {
   const args = process.argv.slice(2);
   const toolIdx = args.indexOf('--tool');
   const tool = toolIdx >= 0 ? args[toolIdx + 1] : undefined;
@@ -113,4 +143,5 @@ export {
   isClaudeInstalled,
   isLingmaInstalled,
   isOpenCodeInstalled,
+  isDirectExecution,
 };

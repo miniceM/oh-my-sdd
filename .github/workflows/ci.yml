@@ -13,7 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        node: [22]
+        node: [18, 20, 22]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,18 +21,17 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: node --version
       - run: npm install --ignore-scripts
-      - run: npm test
+      - run: npm run test:coverage
       - run: npm run lint:baseline
 
   smoke-check:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 18
       - run: |
           set +e  # 关闭 errexit，本步骤的 install.js 可能因无 claude 而 exit 1
           TESTHOME=$(mktemp -d)
@@ -41,10 +40,11 @@ jobs:
           # 会输出引导但 exit 1，smoke-check 改为验证引导输出存在即可。
           OUT=$(HOME=$TESTHOME USERPROFILE=$TESTHOME node install.js 2>&1)
           EXIT_CODE=$?
+          set -e
           echo "$OUT"
           echo "(install.js exit code: $EXIT_CODE — non-zero is expected without claude CLI)"
           # 无论 claude 是否存在，install.js 都应创建 ~/.oh-my-sdd/config.json
-          test -f $TESTHOME/.oh-my-sdd/config.json
-          HOME=$TESTHOME USERPROFILE=$TESTHOME node uninstall.js
+          test -f "$TESTHOME/.oh-my-sdd/config.json"
+          HOME=$TESTHOME USERPROFILE=$TESTHOME node install/uninstall.js
           # uninstall 保留 ~/.oh-my-sdd/ 状态目录（除非 --purge）
-          test -d $TESTHOME/.oh-my-sdd/
+          test -d "$TESTHOME/.oh-my-sdd/"

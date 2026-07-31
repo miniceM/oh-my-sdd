@@ -21,6 +21,19 @@ import { getPluginInstallDir, isIamInPath } from '../../lib/platform.js';
 const MARKETPLACE_NAME = 'oh-my-sdd';
 const PLUGIN_NAME = 'oh-my-sdd';
 
+export function buildClaudeInvocation(
+  args,
+  { platform = process.platform, comspec = process.env.ComSpec } = {},
+) {
+  if (platform === 'win32') {
+    return {
+      command: comspec || 'cmd.exe',
+      args: ['/d', '/s', '/c', 'claude.cmd', ...args],
+    };
+  }
+  return { command: 'claude', args };
+}
+
 export class ClaudeAdapter extends HostAdapter {
   static id = 'claude';
   static displayName = 'Claude Code';
@@ -117,7 +130,8 @@ export class ClaudeAdapter extends HostAdapter {
 
   static #runClaude(args) {
     return new Promise((resolve) => {
-      const child = spawn('claude', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      const invocation = buildClaudeInvocation(args);
+      const child = spawn(invocation.command, invocation.args, { stdio: ['ignore', 'pipe', 'pipe'] });
       let stdout = '';
       let stderr = '';
       child.stdout.on('data', (c) => { stdout += c; });

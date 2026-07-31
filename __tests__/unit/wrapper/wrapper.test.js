@@ -1,6 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -105,4 +114,43 @@ test('installWrapper function exists and is async', () => {
 test('uninstallWrapper function exists and is async', () => {
   assert.strictEqual(typeof wrapper.uninstallWrapper, 'function', 'uninstallWrapper must be function');
   assert.strictEqual(wrapper.uninstallWrapper.constructor.name, 'AsyncFunction', 'uninstallWrapper must be async');
+});
+
+test('wrapper install, verification, reinstall, and uninstall preserve the original CLI', async (t) => {
+  if (process.platform === 'win32') return;
+
+  const fakeHome = mkdtempSync(path.join(os.tmpdir(), 'oms-wrapper-lifecycle-'));
+  const originalHome = process.env.HOME;
+  const originalPath = process.env.PATH;
+  t.after(() => {
+    if (originalHome === undefined) delete process.env.HOME;
+    else process.env.HOME = originalHome;
+    if (originalPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalPath;
+    rmSync(fakeHome, { recursive: true, force: true });
+  });
+
+  const originalClaude = path.join(fakeHome, '.claude', 'bin', 'claude');
+  const wrapperBin = path.join(fakeHome, '.local', 'bin');
+  mkdirSync(path.dirname(originalClaude), { recursive: true });
+  writeFileSync(originalClaude, '#!/bin/sh\nexit 0\n');
+  chmodSync(originalClaude, 0o755);
+  process.env.HOME = fakeHome;
+  process.env.PATH = `${wrapperBin}${path.delimiter}${originalPath ?? ''}`;
+
+  const messages = [];
+  assert.equal(await wrapper.installWrapper(PROJECT_ROOT, message => messages.push(message)), true);
+  assert.equal(wrapper.verifyWrapper(message => messages.push(message)), true);
+  assert.equal(await wrapper.installWrapper(PROJECT_ROOT, message => messages.push(message)), true);
+
+  const backup = path.join(wrapperBin, 'claude-original');
+  assert.equal(existsSync(backup), true);
+  assert.equal(existsSync(path.join(wrapperBin, 'claude')), true);
+  assert.equal(existsSync(path.join(fakeHome, '.config', 'claude-enterprise', 'baseline.md')), true);
+  assert.ok(messages.some(message => message.includes('备份已存在')));
+
+  assert.equal(await wrapper.uninstallWrapper(message => messages.push(message)), true);
+  assert.equal(existsSync(backup), false);
+  assert.equal(existsSync(path.join(wrapperBin, 'claude')), false);
+  assert.equal(wrapper.verifyWrapper(() => {}), false);
 });

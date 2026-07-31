@@ -15,6 +15,33 @@ function announce(msg) {
   process.stderr.write(msg + '\n');
 }
 
+/**
+ * Return whether this module is the process entry point on the current OS.
+ */
+function isDirectExecution(
+  moduleUrl,
+  entryArg,
+  {
+    platform = process.platform,
+    pathApi = path,
+    fileURLToPathFn = fileURLToPath,
+  } = {},
+) {
+  if (!entryArg) return false;
+  const modulePath = pathApi.resolve(fileURLToPathFn(moduleUrl));
+  const entryPath = pathApi.resolve(entryArg);
+  return platform === 'win32'
+    ? modulePath.toLowerCase() === entryPath.toLowerCase()
+    : modulePath === entryPath;
+}
+
+/**
+ * Uninstall one registered host or every detected host.
+ *
+ * @param {{ purge?: boolean, tool?: string | null }} options uninstall options
+ * @param {object} dependencies injectable collaborators used by tests
+ * @returns {Promise<void>}
+ */
 async function main(
   { purge = false, tool } = {},
   {
@@ -45,7 +72,7 @@ async function main(
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isDirectExecution(import.meta.url, process.argv[1])) {
   const args = process.argv.slice(2);
   const purge = args.includes('--purge');
   const toolIdx = args.indexOf('--tool');
@@ -56,4 +83,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   });
 }
 
-export { main };
+export { isDirectExecution, main };

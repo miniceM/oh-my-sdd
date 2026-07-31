@@ -24,11 +24,11 @@ const ADAPTER_URL = pathToFileURL(
 ).href;
 const SENTINEL_BEGIN = '<!-- OH-MY-SDD:BEGIN (do not edit between these markers) -->';
 
-async function runAdapter(method, fakeHome) {
+async function runAdapter(method, fakeHome, packageRoot = PACKAGE_ROOT) {
   const script = `
     import { KiloCodeAdapter } from ${JSON.stringify(ADAPTER_URL)};
     await KiloCodeAdapter.${method}({
-      PACKAGE_ROOT: ${JSON.stringify(PACKAGE_ROOT)},
+      PACKAGE_ROOT: ${JSON.stringify(packageRoot)},
       announce() {},
     });
   `;
@@ -115,6 +115,80 @@ describe('KiloCodeAdapter', () => {
       assert.ok(!uninstalled.includes(SENTINEL_BEGIN));
       assert.ok(existsSync(customSkill), '用户自建 skill 不应被删除');
       assert.ok(!existsSync(join(fakeHome, '.kilo', 'skills', 'sdd-spec')));
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  it('restores a pre-existing same-name user skill on uninstall', async () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), 'oms-kilocode-conflict-'));
+    const skillFile = join(fakeHome, '.kilo', 'skills', 'sdd-spec', 'SKILL.md');
+    const userSkill = '# User-owned sdd-spec\nDo not delete me.\n';
+    try {
+      mkdirSync(dirname(skillFile), { recursive: true });
+      writeFileSync(skillFile, userSkill);
+
+      await runAdapter('install', fakeHome);
+      assert.notEqual(readFileSync(skillFile, 'utf8'), userSkill);
+
+      const sentinel = JSON.parse(readFileSync(
+        join(fakeHome, '.oh-my-sdd', 'baseline-kilocode.sentinel'),
+        'utf8',
+      ));
+      assert.deepEqual(
+        sentinel.skill_ownership.find((skill) => skill.name === 'sdd-spec'),
+        { name: 'sdd-spec', had_existing: true },
+      );
+
+      await runAdapter('uninstall', fakeHome);
+      assert.equal(readFileSync(skillFile, 'utf8'), userSkill);
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  it('loads resources from a PACKAGE_ROOT containing spaces', async () => {
+    const sandbox = mkdtempSync(join(tmpdir(), 'oms kilo package '));
+    const fakeHome = join(sandbox, 'home');
+    const packageRoot = join(sandbox, 'package root');
+    try {
+      mkdirSync(join(packageRoot, 'skills', 'sample'), { recursive: true });
+      mkdirSync(join(packageRoot, 'content'), { recursive: true });
+      writeFileSync(join(packageRoot, 'skills', 'sample', 'SKILL.md'), '# sample\n');
+      writeFileSync(
+        join(packageRoot, 'content', 'enterprise-baseline.md'),
+        '---\nversion: 1\n---\n# Baseline from spaced root\n',
+      );
+
+      await runAdapter('install', fakeHome, packageRoot);
+
+      assert.ok(readFileSync(
+        join(fakeHome, '.config', 'kilo', 'AGENTS.md'),
+        'utf8',
+      ).includes('# Baseline from spaced root'));
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
+  it('does not restore an OMS skill recorded by a legacy sentinel after upgrade', async () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), 'oms-kilocode-legacy-upgrade-'));
+    const skillDir = join(fakeHome, '.kilo', 'skills', 'sdd-spec');
+    const sentinelPath = join(fakeHome, '.oh-my-sdd', 'baseline-kilocode.sentinel');
+    try {
+      mkdirSync(skillDir, { recursive: true });
+      mkdirSync(dirname(sentinelPath), { recursive: true });
+      writeFileSync(join(skillDir, 'SKILL.md'), '# old OMS skill\n');
+      writeFileSync(sentinelPath, JSON.stringify({
+        tool: 'kilocode',
+        dest: join(fakeHome, '.config', 'kilo', 'AGENTS.md'),
+        skill_names: ['sdd-spec'],
+      }));
+
+      await runAdapter('install', fakeHome);
+      await runAdapter('uninstall', fakeHome);
+
+      assert.ok(!existsSync(skillDir));
     } finally {
       rmSync(fakeHome, { recursive: true, force: true });
     }
