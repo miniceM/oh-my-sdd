@@ -5,7 +5,7 @@ import {
   compareVersions,
   shouldCheck,
   buildUpdateNotification,
-} from '../../hooks/lib/update-check.js';
+} from '../../lib/update-check.js';
 
 // ============================================
 // SemVer 解析测试

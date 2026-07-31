@@ -23,7 +23,7 @@ argument-hint: "[slug 或 change-id]"
 
 > 本节是 design 阶段的合规门，**必须**在设计探索开始前完成，并在设计末尾再评估一次。
 
-- **加载 baseline**：调用 `loadBaseline("content/enterprise-baseline.md")`（hooks/lib/constitution.js），取 `body` 扫描 HARD_RULE/SOFT_RULE 清单
+- **加载 baseline**：调用 `loadBaseline("content/enterprise-baseline.md")`（lib/constitution.js），取 `body` 扫描 HARD_RULE/SOFT_RULE 清单
 - **规则触发判定**：根据 proposal.md + specs/*.md 的内容关键词匹配本 change 触发的规则。示例：
   - spec 涉及凭据/AK/SK/token/密码/`.env`/私钥 → 触发"安全与合规底线 §1 密钥与凭据"HARD_RULE
   - spec 涉及 `rm -rf`/`git push --force`/`drop database`/破坏性运维 → 触发"安全与合规底线 §5 越权命令"HARD_RULE

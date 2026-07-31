@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 test('DEFAULT_CONFIG has required keys', async () => {
-  const { DEFAULT_CONFIG } = await import('../../hooks/lib/config.js');
+  const { DEFAULT_CONFIG } = await import('../../lib/config.js');
   assert.ok(DEFAULT_CONFIG.dop_endpoint);
   // 2026-06-22 改造：aih_system_name 替换为 required_systems（devops+gitee 都必须登）
   assert.ok('required_systems' in DEFAULT_CONFIG);
@@ -20,7 +20,7 @@ test('loadConfig returns defaults when file missing', async (t) => {
   process.env.USERPROFILE = tmpHome;  // Windows: os.homedir() 优先 USERPROFILE
   process.env.USERPROFILE = tmpHome;
 
-  const { loadConfig, DEFAULT_CONFIG } = await import('../../hooks/lib/config.js?' + Date.now());
+  const { loadConfig, DEFAULT_CONFIG } = await import('../../lib/config.js?' + Date.now());
   const cfg = await loadConfig();
   assert.deepEqual(cfg, DEFAULT_CONFIG);
 });
@@ -32,7 +32,7 @@ test('saveConfig writes file and loadConfig reads it back', async (t) => {
   process.env.USERPROFILE = tmpHome;  // Windows: os.homedir() 优先 USERPROFILE
   process.env.USERPROFILE = tmpHome;
 
-  const mod = await import('../../hooks/lib/config.js?' + Date.now());
+  const mod = await import('../../lib/config.js?' + Date.now());
   await mod.saveConfig({ telemetry_disabled: true });
   const cfg = await mod.loadConfig();
   assert.equal(cfg.telemetry_disabled, true);

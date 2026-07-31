@@ -40,7 +40,7 @@ test('getAuthStatus uses --json flag and parses credentials-only payload', async
   process.env.PATH = `${stubDir}${path.delimiter}${process.env.PATH}`;
   t.after(() => { process.env.PATH = oldPath; });
 
-  const { getAuthStatus } = await import('../../hooks/lib/iam-cli.js?' + Date.now());
+  const { getAuthStatus } = await import('../../lib/iam-cli.js?' + Date.now());
   const status = await getAuthStatus();
   assert.ok(Array.isArray(status.credentials));
   assert.equal(status.credentials.length, 2);
@@ -55,7 +55,7 @@ test('getAuthStatus throws on command missing', async (t) => {
   process.env.PATH = '/nonexistent';
   t.after(() => { process.env.PATH = oldPath; });
 
-  const { getAuthStatus, IamCliError } = await import('../../hooks/lib/iam-cli.js?' + Date.now());
+  const { getAuthStatus, IamCliError } = await import('../../lib/iam-cli.js?' + Date.now());
   await assert.rejects(() => getAuthStatus(), IamCliError);
 });
 
@@ -66,7 +66,7 @@ test('getAuthStatus throws on non-zero exit', async (t) => {
   process.env.PATH = `${stubDir}${path.delimiter}${process.env.PATH}`;
   t.after(() => { process.env.PATH = oldPath; });
 
-  const { getAuthStatus, IamCliError } = await import('../../hooks/lib/iam-cli.js?' + Date.now());
+  const { getAuthStatus, IamCliError } = await import('../../lib/iam-cli.js?' + Date.now());
   await assert.rejects(() => getAuthStatus(), IamCliError);
 });
 
@@ -78,7 +78,7 @@ test('getAuthStatus throws on missing credentials field', async (t) => {
   process.env.PATH = `${stubDir}${path.delimiter}${process.env.PATH}`;
   t.after(() => { process.env.PATH = oldPath; });
 
-  const { getAuthStatus, IamCliError } = await import('../../hooks/lib/iam-cli.js?' + Date.now());
+  const { getAuthStatus, IamCliError } = await import('../../lib/iam-cli.js?' + Date.now());
   await assert.rejects(() => getAuthStatus(), (err) => {
     assert.ok(err instanceof IamCliError);
     assert.equal(err.code, 'IAM_SCHEMA_MISMATCH');
@@ -87,7 +87,7 @@ test('getAuthStatus throws on missing credentials field', async (t) => {
 });
 
 test('isFullyAuthenticated returns true when all required systems logged', async () => {
-  const { isFullyAuthenticated } = await import('../../hooks/lib/iam-cli.js');
+  const { isFullyAuthenticated } = await import('../../lib/iam-cli.js');
   const status = {
     credentials: [
       { username: 'deepus',  status: 'logged', is_api_key_true: true  },
@@ -98,7 +98,7 @@ test('isFullyAuthenticated returns true when all required systems logged', async
 });
 
 test('isFullyAuthenticated returns false when fewer than required', async () => {
-  const { isFullyAuthenticated } = await import('../../hooks/lib/iam-cli.js');
+  const { isFullyAuthenticated } = await import('../../lib/iam-cli.js');
   const status = {
     credentials: [
       { username: 'deepus', status: 'logged', is_api_key_true: true },
@@ -109,7 +109,7 @@ test('isFullyAuthenticated returns false when fewer than required', async () => 
 });
 
 test('isFullyAuthenticated returns false when any credential not logged', async () => {
-  const { isFullyAuthenticated } = await import('../../hooks/lib/iam-cli.js');
+  const { isFullyAuthenticated } = await import('../../lib/iam-cli.js');
   const status = {
     credentials: [
       { username: 'deepus',  status: 'logged',    is_api_key_true: true  },
@@ -120,14 +120,14 @@ test('isFullyAuthenticated returns false when any credential not logged', async 
 });
 
 test('isFullyAuthenticated handles empty credentials', async () => {
-  const { isFullyAuthenticated } = await import('../../hooks/lib/iam-cli.js');
+  const { isFullyAuthenticated } = await import('../../lib/iam-cli.js');
   assert.equal(isFullyAuthenticated({ credentials: [] }, 2), false);
   assert.equal(isFullyAuthenticated({}, 2), false);
   assert.equal(isFullyAuthenticated(null, 2), false);
 });
 
 test('pickAnyLoggedUsername returns first logged username', async () => {
-  const { pickAnyLoggedUsername } = await import('../../hooks/lib/iam-cli.js');
+  const { pickAnyLoggedUsername } = await import('../../lib/iam-cli.js');
   const status = {
     credentials: [
       { username: 'deepus',  status: 'logged' },
@@ -138,7 +138,7 @@ test('pickAnyLoggedUsername returns first logged username', async () => {
 });
 
 test('pickAnyLoggedUsername returns null when none logged', async () => {
-  const { pickAnyLoggedUsername } = await import('../../hooks/lib/iam-cli.js');
+  const { pickAnyLoggedUsername } = await import('../../lib/iam-cli.js');
   assert.equal(pickAnyLoggedUsername({ credentials: [] }), null);
   assert.equal(pickAnyLoggedUsername({
     credentials: [{ username: 'x', status: 'expired' }],

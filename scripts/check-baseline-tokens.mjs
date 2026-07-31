@@ -16,7 +16,7 @@ import {
   loadBaseline,
   REQUIRED_FRONTMATTER_FIELDS,
   ConstitutionError,
-} from '../hooks/lib/constitution.js';
+} from '../lib/constitution.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const baselinePath = path.resolve(__dirname, '..', 'content', 'enterprise-baseline.md');

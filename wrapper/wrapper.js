@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdir, copyFile, rm, access, constants } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { isWindows, getHomeDir } from '../hooks/lib/platform.js';
+import { isWindows, getHomeDir } from '../lib/platform.js';
 
 // ============================================
 // 目录配置（用户级，无需管理员权限）

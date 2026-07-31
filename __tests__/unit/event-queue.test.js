@@ -9,7 +9,7 @@ async function setupQueue(t) {
   t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
   process.env.HOME = tmpHome;
   process.env.USERPROFILE = tmpHome;
-  const mod = await import('../../hooks/lib/event-queue.js?' + Date.now());
+  const mod = await import('../../lib/event-queue.js?' + Date.now());
   return mod;
 }
 
@@ -63,7 +63,7 @@ test('corrupted JSONL line does not crash size/enqueue', async (t) => {
   const { mkdir, writeFile } = await import('node:fs/promises');
   await mkdir(path.dirname(queueFile), { recursive: true });
   await writeFile(queueFile, JSON.stringify({ event: 'x', id: 9 }) + '\nNOT-JSON-AT-ALL\n');
-  const { enqueue, size } = await import('../../hooks/lib/event-queue.js?' + Date.now());
+  const { enqueue, size } = await import('../../lib/event-queue.js?' + Date.now());
   // Corrupted line must be skipped, valid line still counted.
   assert.equal(await size(), 1);
   await enqueue({ event: 'a', id: 1 });

@@ -29,7 +29,7 @@ npm run lint:baseline
 .claude-plugin/     → Plugin manifest (plugin.json, marketplace.json)
 skills/             → 17 SKILL.md files (SDD commands + enterprise skills)
 hooks/              → Session lifecycle hooks (SessionStart, PreToolUse, etc.)
-hooks/lib/          → Shared utilities (config, iam-cli, dop-client, rules)
+lib/                → Shared utilities (config, iam-cli, dop-client, rules)
 content/            → Markdown injected into system prompt (baseline, welcome)
 bin/                → CLI tools (oms-install, oms-login, oms-uninstall)
 scripts/            → Dev utilities (reinstall, launch, diag, lint)
@@ -82,7 +82,7 @@ During install, the body is injected into `~/.claude/CLAUDE.md` between markers:
 
 **Changing baseline**: Edit `content/enterprise-baseline.md`, bump `oms_version` in frontmatter, add Sync Impact Report block. Run `npm run lint:baseline` to validate.
 
-## Security Rules (hooks/lib/rules.js)
+## Security Rules (lib/rules.js)
 
 Hard rules (block writes):
 - AWS AK pattern: `AKIA[A-Z0-9]{16}`

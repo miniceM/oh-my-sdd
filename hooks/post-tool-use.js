@@ -14,8 +14,8 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 
-import { sessionMetaPath } from './lib/platform.js';
-import { error, warn } from './lib/log.js';
+import { sessionMetaPath } from '../lib/platform.js';
+import { error, warn } from '../lib/log.js';
 const STDIN_TIMEOUT_MS = 1_000;
 
 // 记录 files_touched 的工具集合。Claude Code 协议保证 tool_name 是 PascalCase。

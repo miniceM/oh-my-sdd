@@ -2,12 +2,12 @@
 //
 // 主入口：协调各子模块完成安装流程。
 // 具体逻辑已拆分到：
-//   - hooks/lib/constants.js — 命名常量
-//   - hooks/lib/paths.js — 路径常量
+//   - lib/constants.js — 命名常量
+//   - lib/paths.js — 路径常量
 //   - opencode/build.js — TypeScript 编译
 //   - install/common/fs.js — 文件复制工具
 //   - install/common/superpowers-installer.js — superpowers-zh 集成
-//   - hooks/lib/command-generator.js — 命令 wrapper 模板
+//   - lib/command-generator.js — 命令 wrapper 模板
 //   - install/common/config-patcher.js — opencode.json 修改
 //
 // Windows 不支持：OpenCode 主要跑在 macOS/Linux。
@@ -15,11 +15,11 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, readdirSync, copyFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { OPENCODE_PLUGIN_DIR, OPENCODE_COMMANDS_DIR, OPENCODE_CONFIG_DIR } from '../../hooks/lib/paths.js';
+import { OPENCODE_PLUGIN_DIR, OPENCODE_COMMANDS_DIR, OPENCODE_CONFIG_DIR } from '../../lib/paths.js';
 import { buildOpencodePlugin } from '../../opencode/build.js';
 import { copyDir } from '../common/fs.js';
 import { installSuperpowersZh, findDelegatedSkillsSource } from '../common/superpowers-installer.js';
-import { SDD_COMMANDS, installCommandFiles } from '../../hooks/lib/command-generator.js';
+import { SDD_COMMANDS, installCommandFiles } from '../../lib/command-generator.js';
 import { patchOpencodeJson, unpatchOpencodeJson } from '../common/config-patcher.js';
 
 /**
@@ -91,7 +91,7 @@ function copyHooksToPluginDir(packageRoot) {
     filter: (f) => f.endsWith('.js')
   });
 
-  // 复制 hooks/lib/*.js
+  // 复制 lib/*.js
   const srcLibDir = join(srcHooksDir, 'lib');
   if (existsSync(srcLibDir)) {
     const libCount = copyDir(srcLibDir, join(targetHooksDir, 'lib'), {

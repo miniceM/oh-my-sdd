@@ -6,8 +6,8 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { FILE_PERMISSIONS } from '../../hooks/lib/constants.js';
-import { OPENCODE_JSON, OPENCODE_PLUGIN_ENTRY } from '../../hooks/lib/paths.js';
+import { FILE_PERMISSIONS } from '../../lib/constants.js';
+import { OPENCODE_JSON, OPENCODE_PLUGIN_ENTRY } from '../../lib/paths.js';
 
 /**
  * Announce message to stderr.

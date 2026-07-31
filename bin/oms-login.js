@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline';
-import { login } from '../hooks/lib/iam-cli.js';
-import { isIamInPath } from '../hooks/lib/platform.js';
+import { login } from '../lib/iam-cli.js';
+import { isIamInPath } from '../lib/platform.js';
 import { printWelcome } from './oms-welcome.js';
 
 function ask(rl, question, { secret = false } = {}) {

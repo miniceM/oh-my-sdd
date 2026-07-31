@@ -3,10 +3,10 @@ import { readFile, unlink, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { computeCodeDelta } from './lib/git-diff.js';
-import { reportOrEnqueue, shouldSkipTelemetry, flush } from './lib/dop-client.js';
-import { getStateDir, sessionMetaPath } from './lib/platform.js';
-import { info, warn, error } from './lib/log.js';
+import { computeCodeDelta } from '../lib/git-diff.js';
+import { reportOrEnqueue, shouldSkipTelemetry, flush } from '../lib/dop-client.js';
+import { getStateDir, sessionMetaPath } from '../lib/platform.js';
+import { info, warn, error } from '../lib/log.js';
 
 const SESSIONS_DIR = path.join(getStateDir(), 'sessions');
 

@@ -27,8 +27,8 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { checkNodeVersion, isIamInPath } from '../hooks/lib/platform.js';
-import { ensureStateDir } from '../hooks/lib/state-dir.js';
+import { checkNodeVersion, isIamInPath } from '../lib/platform.js';
+import { ensureStateDir } from '../lib/state-dir.js';
 import { installForClaude, isClaudeInstalled } from './hosts/claude-adapter.js';
 import { installForLingma } from './hosts/lingma-adapter.js';
 import { installForOpencode, isOpenCodeInstalled } from './hosts/opencode-adapter.js';

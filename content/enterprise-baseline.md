@@ -12,9 +12,9 @@ Modified principles:
   - HARD_RULE #6: "PostToolUse 强制" → "PreToolUse 强制" (documentation fix)
 Added sections: none.
 Templates requiring updates:
-  ✅ hooks/lib/constitution.js (CRLF regex)
+  ✅ lib/constitution.js (CRLF regex)
   ✅ hooks/pre-tool-use.js (fail-safe deny on error)
-  ✅ hooks/lib/rules.js (arrow function pattern)
+  ✅ lib/rules.js (arrow function pattern)
   ✅ skills/sdd-constitution/SKILL.md (PreToolUse reference)
   ✅ scripts/check-baseline-tokens.mjs (frontmatter size sanity check)
 Follow-up TODOs: Consider refactoring test helpers (spawn-hook.js shared utility).

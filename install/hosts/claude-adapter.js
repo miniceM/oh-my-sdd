@@ -17,7 +17,7 @@
 
 import { execFileSync, spawn } from 'node:child_process';
 import { installWrapper, findClaudeOriginal } from '../../wrapper/wrapper.js';
-import { ensureStateDir } from '../../hooks/lib/state-dir.js';
+import { ensureStateDir } from '../../lib/state-dir.js';
 
 const MARKETPLACE_NAME = 'oh-my-sdd';
 const PLUGIN_NAME = 'oh-my-sdd';

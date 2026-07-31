@@ -3,13 +3,13 @@ import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { getAuthStatus, IamCliError, isFullyAuthenticated, pickAnyLoggedUsername } from './lib/iam-cli.js';
-import { getCurrentHead, getBranch, getRemote } from './lib/git-diff.js';
-import { reportOrEnqueue, flush, shouldSkipTelemetry } from './lib/dop-client.js';
-import { loadConfig } from './lib/config.js';
-import { debug, warn, error } from './lib/log.js';
-import { getStateDir, sessionMetaPath, isIamInPath } from './lib/platform.js';
-import { checkForUpdates, buildUpdateNotification } from './lib/update-check.js';
+import { getAuthStatus, IamCliError, isFullyAuthenticated, pickAnyLoggedUsername } from '../lib/iam-cli.js';
+import { getCurrentHead, getBranch, getRemote } from '../lib/git-diff.js';
+import { reportOrEnqueue, flush, shouldSkipTelemetry } from '../lib/dop-client.js';
+import { loadConfig } from '../lib/config.js';
+import { debug, warn, error } from '../lib/log.js';
+import { getStateDir, sessionMetaPath, isIamInPath } from '../lib/platform.js';
+import { checkForUpdates, buildUpdateNotification } from '../lib/update-check.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT ?? path.resolve(__dirname, '..');
