@@ -55,7 +55,7 @@ function isHomeDir(p) {
 // Baseline 写入：整体覆盖 rule 文件
 // ============================================
 async function injectLingmaBaseline(announce) {
-  const baselinePath = resolve(dirname(new URL(import.meta.url).pathname), '..', '..', 'baseline', 'lingma.md');
+  const baselinePath = resolve(dirname(new URL(import.meta.url).pathname), '..', '..', 'content', 'lingma-baseline.md');
   const baseline = await readFile(baselinePath, 'utf8');
   // strip frontmatter（rules 不接受 frontmatter）
   const bodyOnly = baseline.replace(/^---[\s\S]*?---\n/, '');
@@ -69,7 +69,7 @@ async function injectLingmaBaseline(announce) {
 // settings.json 深度合并
 // ============================================
 async function generateLingmaSettings(packageRoot, announce) {
-  const tplPath = join(packageRoot, 'scaffolding', 'lingma-settings.json');
+  const tplPath = join(packageRoot, 'install', 'common', 'fixtures', 'lingma-settings.json');
   const tpl = JSON.parse(await readFile(tplPath, 'utf8'));
 
   // 替换 <PLUGIN_ROOT> 为绝对路径

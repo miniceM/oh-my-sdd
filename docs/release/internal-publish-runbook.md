@@ -117,8 +117,7 @@ ls -la
 # - bin/ (7 个 CLI: oms-install, oms-uninstall, oms-login, oms-update,
 #         oms-git-hooks, oms-welcome, oms-wrapper-verify)
 # - skills/ (17 个 skill 目录：5 个 sdd-* + 12 个企业 skill)
-# - content/ (3 个 .md)
-# - baseline/ (lingma.md — Lingma baseline 专用)
+# - content/ (4 个 .md: enterprise-baseline.md, lingma-baseline.md, auth-required.md, welcome-message.md)
 # - hooks/ (4 个 hook + lib/ + git/)
 # - scripts/ (dev-launch + dev-reinstall + check-baseline-tokens + ...)
 # - wrappers/ (claude.sh, claude.ps1, claude.bat)
@@ -176,7 +175,7 @@ package/README.md
 package/install.js
 package/uninstall.js
 package/package.json
-package/baseline/lingma.md
+package/content/lingma-baseline.md
 package/bin/oms-{install,uninstall,login,update,git-hooks,welcome,wrapper-verify}.js (7 个)
 package/content/{auth-required,enterprise-baseline,welcome-message}.md
 package/hooks/{hooks.json,pre-tool-use.js,post-tool-use.js,session-start.js,...} (4 个主 hook)

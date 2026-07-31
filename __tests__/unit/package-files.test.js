@@ -8,13 +8,13 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
 
-test('package.json files whitelist includes baseline/', () => {
+test('package.json files whitelist includes content/', () => {
   const pkg = JSON.parse(readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'));
   assert.ok(Array.isArray(pkg.files), 'package.json must have a "files" array');
-  assert.ok(pkg.files.includes('baseline/'), 'files must include "baseline/"');
+  assert.ok(pkg.files.includes('content/'), 'files must include "content/"');
 });
 
-test('npm pack --dry-run output includes baseline/ contents', () => {
+test('npm pack --dry-run output includes content/ contents', () => {
   // npm pack writes the file listing to stderr, not stdout
   const result = spawnSync('npm', ['pack', '--dry-run'], {
     cwd: PACKAGE_ROOT,
@@ -26,5 +26,5 @@ test('npm pack --dry-run output includes baseline/ contents', () => {
   assert.equal(result.status, 0,
     `npm pack exited ${result.status}; stderr: ${(result.stderr || '').slice(0, 500)}`);
   const output = ((result.stdout || '') + (result.stderr || '')).replaceAll('\\', '/');
-  assert.match(output, /baseline\/lingma\.md/);
+  assert.match(output, /content\/lingma-baseline\.md/);
 });
