@@ -152,7 +152,7 @@ function copySkillsToPluginDir(packageRoot) {
     const allowedSkills = new Set(sddSkills);
     for (const entry of readdirSync(targetSkillsDir)) {
       if (entry.startsWith('sdd-') && !allowedSkills.has(entry)) {
-        rmSync(join(targetSkillsDir, entry), { recursive: true, force: true });
+        rmIfExistsSync(join(targetSkillsDir, entry));
         announce(`  ✓ 清理遗留 skill 目录: ${entry}`);
       }
     }
