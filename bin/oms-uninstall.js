@@ -38,6 +38,8 @@ function printHelp() {
 工具:
   claude       Claude Code
   lingma       通义灵码 lingma
+  opencode     OpenCode AI 编程工具
+  kilocode     KiloCode AI 编程工具
 
 选项:
   --tool <name>    仅卸载指定工具。默认卸载所有工具（Claude + lingma）
@@ -72,7 +74,7 @@ function parseArgs(argv) {
     tool = argv[toolIdx + 1];
     if (!tool || tool.startsWith('-')) {
       process.stderr.write('❌ --tool 需要指定工具名\n');
-      process.stderr.write('  支持: claude, lingma\n');
+      process.stderr.write('  支持: claude, lingma, opencode, kilocode\n');
       process.stderr.write('  查看帮助: oms-uninstall --help\n');
       process.exit(1);
     }

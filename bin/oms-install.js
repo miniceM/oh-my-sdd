@@ -42,6 +42,7 @@ function printHelp() {
   claude       Claude Code（默认；需 iam CLI）
   lingma       通义灵码 lingma CN
   opencode     OpenCode AI 编程工具
+  kilocode     KiloCode AI 编程工具
 
 选项:
   --tool <name>    指定目标 AI 工具。不传时按 which claude > which lingma 顺序自动检测
@@ -73,7 +74,7 @@ function parseArgs(argv) {
   const tool = argv[toolIdx + 1];
   if (!tool || tool.startsWith('-')) {
     process.stderr.write('❌ --tool 需要指定工具名\n');
-    process.stderr.write('  支持: claude, lingma, opencode\n');
+    process.stderr.write('  支持: claude, lingma, opencode, kilocode\n');
     process.stderr.write('  查看帮助: oms-install --help\n');
     process.exit(1);
   }
