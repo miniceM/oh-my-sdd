@@ -15,14 +15,13 @@
   "scripts": {
     "postinstall": "node install.js",
     "preuninstall": "node install/uninstall.js",
+    "build": "npm run lint:baseline && npm test",
+    "build:opencode": "cd opencode && npm install && npx tsc",
+    "publish:opencode": "cd opencode && npm publish",
+    "prepublishOnly": "npm run build && npm run build:opencode",
     "test": "node scripts/run-tests.js",
     "test:glob": "node --test \"__tests__/**/*.test.js\"",
-    "lint:baseline": "node scripts/check-baseline-tokens.mjs",
-    "build:opencode": "cd opencode && npm run build",
-    "install:opencode": "cd opencode && npm install --no-audit --no-fund",
-    "build:all": "npm run install:opencode && npm run build:opencode",
-    "prepublishOnly": "npm run build:all && npm test",
-    "publish:opencode": "cd opencode && npm publish"
+    "lint:baseline": "node scripts/check-baseline-tokens.mjs"
   },
   "files": [
     ".claude-plugin/",

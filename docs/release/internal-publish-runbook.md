@@ -190,7 +190,7 @@ package/opencode/dist/*.js + *.d.ts + *.js.map + *.d.ts.map (OpenCode 编译产�
 
 ⚠️ **如果 tgz 缺关键文件**（如 `.claude-plugin/`、`install.js`）：
 - 检查 `package.json` 的 `files` 字段
-- 检查 `opencode/dist/` 是否已构建（缺失时 `npm run build:all` 会自动编译）
+- 检查 `opencode/dist/` 是否已构建（缺失时 `npm run build:opencode` 会自动编译）
 - 不能 publish，重打包
 
 ### 3.3 本地安装端到端测试
