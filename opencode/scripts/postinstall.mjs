@@ -48,6 +48,12 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 
+import {
+  readOwnershipManifest,
+  resourceDigest,
+  writeOwnershipManifest,
+} from './resource-ownership.mjs';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = resolve(__dirname, '..');
 
@@ -57,6 +63,7 @@ const OPENCODE_SKILLS_DIR = join(HOME, '.config', 'opencode', 'skills');
 const OPENCODE_COMMAND_DIR = join(HOME, '.config', 'opencode', 'command');
 const AGENTS_SKILLS_DIR = join(HOME, '.agents', 'skills');
 const AGENTS_COMMAND_DIR = join(HOME, '.agents', 'command');
+const OWNERSHIP_MANIFEST = join(HOME, '.oh-my-sdd', 'opencode-npm-resources.json');
 
 // Plugin-side source dirs (mirrored into `.opencode/` and `.agents/` by
 // copy-resources.mjs — we read from `.opencode/` which is canonical).
@@ -138,6 +145,9 @@ export function copyDirSafe(srcDir, dstDir, filterFn, label, ops = {}) {
   const resourcesEqual = ops.treeContentEqual ?? ((a, b) => treeContentEqual(a, b, ops));
   const warn = ops.warn ?? console.warn;
   const now = ops.now ?? Date.now;
+  const ownership = ops.ownership ?? new Map();
+  const recordOwnership = ops.recordOwnership ?? (() => {});
+  const digest = ops.resourceDigest ?? resourceDigest;
 
   if (!exists(srcDir) || !stat(srcDir).isDirectory()) {
     warn(`[postinstall] ${label}: source missing ${srcDir}`);
@@ -151,19 +161,43 @@ export function copyDirSafe(srcDir, dstDir, filterFn, label, ops = {}) {
     if (!filterFn(name)) continue;
     const src = join(srcDir, name);
     const dst = join(dstDir, name);
+    const prior = ownership.get(dst);
 
     if (exists(dst)) {
-      if (resourcesEqual(src, dst)) continue;
+      if (resourcesEqual(src, dst)) {
+        if (prior) recordOwnership({ ...prior, installed_digest: digest(dst) });
+        continue;
+      }
+
+      if (prior) {
+        let currentDigest;
+        try {
+          currentDigest = digest(dst);
+        } catch {
+          warn(`[postinstall] ${label}: cannot verify owned resource ${name}; preserving existing target`);
+          continue;
+        }
+        if (currentDigest !== prior.installed_digest) {
+          warn(`[postinstall] ${label}: ${name} was modified after install; preserving user changes`);
+          continue;
+        }
+      }
 
       const backupStamp = now();
-      let backup = `${dst}.oh-my-sdd-backup-${backupStamp}`;
+      const suffixName = prior ? 'oh-my-sdd-rollback' : 'oh-my-sdd-backup';
+      let backup = `${dst}.${suffixName}-${backupStamp}`;
       let suffix = 1;
-      while (exists(backup)) backup = `${dst}.oh-my-sdd-backup-${backupStamp}-${suffix++}`;
+      while (exists(backup)) backup = `${dst}.${suffixName}-${backupStamp}-${suffix++}`;
+
+      if (prior && !prior.created && (!prior.backup || !exists(prior.backup))) {
+        warn(`[postinstall] ${label}: original backup missing for ${name}; preserving existing target`);
+        continue;
+      }
 
       try {
         // Always copy the existing destination: it is the user data at risk.
         copy(dst, backup, { recursive: true, force: false, errorOnExist: true });
-        warn(`[postinstall] ${label}: backed up ${name} -> ${backup}`);
+        if (!prior) warn(`[postinstall] ${label}: backed up ${name} -> ${backup}`);
       } catch (e) {
         warn(`[postinstall] ${label}: backup failed for ${name}; preserving existing target: ${e.message}`);
         continue;
@@ -179,13 +213,23 @@ export function copyDirSafe(srcDir, dstDir, filterFn, label, ops = {}) {
 
       try {
         copy(src, dst, { recursive: true });
+        const record = prior ?? { target: dst, backup, created: false };
+        recordOwnership({ ...record, installed_digest: digest(dst) });
         installed++;
+        if (prior) {
+          try {
+            remove(backup, { recursive: true, force: true });
+          } catch (cleanupError) {
+            warn(`[postinstall] ${label}: rollback cleanup failed for ${name}: ${cleanupError.message}`);
+          }
+        }
       } catch (e) {
         warn(`[postinstall] ${label}: copy failed ${name}: ${e.message}`);
         try {
           remove(dst, { recursive: true, force: true });
           copy(backup, dst, { recursive: true });
           warn(`[postinstall] ${label}: restored existing target ${name} from ${backup}`);
+          remove(backup, { recursive: true, force: true });
         } catch (restoreError) {
           warn(`[postinstall] ${label}: restore failed for ${name}; backup remains at ${backup}: ${restoreError.message}`);
         }
@@ -195,9 +239,12 @@ export function copyDirSafe(srcDir, dstDir, filterFn, label, ops = {}) {
 
     try {
       copy(src, dst, { recursive: true });
+      const record = prior ?? { target: dst, backup: null, created: true };
+      recordOwnership({ ...record, installed_digest: digest(dst) });
       installed++;
     } catch (e) {
       warn(`[postinstall] ${label}: copy failed ${name}: ${e.message}`);
+      remove(dst, { recursive: true, force: true });
     }
   }
   return installed;
@@ -205,18 +252,25 @@ export function copyDirSafe(srcDir, dstDir, filterFn, label, ops = {}) {
 
 export function main() {
   const results = [];
+  const records = readOwnershipManifest(OWNERSHIP_MANIFEST);
+  const ownership = new Map(records.map((record) => [record.target, record]));
+  const recordOwnership = (record) => {
+    ownership.set(record.target, record);
+    writeOwnershipManifest(OWNERSHIP_MANIFEST, [...ownership.values()]);
+  };
+  const ops = { ownership, recordOwnership };
 
-  const n1 = copyDirSafe(PLUGIN_SKILLS_SRC, OPENCODE_SKILLS_DIR, isOwnedSkill, 'opencode-skills');
+  const n1 = copyDirSafe(PLUGIN_SKILLS_SRC, OPENCODE_SKILLS_DIR, isOwnedSkill, 'opencode-skills', ops);
   results.push(`opencode-skills: ${n1}`);
 
-  const n2 = copyDirSafe(PLUGIN_COMMAND_SRC, OPENCODE_COMMAND_DIR, isOwnedCommand, 'opencode-commands');
+  const n2 = copyDirSafe(PLUGIN_COMMAND_SRC, OPENCODE_COMMAND_DIR, isOwnedCommand, 'opencode-commands', ops);
   results.push(`opencode-commands: ${n2}`);
 
   // Mirror to ~/.agents/ for Claude Code / Codex compatibility.
-  const n3 = copyDirSafe(PLUGIN_SKILLS_SRC, AGENTS_SKILLS_DIR, isOwnedSkill, 'agents-skills');
+  const n3 = copyDirSafe(PLUGIN_SKILLS_SRC, AGENTS_SKILLS_DIR, isOwnedSkill, 'agents-skills', ops);
   results.push(`agents-skills: ${n3}`);
 
-  const n4 = copyDirSafe(PLUGIN_COMMAND_SRC, AGENTS_COMMAND_DIR, isOwnedCommand, 'agents-commands');
+  const n4 = copyDirSafe(PLUGIN_COMMAND_SRC, AGENTS_COMMAND_DIR, isOwnedCommand, 'agents-commands', ops);
   results.push(`agents-commands: ${n4}`);
 
   console.log(`[postinstall] oh-my-sdd installed: ${results.join(', ')}`);

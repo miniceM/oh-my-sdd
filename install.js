@@ -17,7 +17,7 @@ if (isDirectExecution(import.meta.url, process.argv[1])) {
   const tool = toolIdx >= 0 ? args[toolIdx + 1] : undefined;
   main({ tool }).catch((err) => {
     process.stderr.write(`❌ 安装失败：${err.stack ?? err.message}\n`);
-    process.exit(1);
+    process.exitCode = 1;
   });
 }
 

@@ -83,8 +83,7 @@ function isDirectExecution(
 async function main(options = {}) {
   // 共享前置：Node 版本
   if (!checkNodeVersion(MIN_NODE_VERSION)) {
-    process.stderr.write(`❌ Node 版本过低。需要 >= ${MIN_NODE_VERSION}，当前 ${process.version}\n`);
-    process.exit(1);
+    throw new Error(`Node 版本过低。需要 >= ${MIN_NODE_VERSION}，当前 ${process.version}`);
   }
 
   // 共享状态目录
@@ -108,8 +107,7 @@ async function main(options = {}) {
 /** Run only the shared and host-specific prerequisite checks. */
 function preflightFor(tool) {
   if (!checkNodeVersion(MIN_NODE_VERSION)) {
-    process.stderr.write(`❌ Node 版本过低。需要 >= ${MIN_NODE_VERSION}，当前 ${process.version}\n`);
-    process.exit(1);
+    throw new Error(`Node 版本过低。需要 >= ${MIN_NODE_VERSION}，当前 ${process.version}`);
   }
   const Adapter = getAdapter(tool);
   Adapter.preflight({ PACKAGE_ROOT, announce });
@@ -132,7 +130,7 @@ if (isDirectExecution(import.meta.url, process.argv[1])) {
   const tool = toolIdx >= 0 ? args[toolIdx + 1] : undefined;
   main({ tool }).catch((err) => {
     process.stderr.write(`❌ 安装失败：${err.stack ?? err.message}\n`);
-    process.exit(1);
+    process.exitCode = 1;
   });
 }
 

@@ -26,6 +26,7 @@
     "typecheck": "tsc --noEmit",
     "sync:resources": "node scripts/copy-resources.mjs",
     "postinstall": "node scripts/postinstall.mjs",
+    "preuninstall": "node scripts/uninstall.mjs",
     "prepublishOnly": "npm run sync:resources && npm run build"
   },
   "keywords": [

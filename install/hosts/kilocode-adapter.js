@@ -9,8 +9,7 @@
 import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
 import { HostAdapter } from '../host-adapter.js';
 import {
@@ -113,12 +112,6 @@ export class KiloCodeAdapter extends HostAdapter {
 
     // Step 1: Delete only skill directories installed by oh-my-sdd.
     // Never remove the shared ~/.kilo/skills directory.
-    const fallbackSkillsSource = resolve(
-      dirname(fileURLToPath(import.meta.url)),
-      '..',
-      '..',
-      'skills'
-    );
     if (Array.isArray(sentinel?.skill_ownership)) {
       const result = await restoreSkillsFromOwnership(
         KILO_SKILLS_DIR,
@@ -127,16 +120,18 @@ export class KiloCodeAdapter extends HostAdapter {
       );
       if (result.removed > 0) announce(`  ✓ 已删除 ${result.removed} 个 oh-my-sdd skills`);
       if (result.restored > 0) announce(`  ✓ 已恢复 ${result.restored} 个用户 skills`);
-    } else {
-      const skillNames = Array.isArray(sentinel?.skill_names)
-        ? sentinel.skill_names
-        : await this.#getSkillNames(fallbackSkillsSource);
+    } else if (Array.isArray(sentinel?.skill_names)) {
+      // Legacy sentinels are positive ownership evidence. With no sentinel at
+      // all, same-name directories may be user-authored and must be preserved.
+      const skillNames = sentinel.skill_names;
       let removedSkills = 0;
       for (const skillName of skillNames) {
         if (!this.#isSafeSkillName(skillName)) continue;
         if (await rmIfExists(join(KILO_SKILLS_DIR, skillName))) removedSkills++;
       }
       if (removedSkills > 0) announce(`  ✓ 已删除 ${removedSkills} 个 oh-my-sdd skills`);
+    } else {
+      announce('  (无 Kilo Code skill 所有权记录，跳过 skill 清理)');
     }
 
     // Step 2: Remove only the OMS block from AGENTS.md.

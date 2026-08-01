@@ -16,8 +16,7 @@
 import { copyFile, readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { constants, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, resolve } from 'node:path';
 
 import { HostAdapter } from '../host-adapter.js';
 import { writeSentinel, readSentinel, sentinelPathFor } from '../common/sentinel.js';
@@ -117,9 +116,6 @@ export class LingmaAdapter extends HostAdapter {
 
     const sentinel = await readSentinel('lingma');
     const packageRoot = ctx.PACKAGE_ROOT;
-    const fallbackSkillsSource = packageRoot
-      ? join(packageRoot, 'skills')
-      : resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'skills');
 
     // 1. Delete only skill directories installed by OMS. ~/.lingma/skills is
     // shared with user-created skills and other plugins and must survive.
@@ -131,16 +127,20 @@ export class LingmaAdapter extends HostAdapter {
       );
       if (result.removed > 0) announce(`  ✓ 已删除 ${result.removed} 个 oh-my-sdd skills`);
       if (result.restored > 0) announce(`  ✓ 已恢复 ${result.restored} 个用户 skills`);
-    } else {
-      const skillNames = Array.isArray(sentinel?.skill_names)
-        ? sentinel.skill_names
-        : await this.#listSkillNames(fallbackSkillsSource);
+    } else if (Array.isArray(sentinel?.skill_names)) {
+      // Legacy sentinels recorded only skill_names. Without any sentinel there
+      // is no ownership evidence: deleting package-name matches could remove a
+      // user's independently authored skill on a machine where OMS was never
+      // installed for Lingma.
+      const skillNames = sentinel.skill_names;
       let removedSkills = 0;
       for (const skillName of skillNames) {
         if (!this.#isSafeSkillName(skillName)) continue;
         if (await rmIfExists(join(LINGMA_SKILLS_DIR, skillName))) removedSkills++;
       }
       if (removedSkills > 0) announce(`  ✓ 已删除 ${removedSkills} 个 oh-my-sdd skills`);
+    } else {
+      announce('  (无 Lingma skill 所有权记录，跳过 skill 清理)');
     }
 
     // 2. Delete rule file

@@ -120,6 +120,22 @@ describe('KiloCodeAdapter', () => {
     }
   });
 
+  it('uninstall preserves same-name user skills when no ownership sentinel exists', async () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), 'oms-kilocode-no-sentinel-'));
+    const skillFile = join(fakeHome, '.kilo', 'skills', 'sdd-spec', 'SKILL.md');
+    const userSkill = '# Independently authored sdd-spec\n';
+    try {
+      mkdirSync(dirname(skillFile), { recursive: true });
+      writeFileSync(skillFile, userSkill);
+
+      await runAdapter('uninstall', fakeHome);
+
+      assert.equal(readFileSync(skillFile, 'utf8'), userSkill);
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
   it('restores a pre-existing same-name user skill on uninstall', async () => {
     const fakeHome = mkdtempSync(join(tmpdir(), 'oms-kilocode-conflict-'));
     const skillFile = join(fakeHome, '.kilo', 'skills', 'sdd-spec', 'SKILL.md');

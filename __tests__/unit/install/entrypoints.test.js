@@ -62,6 +62,32 @@ test('executing the package entry point still invokes installation', () => {
   }
 });
 
+test('calling the public installer rejects instead of terminating its caller', () => {
+  const fakeHome = mkdtempSync(path.join(os.tmpdir(), 'oms-call-entry-'));
+  try {
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', [
+      "const { main } = await import('./install.js');",
+      "try { await main({ tool: 'claude' }); }",
+      "catch (error) { process.stdout.write(error.code ?? 'caught'); }",
+    ].join(' ')], {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        HOME: fakeHome,
+        USERPROFILE: fakeHome,
+        PATH: '',
+      },
+      encoding: 'utf8',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, 'OMS_CLAUDE_NOT_FOUND');
+    assert.equal(existsSync(path.join(fakeHome, '.oh-my-sdd', 'config.json')), true);
+  } finally {
+    rmSync(fakeHome, { recursive: true, force: true });
+  }
+});
+
 test('install and uninstall direct-entry checks compare decoded Windows paths', () => {
   const dependencies = {
     platform: 'win32',

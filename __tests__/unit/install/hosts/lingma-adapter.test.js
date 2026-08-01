@@ -132,6 +132,22 @@ describe('LingmaAdapter', () => {
     }
   });
 
+  it('uninstall preserves same-name user skills when no ownership sentinel exists', () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), 'oms-lingma-no-sentinel-'));
+    const skillFile = join(fakeHome, '.lingma', 'skills', 'sdd-spec', 'SKILL.md');
+    const userSkill = '# Independently authored sdd-spec\n';
+    try {
+      mkdirSync(dirname(skillFile), { recursive: true });
+      writeFileSync(skillFile, userSkill);
+
+      runAdapter(fakeHome, 'uninstall');
+
+      assert.equal(readFileSync(skillFile, 'utf8'), userSkill);
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
   it('uninstall cleans legacy OMS hooks when sentinel lacks ownership metadata', () => {
     // Arrange: simulate an installation created before hook_commands existed.
     const fakeHome = mkdtempSync(join(tmpdir(), 'oms-lingma-legacy-home-'));

@@ -63,9 +63,11 @@ export class ClaudeAdapter extends HostAdapter {
       announce('\n❌ 未检测到 claude CLI。请手动执行：');
       announce(`  claude plugin marketplace add ${PACKAGE_ROOT}`);
       announce(`  claude plugin install ${PLUGIN_NAME}@${MARKETPLACE_NAME}`);
-      // Create state dir before exiting — smoke-check depends on this side effect
+      // Create state dir before reporting failure — smoke-check depends on it.
       await ensureStateDir();
-      process.exit(1);
+      const error = new Error('未检测到 claude CLI');
+      error.code = 'OMS_CLAUDE_NOT_FOUND';
+      throw error;
     }
 
     announce('→ 初始化 ~/.oh-my-sdd/ 状态目录');

@@ -6,6 +6,11 @@ import { join } from 'node:path';
 
 import { copyDirSafe } from '../../../opencode/scripts/postinstall.mjs';
 import { shouldCopy, syncResourceTree } from '../../../opencode/scripts/copy-resources.mjs';
+import {
+  readOwnershipManifest,
+  uninstallOwnedResources,
+  writeOwnershipManifest,
+} from '../../../opencode/scripts/resource-ownership.mjs';
 
 function fixture() {
   return mkdtempSync(join(tmpdir(), 'oms-resource-test-'));
@@ -155,6 +160,123 @@ test('postinstall restores the existing target when replacement fails', () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('npm resource ownership restores user data and removes plugin-created resources', () => {
+  const root = fixture();
+  try {
+    const srcRoot = join(root, 'src');
+    const dstRoot = join(root, 'dst');
+    const manifestPath = join(root, 'state', 'resources.json');
+    mkdirSync(join(srcRoot, 'sdd-spec'), { recursive: true });
+    mkdirSync(dstRoot, { recursive: true });
+    writeFileSync(join(srcRoot, 'sdd-spec', 'SKILL.md'), 'plugin-created');
+    writeFileSync(join(srcRoot, 'sdd-plan'), 'plugin-v1');
+    writeFileSync(join(dstRoot, 'sdd-plan'), 'user-original');
+
+    const ownership = new Map();
+    const recordOwnership = (record) => {
+      ownership.set(record.target, record);
+      writeOwnershipManifest(manifestPath, [...ownership.values()]);
+    };
+    const installed = copyDirSafe(srcRoot, dstRoot, () => true, 'resources', {
+      ownership,
+      recordOwnership,
+      warn: () => {},
+      now: () => 123,
+    });
+
+    assert.equal(installed, 2);
+    assert.equal(readOwnershipManifest(manifestPath).length, 2);
+    assert.equal(readFileSync(join(dstRoot, 'sdd-plan'), 'utf8'), 'plugin-v1');
+
+    const result = uninstallOwnedResources({
+      manifestPath,
+      allowedRoots: [dstRoot],
+      warn: () => {},
+      now: () => 456,
+    });
+
+    assert.deepEqual(result, { removed: 1, restored: 1, preserved: 0, remaining: 0 });
+    assert.equal(existsSync(join(dstRoot, 'sdd-spec')), false);
+    assert.equal(readFileSync(join(dstRoot, 'sdd-plan'), 'utf8'), 'user-original');
+    assert.equal(existsSync(manifestPath), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('npm resource upgrades retain the original user backup for uninstall', () => {
+  const root = fixture();
+  try {
+    const srcRoot = join(root, 'src');
+    const dstRoot = join(root, 'dst');
+    const target = join(dstRoot, 'sdd-plan.md');
+    const manifestPath = join(root, 'state', 'resources.json');
+    mkdirSync(srcRoot, { recursive: true });
+    mkdirSync(dstRoot, { recursive: true });
+    writeFileSync(join(srcRoot, 'sdd-plan.md'), 'plugin-v1');
+    writeFileSync(target, 'user-original');
+
+    const ownership = new Map();
+    const recordOwnership = (record) => {
+      ownership.set(record.target, record);
+      writeOwnershipManifest(manifestPath, [...ownership.values()]);
+    };
+    const ops = { ownership, recordOwnership, warn: () => {}, now: () => 123 };
+    copyDirSafe(srcRoot, dstRoot, () => true, 'commands', ops);
+    const originalBackup = ownership.get(target).backup;
+
+    writeFileSync(join(srcRoot, 'sdd-plan.md'), 'plugin-v2');
+    copyDirSafe(srcRoot, dstRoot, () => true, 'commands', { ...ops, now: () => 124 });
+
+    assert.equal(ownership.get(target).backup, originalBackup);
+    assert.equal(readFileSync(target, 'utf8'), 'plugin-v2');
+    uninstallOwnedResources({ manifestPath, allowedRoots: [dstRoot], warn: () => {} });
+    assert.equal(readFileSync(target, 'utf8'), 'user-original');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('npm resource upgrades do not overwrite user modifications made after install', () => {
+  const root = fixture();
+  try {
+    const srcRoot = join(root, 'src');
+    const dstRoot = join(root, 'dst');
+    const target = join(dstRoot, 'sdd-plan.md');
+    const ownership = new Map();
+    mkdirSync(srcRoot, { recursive: true });
+    writeFileSync(join(srcRoot, 'sdd-plan.md'), 'plugin-v1');
+
+    const recordOwnership = (record) => ownership.set(record.target, record);
+    copyDirSafe(srcRoot, dstRoot, () => true, 'commands', {
+      ownership,
+      recordOwnership,
+      warn: () => {},
+    });
+    writeFileSync(target, 'user-modified-plugin-resource');
+    writeFileSync(join(srcRoot, 'sdd-plan.md'), 'plugin-v2');
+
+    const warnings = [];
+    const installed = copyDirSafe(srcRoot, dstRoot, () => true, 'commands', {
+      ownership,
+      recordOwnership,
+      warn: (message) => warnings.push(message),
+    });
+
+    assert.equal(installed, 0);
+    assert.equal(readFileSync(target, 'utf8'), 'user-modified-plugin-resource');
+    assert.ok(warnings.some((message) => message.includes('preserving user changes')));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('OpenCode package declares ownership cleanup before uninstall', () => {
+  const pkg = JSON.parse(readFileSync(join(process.cwd(), 'opencode', 'package.json'), 'utf8'));
+  assert.equal(pkg.scripts.preuninstall, 'node scripts/uninstall.mjs');
+  assert.ok(pkg.files.includes('scripts'));
 });
 
 test('resource sync excludes declared noise directories', () => {
