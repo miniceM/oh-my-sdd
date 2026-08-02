@@ -375,7 +375,7 @@ ctrl+x down view subagents
 
 ```bash
 cd <worktree-root>
-npm run build:opencode      # 编译 TS → JS
+npm run build:opencode      # 安装依赖 + 编译 TS → JS
 node bin/oms-install.js --tool opencode
 ```
 

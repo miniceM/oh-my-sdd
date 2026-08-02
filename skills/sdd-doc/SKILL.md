@@ -1,7 +1,7 @@
 ---
 name: sdd-doc
 description: 把 openspec 的 spec + plan 产物（proposal + delta specs + design.md）转成符合企业模版的 Markdown 需求规格说明书。当用户提到"生成需求文档/出需求规格说明书/出文档/归档 spec/出评审材料"等需求时使用。触发时机：/sdd-plan 完成后。
-argument-hint: [change-slug，可选；缺省自动推断唯一未归档 change]
+argument-hint: "[change-slug，可选；缺省自动推断唯一未归档 change]"
 allowed-tools: Bash, Read, Write
 ---
 

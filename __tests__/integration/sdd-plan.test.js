@@ -57,7 +57,7 @@ test('SKILL.md explicitly references enterprise-baseline.md as the constitution 
     skill.includes('enterprise-baseline.md'),
     'sdd-plan must explicitly reference enterprise-baseline.md (the constitution source of truth)'
   );
-  // 同时校验引用了 loadBaseline helper（来自 PR1 的 hooks/lib/constitution.js）
+  // 同时校验引用了 loadBaseline helper（来自 PR1 的 lib/constitution.js）
   assert.ok(
     skill.includes('loadBaseline'),
     'sdd-plan should call loadBaseline() to parse the versioned baseline (PR1 helper)'

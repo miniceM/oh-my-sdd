@@ -21,8 +21,8 @@
 // pure function of (content, filePath) — the spike showed that coupling
 // rules to session meta caused hard-gate short-circuit when auth failed.
 
-import { matchRules } from './lib/rules.js';
-import { error } from './lib/log.js';
+import { matchRules } from '../lib/rules.js';
+import { error } from '../lib/log.js';
 import { readFile } from 'node:fs/promises';
 const STDIN_TIMEOUT_MS = 5_000; // 增大超时,避免大型 payload 竞争
 

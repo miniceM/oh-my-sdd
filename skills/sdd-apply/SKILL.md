@@ -1,7 +1,7 @@
 ---
 name: sdd-apply
 description: 本 skill 在已完成 plan、用户说"开始实现"/"写代码"/"执行任务"/"做 TDD"时使用。SDD Ring 4——根据任务复杂度选 superpowers:subagent-driven-development（复杂多任务）或 executing-plans（简单任务）。
-argument-hint: [slug 或 change-id]
+argument-hint: "[slug 或 change-id]"
 ---
 
 # /sdd-apply —— SDD 第 4 环：实现执行（薄包装 + 委托）

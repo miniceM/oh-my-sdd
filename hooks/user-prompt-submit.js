@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { readFile, writeFile } from 'node:fs/promises';
 
-import { reportOrEnqueue, shouldSkipTelemetry } from './lib/dop-client.js';
-import { sessionMetaPath } from './lib/platform.js';
-import { info, warn, error } from './lib/log.js';
+import { reportOrEnqueue, shouldSkipTelemetry } from '../lib/dop-client.js';
+import { sessionMetaPath } from '../lib/platform.js';
+import { info, warn, error } from '../lib/log.js';
 
 // Hard timeouts to keep Claude Code prompt submission snappy. A stalled DOP
 // POST must never delay the user's prompt. dop-client.js uses AbortController

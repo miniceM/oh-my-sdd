@@ -14,6 +14,9 @@ import path from 'node:path';
 import os from 'node:os';
 import { getBaselinePath } from './paths.js';
 import { log } from './logger.js';
+const SENTINEL_BEGIN = '<!-- OH-MY-SDD:BEGIN (do not edit between these markers) -->';
+const SENTINEL_END = '<!-- OH-MY-SDD:END -->';
+const SENTINEL_RE = /<!-- OH-MY-SDD:BEGIN[\s\S]*?<!-- OH-MY-SDD:END -->\n?/g;
 // 缓存：sections + 文件 mtime。mtime 变化才重新加载。
 let _cachedSections = null;
 let _cachedMtimeMs = null;
@@ -91,15 +94,18 @@ export function buildSystemPrompt(sections, output) {
         output.system = [];
     output.system.push(...sections);
 }
-export function writeAgentsMdFallback(sections) {
+export function writeAgentsMdFallback(sections, home = os.homedir()) {
     if (process.platform === 'win32') {
         log('warn', 'AGENTS.md fallback not implemented on Windows', {});
         return;
     }
-    const home = os.homedir();
     const p = path.join(home, '.config', 'opencode', 'AGENTS.md');
     fs.mkdirSync(path.dirname(p), { recursive: true });
-    fs.writeFileSync(p, sections.join('\n\n') + '\n');
+    const existing = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
+    const cleaned = existing.replace(SENTINEL_RE, '');
+    const separator = cleaned.length > 0 && !cleaned.endsWith('\n') ? '\n' : '';
+    const block = sections.join('\n\n').trimEnd();
+    fs.writeFileSync(p, `${cleaned}${separator}${SENTINEL_BEGIN}\n${block}\n${SENTINEL_END}\n`);
     log('info', 'wrote AGENTS.md fallback', { path: p });
 }
 export function detectExperimentalHook() {

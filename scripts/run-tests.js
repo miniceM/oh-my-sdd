@@ -36,7 +36,30 @@ async function findTests(dir) {
   return out.sort();
 }
 
-async function main() {
+const COVERAGE_MINIMUM = 80;
+
+function buildNodeArgs(files, { coverage = false } = {}) {
+  return [...(coverage ? ['--experimental-test-coverage'] : []), '--test', ...files];
+}
+
+function parseLineCoverage(output) {
+  const match = output.match(/all files\s*\|\s*([0-9]+(?:\.[0-9]+)?)/i);
+  return match ? Number(match[1]) : null;
+}
+
+function validateCoverage(output, minimum = COVERAGE_MINIMUM) {
+  const actual = parseLineCoverage(output);
+  if (actual === null) {
+    throw new Error('Native coverage summary not found in test output');
+  }
+  if (actual < minimum) {
+    throw new Error(`Line coverage ${actual}% is below required ${minimum}%`);
+  }
+  return { actual, minimum };
+}
+
+/** Discover test files, run them, and optionally enforce native line coverage. */
+async function main({ coverage = process.argv.includes('--coverage') } = {}) {
   const files = await findTests(TESTS_DIR);
   if (files.length === 0) {
     process.stderr.write('No test files found under __tests__/\n');
@@ -45,13 +68,52 @@ async function main() {
 
   process.stderr.write(`Running ${files.length} test file(s)...\n`);
 
-  const child = spawn('node', ['--test', ...files], {
-    stdio: 'inherit',
+  const child = spawn(process.execPath, buildNodeArgs(files, { coverage }), {
+    stdio: coverage ? ['inherit', 'pipe', 'pipe'] : 'inherit',
   });
-  child.on('close', (code) => process.exit(code ?? 1));
+
+  let output = '';
+  if (coverage) {
+    child.stdout.on('data', (chunk) => {
+      process.stdout.write(chunk);
+      output += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      process.stderr.write(chunk);
+      output += chunk;
+    });
+  }
+
+  return new Promise((resolve, reject) => {
+    child.on('error', reject);
+    child.on('close', async (code) => {
+      try {
+        if (code !== 0) throw new Error(`test process exited with code ${code ?? 1}`);
+        if (coverage) {
+          const result = validateCoverage(output);
+          process.stderr.write(
+            `Coverage gate passed: ${result.actual}% >= ${result.minimum}% executable lines\n`,
+          );
+        }
+        resolve();
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
 }
 
-main().catch((err) => {
-  process.stderr.write(`test runner failed: ${err.message}\n`);
-  process.exit(1);
-});
+if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1] ?? '')) {
+  main().catch((err) => {
+    process.stderr.write(`test runner failed: ${err.message}\n`);
+    process.exit(1);
+  });
+}
+
+export {
+  buildNodeArgs,
+  findTests,
+  main,
+  parseLineCoverage,
+  validateCoverage,
+};

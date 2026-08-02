@@ -48,6 +48,18 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
     assert.ok(content.includes('SKILL.md'), `${cmdFile} 应指示 agent 读 SKILL.md`);
     assert.ok(content.includes('$ARGUMENTS'), `${cmdFile} 应支持 $ARGUMENTS 占位符`);
   }
+
+  // hooks + lib: hooks/*.js → <plugin>/hooks/, lib/*.js → <plugin>/lib/
+  // (Phase 0 restructure: hooks import via '../lib/X.js', so lib must be at plugin level)
+  const hooksDir = path.join(pluginDir, 'hooks');
+  assert.ok(fs.existsSync(hooksDir), 'hooks dir should exist in plugin dir');
+  const sessionStartJs = path.join(hooksDir, 'session-start.js');
+  assert.ok(fs.existsSync(sessionStartJs), 'hooks/session-start.js should exist');
+  // lib/ 应在 <plugin>/lib/ 而非 <plugin>/hooks/lib/（hooks 通过 ../lib/X.js 导入）
+  const libDir = path.join(pluginDir, 'lib');
+  assert.ok(fs.existsSync(libDir), 'lib dir should exist at plugin level (<plugin>/lib/)');
+  const wrongLibDir = path.join(hooksDir, 'lib');
+  assert.ok(!fs.existsSync(wrongLibDir), 'lib should NOT be inside hooks/ (hooks import via ../lib/X.js)');
   // skills 复制（主 SDD skills 必须存在）
   const skillsDir = path.join(pluginDir, 'skills');
   assert.ok(fs.existsSync(skillsDir), 'skills dir should exist in plugin dir');
@@ -115,6 +127,16 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
   const constitutionSkill = path.join(skillsDir, 'sdd-constitution', 'SKILL.md');
   assert.ok(!fs.existsSync(constitutionSkill), 'sdd-constitution skill 必须不被复制到 plugin 目录');
 
+  // 模拟旧 SDK fallback 写入：卸载只能移除 OMS 区块，不能删除用户内容。
+  const agentsPath = path.join(tmpHome, '.config', 'opencode', 'AGENTS.md');
+  fs.writeFileSync(agentsPath, [
+    '# User instructions',
+    '<!-- OH-MY-SDD:BEGIN (do not edit between these markers) -->',
+    'OMS baseline',
+    '<!-- OH-MY-SDD:END -->',
+    '',
+  ].join('\n'));
+
   // Step 2: uninstall
   execFileSync('node', ['bin/oms-uninstall.js', '--tool', 'opencode'], {
     cwd: worktreeRoot,
@@ -128,6 +150,7 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
   assert.ok(!plugins.includes('./plugins/oh-my-sdd/index.js'), 'uninstall 应清掉 ./plugins/oh-my-sdd/index.js');
   assert.ok(!plugins.includes('oh-my-sdd'), 'uninstall 应清掉裸字符串 oh-my-sdd');
   assert.ok(!plugins.includes('./plugins/oh-my-sdd/plugin.js'), 'uninstall 应清掉旧 ./plugins/oh-my-sdd/plugin.js');
+  assert.equal(fs.readFileSync(agentsPath, 'utf8'), '# User instructions\n');
 
   // command 文件应被清理
   for (const cmdFile of expectedCommands) {

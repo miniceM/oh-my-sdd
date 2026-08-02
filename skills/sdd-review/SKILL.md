@@ -1,7 +1,7 @@
 ---
 name: sdd-review
 description: 本 skill 在已完成实现、用户说"创建 PR"/"code review"/"归档"/"跑测试"/"finalize"或调用 /sdd-review 时使用。SDD Ring 5——两阶段：默认创建 PR，--finalize 在 PR merge 后做 openspec archive。委托 superpowers:requesting-code-review。
-argument-hint: [slug 或 change-id] 或 --finalize [slug 或 change-id]
+argument-hint: "[slug 或 change-id] 或 --finalize [slug 或 change-id]"
 ---
 
 # /sdd-review —— SDD 第 5 环：验证 + PR + 归档（两阶段）
@@ -25,7 +25,7 @@ argument-hint: [slug 或 change-id] 或 --finalize [slug 或 change-id]
 
 **baseline 在本次 review 范围内不可协商。**违反 HARD_RULE 自动 CRITICAL，违反 SOFT_RULE 自动 Important。
 
-读 `content/enterprise-baseline.md`（可用 `hooks/lib/constitution.js` 的 `loadBaseline()` 解析 frontmatter/body/syncReport）。把每条规则翻译成 reviewer 的触发条件：
+读 `content/enterprise-baseline.md`（可用 `lib/constitution.js` 的 `loadBaseline()` 解析 frontmatter/body/syncReport）。把每条规则翻译成 reviewer 的触发条件：
 
 - **HARD_RULE 清单**（自动 CRITICAL 触发条件）：
   - 身份声明——代码/commit/PR 自称 "Claude"/"Claude Code"/"通用 AI 助手" 或仅以模型名（如 glm-5）作身份 → CRITICAL

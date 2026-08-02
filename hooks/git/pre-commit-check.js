@@ -18,7 +18,7 @@
 //   环境变量 OMS_OVERRIDE_RULES=rule1,rule2 可绕过指定规则
 //   同时仍尝试读 .git/COMMIT_EDITMSG（可能含上次的 override 标记）
 
-import { matchRules } from '../lib/rules.js';
+import { matchRules } from '../../lib/rules.js';
 import { parseOverrides, filterOverridden } from './lib/override-check.js';
 import {
   getStagedFiles,

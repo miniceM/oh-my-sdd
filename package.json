@@ -5,7 +5,6 @@
   "type": "module",
   "main": "install.js",
   "bin": {
-    "hello-sdd": "bin/hello-sdd.js",
     "oms-install": "./bin/oms-install.js",
     "oms-uninstall": "./bin/oms-uninstall.js",
     "oms-login": "./bin/oms-login.js",
@@ -15,31 +14,36 @@
   },
   "scripts": {
     "postinstall": "node install.js",
-    "preuninstall": "node uninstall.js",
+    "preuninstall": "node install/uninstall.js",
+    "build": "npm run lint:baseline && npm test",
+    "build:opencode": "cd opencode && npm install && npx tsc",
+    "publish:opencode": "cd opencode && npm publish",
+    "prepublishOnly": "npm run build && npm run build:opencode",
     "test": "node scripts/run-tests.js",
+    "test:coverage": "node scripts/run-tests.js --coverage",
     "test:glob": "node --test \"__tests__/**/*.test.js\"",
-    "lint:baseline": "node scripts/check-baseline-tokens.mjs",
-    "build:opencode": "cd opencode && npm install --no-audit --no-fund && npm run build"
+    "lint:baseline": "node scripts/check-baseline-tokens.mjs"
   },
   "files": [
     ".claude-plugin/",
     "install.js",
-    "uninstall.js",
+    "install/",
     "bin/",
-    "wrappers/",
+    "wrapper/",
     "skills/",
     "content/",
     "hooks/",
-    "baseline/",
+    "lib/",
     "README.md",
-    "opencode/dist/"
+    "opencode/dist/",
+    "opencode/build.js"
   ],
   "publishConfig": {
     "registry": "https://npm.enterprise.com/",
     "access": "restricted"
   },
   "engines": {
-    "node": ">=22.0.0",
+    "node": ">=18.0.0",
     "npm": ">=9.0.0"
   },
   "os": [
@@ -59,7 +63,12 @@
   ],
   "license": "UNLICENSED",
   "private": false,
-  "devDependencies": {
-    "typescript": "^5.9.3"
-  }
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/enterprise/oh-my-sdd.git"
+  },
+  "bugs": {
+    "url": "https://github.com/enterprise/oh-my-sdd/issues"
+  },
+  "homepage": "https://github.com/enterprise/oh-my-sdd#readme"
 }

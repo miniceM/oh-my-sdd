@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 
-import { loadBaseline, getBodyForInjection } from '../../hooks/lib/constitution.js';
+import { loadBaseline, getBodyForInjection } from '../../lib/constitution.js';
 
 const BASELINE_PATH = path.join(PROJECT_ROOT, 'content', 'enterprise-baseline.md');
 

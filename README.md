@@ -1,6 +1,6 @@
 # @cli-tools/oh-my-sdd
 
-企业级 SDD 工作流插件。**支持 3 种 AI 编程工具**：Claude Code、通义灵码 Lingma、OpenCode。skills + HARD_RULE 安全门禁跨工具复用。
+企业级 SDD 工作流插件。**支持 4 种 AI 编程工具**：Claude Code、通义灵码 Lingma、OpenCode、KiloCode。skills + HARD_RULE 安全门禁跨工具复用。
 
 **核心能力：**
 - 5 个 SDD 斜杠命令：`/sdd-spec` `/sdd-plan` `/sdd-task` `/sdd-apply` `/sdd-review`
@@ -16,22 +16,67 @@
 
 ### OpenCode
 
-```bash
-# 1. 全局安装
-npm install -g --foreground-scripts @cli-tools/oh-my-sdd
+#### 方式一：npm 插件（推荐）
 
-# 2. 显式选择工具
-oms-install --tool opencode
+OpenCode 会自动安装和更新插件，无需手动管理。
+
+```bash
+# 在 ~/.config/opencode/opencode.json 中配置：
+{
+  "plugin": ["@enterprise/oh-my-sdd-opencode"]
+}
+
+# 启动 OpenCode，插件自动加载
+opencode
+
+# 使用 SDD 命令：
+# /sdd-spec <change-name>
+```
+
+**优点**：
+- OpenCode 自动安装和更新
+- 符合官方插件生态规范
+- 无需手动管理文件
+
+#### 方式二：本地开发模式
+
+用于开发和测试插件功能。
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/enterprise/oh-my-sdd.git
+cd oh-my-sdd
+
+# 2. 安装依赖 + 构建 + 注册插件
+npm install                 # 安装根包依赖（触发 install.js 注册 Claude/Lingma）
+npm run build:opencode      # 安装 + 编译 opencode 子包（@opencode-ai/plugin 等）
+oms-install --tool opencode # 注册插件到 OpenCode
 
 # 3. 启动 OpenCode
 #    plugin 自动加载到 ~/.config/opencode/plugins/oh-my-sdd/
 #    baseline 通过 experimental.chat.system.transform 注入
-#    /sdd-spec <change-name>
+opencode
 ```
 
 ⚠️ **前置依赖**：OpenCode（`npm install -g opencode` 或从 https://opencode.ai 下载）
 ⚠️ **baseline 注入**：依赖 `@opencode-ai/plugin` 1.15+ 的 `experimental.chat.system.transform` hook
 ⚠️ **HARD_RULE 强制**：通过自维护 TypeScript 适配层，`permissionDecision: "deny"` 转译为 OpenCode 的 `throw new Error()`
+
+### KiloCode
+
+```bash
+# 1. 全局安装
+npm install -g --foreground-scripts @cli-tools/oh-my-sdd
+
+# 2. 显式选择工具
+oms-install --tool kilocode
+
+# 3. 重启 KiloCode IDE
+#    skills 已加载到 ~/.kilo/skills/
+#    /sdd-spec <change-name>
+```
+
+⚠️ **重要限制**：KiloCode 当前无 hook 机制（无 PreToolUse/PostToolUse）。HARD_RULE 强制仅为**建议性**（baseline 注入到 system prompt，无运行期阻断）。安全敏感场景建议使用 Claude Code 或 OpenCode。
 
 ### Claude Code（默认）
 
@@ -65,7 +110,8 @@ oms-install --tool lingma
 ```bash
 oms-install                       # 装 Claude（自动检测）
 oms-install --tool lingma          # 再装 lingma
-# 两套独立，互不覆盖——skills 各自复制到工具专属目录
+oms-install --tool kilocode        # 再装 KiloCode
+# 三套独立，互不覆盖——skills 各自复制到工具专属目录
 ```
 
 > 💡 **关于 `--foreground-scripts`**：npm 默认静默 postinstall 输出（即使 stderr 也吞），加这个 flag 才能看到安装进度和"下一步"提示。**不加也能装成功**，只是看不到提示——安装失败时 npm 会自动显示所有输出。
@@ -158,7 +204,7 @@ oh-my-sdd 采用 **7 层洋葱模型** 实现强制约束，借鉴自 spec-kit �
 - Token 预算：正文 ≤ 1000 token（`scripts/check-baseline-tokens.mjs` 校验）
 
 **Layer 2: 注入层**（按工具机制不同）
-- **Claude Code**：`wrappers/claude.sh` / `wrappers/claude.ps1` → `claude` 命令入口；wrapper 启动时通过 `--append-system-prompt-file` 自动注入 baseline（运行期位置：`~/.config/claude-enterprise/baseline.md` / `~/AppData/Roaming/ClaudeEnterprise/baseline.md`；构建期源在 `content/enterprise-baseline.md`）。绕过：`claude --no-enterprise`。
+- **Claude Code**：`wrapper/claude.sh` / `wrapper/claude.ps1` → `claude` 命令入口；wrapper 启动时通过 `--append-system-prompt-file` 自动注入 baseline（运行期位置：`~/.config/claude-enterprise/baseline.md` / `~/AppData/Roaming/ClaudeEnterprise/baseline.md`；构建期源在 `content/enterprise-baseline.md`）。绕过：`claude --no-enterprise`。
 - **Lingma**：baseline 写入 `~/.lingma/rules/oh-my-sdd.md`（Always 类型规则，IDE 启动自动加载）。hooks 合并到 `~/.lingma/settings.json` 的 `PreToolUse/PostToolUse/UserPromptSubmit/Stop` 4 个事件。
 
 **Layer 3: Plan gate**
@@ -252,7 +298,7 @@ oh-my-sdd v0.2+ 支持在多种 AI 编程工具中加载。skills + hooks + HARD
 | **Claude Code** | ✅ 完整支持（默认） | `npm install -g @cli-tools/oh-my-sdd` | `~/.claude/skills/` | JSON hooks + wrapper |
 | **OpenCode** | ✅ 完整支持（v0.3+） | `oms-install --tool opencode` | `~/.config/opencode/plugins/oh-my-sdd/` | TypeScript adapter + experimental hook |
 | **通义灵码 Lingma** | ✅ 完整支持（基于文档解读） | `oms-install --tool lingma` | `~/.lingma/skills/` | JSON hooks（与 Claude Code 同构） |
-| **KiloCode** | ❌ 暂不支持 | — | — | 无 hook 机制，HARD_RULE 无法强制 |
+| **KiloCode** | ⚠️ 部分支持（无 hook 强制） | `oms-install --tool kilocode` | `~/.kilo/skills/` | 无 hook 机制，HARD_RULE 仅 advisory |
 | **Cursor** | 📋 v0.3 路线 | — | — | — |
 | **Windsurf** | 📋 v0.3 路线 | — | — | — |
 

@@ -94,13 +94,19 @@ test('baseline: buildSystemPrompt creates system array if missing', () => {
 test('baseline: writeAgentsMdFallback writes to ~/.config/opencode/AGENTS.md', () => {
   // skip on Windows
   if (process.platform === 'win32') return;
-  writeAgentsMdFallback(['Rule 1', 'Rule 2']);
-  const home = os.homedir();
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'oms-agents-'));
   const p = path.join(home, '.config', 'opencode', 'AGENTS.md');
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, '# User instructions\n');
+
+  writeAgentsMdFallback(['Rule 1', 'Rule 2'], home);
+  writeAgentsMdFallback(['Rule 1 updated'], home);
   const content = fs.readFileSync(p, 'utf8');
-  assert.ok(content.includes('Rule 1'));
-  assert.ok(content.includes('Rule 2'));
-  fs.unlinkSync(p);
+  assert.ok(content.includes('# User instructions'));
+  assert.ok(content.includes('Rule 1 updated'));
+  assert.ok(!content.includes('Rule 2'));
+  assert.equal(content.match(/OH-MY-SDD:BEGIN/g)?.length, 1);
+  fs.rmSync(home, { recursive: true, force: true });
 });
 
 test('baseline: detectExperimentalHook returns true for current SDK', () => {

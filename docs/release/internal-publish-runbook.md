@@ -114,13 +114,15 @@ ls -la
 # - .claude-plugin/plugin.json
 # - .claude-plugin/marketplace.json
 # - install.js, uninstall.js
-# - bin/ (3 个 CLI)
-# - commands/ (5 个 SDD 命令)
-# - skills/ (3 个 skills)
-# - content/ (3 个 .md)
-# - hooks/ (4 个 hook + lib/)
-# - scripts/ (mock iam + dev-launch + dev-reinstall + check-baseline-tokens)
-# - __tests__/ (单元 + 集成测试)
+# - bin/ (7 个 CLI: oms-install, oms-uninstall, oms-login, oms-update,
+#         oms-git-hooks, oms-welcome, oms-wrapper-verify)
+# - skills/ (17 个 skill 目录：5 个 sdd-* + 12 个企业 skill)
+# - content/ (4 个 .md: enterprise-baseline.md, lingma-baseline.md, auth-required.md, welcome-message.md)
+# - hooks/ (4 个 hook + lib/ + git/)
+# - scripts/ (dev-launch + dev-reinstall + check-baseline-tokens + ...)
+# - wrappers/ (claude.sh, claude.ps1, claude.bat)
+# - opencode/ (独立 TypeScript 子包，含自己的 package.json)
+# - __tests__/ (单元 + 集成测试，共 352 个 case)
 # - docs/ (specs + plans + roadmap + release)
 # - package.json, package-lock.json, README.md
 ```
@@ -134,18 +136,23 @@ ls -la
 ### 3.1 测试 + schema 验证
 
 ```bash
-# 1. 单元 + 集成测试（57 个）
+# 1. 单元 + 集成测试（352 个）
 npm test
-# 期望: pass 57, fail 0
+# 期望: pass 352, fail 0
 
 # 2. baseline token lint
 npm run lint:baseline
-# 期望: ✓ baseline token 估算: 550 / 1000
+# 期望: ✓ baseline token 估算: ~550 / 1000
 
 # 3. Claude Code plugin schema 验证（金标准）
 claude plugin validate .
 # 期望: ✔ Validation passed
 # 如果有 warning/error，停下查 spec
+
+# 4. OpenCode 子包构建 + 测试
+npm run build:opencode
+cd opencode && npm run typecheck
+# 期望: TypeScript 编译 0 错误
 ```
 
 ### 3.2 打包验证
@@ -158,36 +165,32 @@ npm pack
 tar -tzf cli-tools-oh-my-sdd-0.1.0.tgz | sort
 ```
 
-**期望 tgz 内容**（约 32 个文件）：
+**期望 tgz 内容**（约 133 个文件）：
+
+关键目录结构：
 ```
 package/.claude-plugin/marketplace.json
 package/.claude-plugin/plugin.json
 package/README.md
-package/bin/oms-install.js
-package/bin/oms-login.js
-package/bin/oms-uninstall.js
-package/commands/sdd-apply.md
-package/commands/sdd-plan.md
-package/commands/sdd-review.md
-package/commands/sdd-spec.md
-package/commands/sdd-task.md
-package/content/auth-required.md
-package/content/enterprise-baseline.md
-package/content/welcome-message.md
-package/hooks/hooks.json
-package/hooks/lib/*.js (7 个)
-package/hooks/*.js (4 个)
 package/install.js
-package/package.json
-package/package-lock.json
-package/skills/api-design/SKILL.md
-package/skills/doc-writer/SKILL.md
-package/skills/security-check/SKILL.md
 package/uninstall.js
+package/package.json
+package/content/lingma-baseline.md
+package/bin/oms-{install,uninstall,login,update,git-hooks,welcome,wrapper-verify}.js (7 个)
+package/content/{auth-required,enterprise-baseline,welcome-message}.md
+package/hooks/{hooks.json,pre-tool-use.js,post-tool-use.js,session-start.js,...} (4 个主 hook)
+package/hooks/lib/*.js (~20 个库文件)
+package/hooks/git/*.js (4 个 git hook 脚本)
+package/hooks/git/lib/*.js (3 个 git hook 库)
+package/skills/{sdd-spec,sdd-plan,sdd-task,sdd-apply,sdd-review,sdd-constitution,sdd-doc}/SKILL.md (7 个 sdd skill)
+package/skills/{api-design,business-modeling,db-conventions,doc-writer,security-check,testing-strategy,fe-*}/SKILL.md (10 个企业 skill)
+package/wrappers/claude.{sh,ps1,bat}
+package/opencode/dist/*.js + *.d.ts + *.js.map + *.d.ts.map (OpenCode 编译产物)
 ```
 
 ⚠️ **如果 tgz 缺关键文件**（如 `.claude-plugin/`、`install.js`）：
 - 检查 `package.json` 的 `files` 字段
+- 检查 `opencode/dist/` 是否已构建（缺失时 `npm run build:opencode` 会自动编译）
 - 不能 publish，重打包
 
 ### 3.3 本地安装端到端测试
@@ -295,11 +298,41 @@ npm view @cli-tools/oh-my-sdd versions --registry=https://npm.enterprise.com/
 # 期望: [ '0.1.0' ]
 ```
 
+### 5.4 OpenCode 子包发布（可选）
+
+OpenCode 插件是独立的 npm 包 `@enterprise/oh-my-sdd-opencode`，发布流程独立：
+
+```bash
+# 进入 opencode 子目录
+cd opencode
+
+# 构建（编译 TypeScript）
+npm run build
+
+# 打 tgz 验证
+npm pack
+# 期望: ~195 个文件（含 .opencode/、.agents/、hooks/、skills/、content/、scripts/）
+
+# 发布到企业 registry
+npm publish --registry=https://npm.enterprise.com/
+
+# 验证
+npm view @enterprise/oh-my-sdd-opencode@0.2.0 --registry=https://npm.enterprise.com/
+# 期望: 显示包元信息
+```
+
+⚠️ **OpenCode 包特殊点**：
+- 用户安装后 `postinstall` 脚本自动复制 skills/commands 到 `~/.opencode/skills/`
+- 依赖 `@opencode-ai/plugin` 1.15+ 的 `experimental.chat.system.transform` hook
+- 版本号独立管理（主包 0.1.0，OpenCode 包 0.2.0）
+
 ---
 
 ## ⑥ 安装验证（内网测试机）
 
 选一台**没参与开发**的机器模拟真实用户安装：
+
+### 6.1 主包 `@cli-tools/oh-my-sdd` 验证
 
 ```bash
 # 模拟用户安装
@@ -326,10 +359,38 @@ claude plugin list | grep oh-my-sdd
 grep "BEGIN oh-my-sdd" ~/.claude/CLAUDE.md
 # 期望: 命中
 
+# 验证 CLI 命令
+oms-install --help
+oms-login --help
+# 期望: 显示帮助信息
+
 # 启动 Claude Code 测试
 claude
 # 在会话里问："你是谁？"
 # 期望回答含: "企业 SDD Agent"
+```
+
+### 6.2 OpenCode 子包 `@enterprise/oh-my-sdd-opencode` 验证（可选）
+
+```bash
+# 安装 OpenCode 插件
+npm install -g @enterprise/oh-my-sdd-opencode
+
+# 验证 postinstall 脚本执行
+ls ~/.opencode/skills/
+# 期望: 含 sdd-spec, sdd-plan, sdd-task, sdd-apply, sdd-review 等
+
+ls ~/.opencode/command/
+# 期望: 含 sdd-spec.md, sdd-plan.md, sdd-task.md, sdd-apply.md, sdd-review.md
+
+# 启动 OpenCode
+opencode
+# 在会话里问："你是谁？"
+# 期望回答含: "企业 SDD Agent"
+
+# 测试 /sdd-spec
+/sdd-spec test-change
+# 期望: 看到 Ring 1 工作流指令
 ```
 
 **全通过 → 进 ⑦ 通知。失败 → 走 Rollback 流程。**
@@ -354,20 +415,26 @@ claude
   无需操作，v0.1.0 是首个正式版本。
 
 【变更摘要】
-  - 5 个 SDD 斜杠命令 (/sdd-spec 等)
+  - 5 个 SDD 斜杠命令 (/sdd-spec, /sdd-plan, /sdd-task, /sdd-apply, /sdd-review)
+  - 12 个企业 skills (api-design, security-check, db-conventions, business-modeling, testing-strategy, doc-writer, fe-*)
   - 企业 baseline 自动注入到 ~/.claude/CLAUDE.md
   - iam 身份校验 + DOP 埋点
+  - 支持 3 种 AI 工具: Claude Code, 通义灵码 Lingma, OpenCode
   - macOS / Linux / Windows 跨平台
+
+【OpenCode 用户（可选）】
+  npm install -g @enterprise/oh-my-sdd-opencode
+  # 启动 OpenCode 即可使用 /sdd-* 命令
 
 【已知限制】
   - 受 Claude Code bug #16538 影响，plugin SessionStart hook 的
     additionalContext 不工作。当前通过 ~/.claude/CLAUDE.md 绕过。
 
 【文档】
-  - 设计: docs/superpowers/specs/2026-06-18-oh-my-sdd-design.md
-  - 实施: docs/superpowers/plans/2026-06-18-oh-my-sdd-v0.1.md
-  - 验证: docs/real-env-verification-checklist.md
-  - 路线: docs/roadmap/v0.2-backlog.md
+  - README: README.md
+  - 安装指南: INSTALL.md
+  - 发布 Runbook: docs/release/internal-publish-runbook.md
+  - 冒烟测试: docs/smoke-test-checklist.md
 
 【反馈】
   问题/建议请回复本邮件或建 issue: 
@@ -470,9 +537,10 @@ npm install -g --foreground-scripts @cli-tools/oh-my-sdd
 
 ### Added (首版)
 - 5 个 SDD 斜杠命令
-- 3 个企业 skills (api-design, security-check, doc-writer)
+- 12 个企业 skills (api-design, security-check, db-conventions, business-modeling, testing-strategy, doc-writer, fe-*)
 - iam 身份校验 + DOP 埋点
 - 跨平台支持 (macOS/Linux/Windows)
+- 多工具支持 (Claude Code, 通义灵码 Lingma, OpenCode)
 
 ### Known Issues
 - plugin SessionStart hook additionalContext 受 Claude Code bug #16538 影响
@@ -487,10 +555,11 @@ npm install -g --foreground-scripts @cli-tools/oh-my-sdd
 
 - [ ] 代码已传内网，`git tag -l v0.1.0` 能看到
 - [ ] `git status` 干净
-- [ ] `npm test` → 57/57 pass
+- [ ] `npm test` → 352/352 pass
 - [ ] `npm run lint:baseline` → 通过
 - [ ] `claude plugin validate .` → ✔ Validation passed
-- [ ] `npm pack` 产出的 tgz 含 32 个文件
+- [ ] `npm run build:opencode` → TypeScript 编译 0 错误
+- [ ] `npm pack` 产出的 tgz 含 ~133 个文件
 - [ ] 本地 install + uninstall 测试通过（在测试 HOME 里）
 - [ ] 已 push 到内网 git 仓库
 - [ ] `npm login` 成功
@@ -498,6 +567,14 @@ npm install -g --foreground-scripts @cli-tools/oh-my-sdd
 - [ ] `npm view @cli-tools/oh-my-sdd@0.1.0` 能查到
 - [ ] 测试机安装一遍 → plugin enabled + baseline 注入
 - [ ] 通知已发送
+
+### OpenCode 子包 Checklist（可选）
+
+- [ ] `cd opencode && npm run build` → TypeScript 编译成功
+- [ ] `npm pack` → ~195 个文件
+- [ ] `npm publish` 成功
+- [ ] `npm view @enterprise/oh-my-sdd-opencode@0.2.0` 能查到
+- [ ] 测试机安装 → postinstall 复制 skills/commands 到 ~/.opencode/
 
 **全部勾选 = 发布成功** 🎉
 
