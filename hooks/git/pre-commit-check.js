@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // pre-commit hook — git commit 执行前扫描 staged 文件。
 //
-// 复用 hooks/lib/rules.js 的 matchRules 规则引擎，与 Claude Code
+// 复用 lib/rules.js 的 matchRules 规则引擎，与 Claude Code
 // PreToolUse hook 共享同一套 HARD/SOFT 规则，确保 AI 写入和开发者
 // 提交的约束一致。
 //

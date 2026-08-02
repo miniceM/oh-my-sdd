@@ -23,7 +23,6 @@
 
 import { matchRules } from '../lib/rules.js';
 import { error } from '../lib/log.js';
-import { readFile } from 'node:fs/promises';
 const STDIN_TIMEOUT_MS = 5_000; // 增大超时,避免大型 payload 竞争
 
 // 规则引擎扫描 content 的工具集合。Claude Code 协议保证 tool_name 是 PascalCase。

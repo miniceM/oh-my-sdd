@@ -21,7 +21,7 @@ describe('host-registry', () => {
   it('getAdapter throws for unknown tool with helpful message', () => {
     assert.throws(
       () => getAdapter('nonexistent'),
-      /未知工具: nonexistent。支持: .*claude.*lingma.*opencode/
+      /未知工具: nonexistent。支持: .*claude.*lingma.*opencode.*kilocode/
     );
   });
 
