@@ -27,9 +27,42 @@ test('getWrapperBinDir returns user-level bin directory', () => {
   assert.ok(!binDir.includes('/usr/') && !binDir.includes('/Applications/'), 'must be user-level, not system');
 });
 
+test('getWrapperBinDir selects the platform-specific user bin directory', () => {
+  const homeDir = path.join('test-home', 'user');
+  assert.equal(
+    wrapper.getWrapperBinDir({ platform: 'win32', homeDir }),
+    path.join(homeDir, 'bin'),
+  );
+  for (const platform of ['darwin', 'linux']) {
+    assert.equal(
+      wrapper.getWrapperBinDir({ platform, homeDir }),
+      path.join(homeDir, '.local', 'bin'),
+    );
+  }
+});
+
 test('getEnterpriseConfigDir returns user-level config directory', () => {
   const configDir = wrapper.getEnterpriseConfigDir();
   assert.ok(configDir.includes('claude-enterprise') || configDir.includes('ClaudeEnterprise'), 'config dir must contain enterprise marker');
+});
+
+test('getEnterpriseConfigDir selects Windows and POSIX config conventions', () => {
+  const homeDir = path.join('test-home', 'user');
+  assert.equal(
+    wrapper.getEnterpriseConfigDir({ platform: 'win32', homeDir }),
+    path.join(homeDir, 'AppData', 'Roaming', 'ClaudeEnterprise'),
+  );
+  for (const platform of ['darwin', 'linux']) {
+    assert.equal(
+      wrapper.getEnterpriseConfigDir({ platform, homeDir }),
+      path.join(homeDir, '.config', 'claude-enterprise'),
+    );
+  }
+});
+
+test('getDefaultShellConfig selects zsh for macOS and bash for Linux', () => {
+  assert.equal(wrapper.getDefaultShellConfig('darwin'), '.zshrc');
+  assert.equal(wrapper.getDefaultShellConfig('linux'), '.bashrc');
 });
 
 test('getRulesPath returns baseline.md in config directory', () => {
@@ -117,7 +150,10 @@ test('uninstallWrapper function exists and is async', () => {
 });
 
 test('wrapper install, verification, reinstall, and uninstall preserve the original CLI', async (t) => {
-  if (process.platform === 'win32') return;
+  if (process.platform === 'win32') {
+    t.skip('POSIX lifecycle is covered on macOS and Linux CI runners');
+    return;
+  }
 
   const fakeHome = mkdtempSync(path.join(os.tmpdir(), 'oms-wrapper-lifecycle-'));
   const originalHome = process.env.HOME;
@@ -152,5 +188,58 @@ test('wrapper install, verification, reinstall, and uninstall preserve the origi
   assert.equal(await wrapper.uninstallWrapper(message => messages.push(message)), true);
   assert.equal(existsSync(backup), false);
   assert.equal(existsSync(path.join(wrapperBin, 'claude')), false);
+  assert.equal(wrapper.verifyWrapper(() => {}), false);
+});
+
+test('Windows wrapper lifecycle installs scripts and preserves the original executable', async (t) => {
+  if (process.platform !== 'win32') {
+    t.skip('Windows lifecycle runs on the Windows CI runner');
+    return;
+  }
+
+  const fakeHome = mkdtempSync(path.join(os.tmpdir(), 'oms-wrapper-windows-'));
+  const originalEnv = {
+    XDG_HOME_DIR: process.env.XDG_HOME_DIR,
+    HOME: process.env.HOME,
+    USERPROFILE: process.env.USERPROFILE,
+    PATH: process.env.PATH,
+  };
+  t.after(() => {
+    for (const [name, value] of Object.entries(originalEnv)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    rmSync(fakeHome, { recursive: true, force: true });
+  });
+
+  const originalClaude = path.join(fakeHome, '.claude', 'bin', 'claude.exe');
+  const wrapperBin = path.join(fakeHome, 'bin');
+  mkdirSync(path.dirname(originalClaude), { recursive: true });
+  writeFileSync(originalClaude, 'fake executable');
+  process.env.XDG_HOME_DIR = fakeHome;
+  process.env.HOME = fakeHome;
+  process.env.USERPROFILE = fakeHome;
+  process.env.PATH = `${wrapperBin}${path.delimiter}${originalEnv.PATH ?? ''}`;
+
+  const messages = [];
+  assert.equal(await wrapper.installWrapper(PROJECT_ROOT, message => messages.push(message)), true);
+  assert.equal(wrapper.verifyWrapper(message => messages.push(message)), true);
+  assert.equal(await wrapper.installWrapper(PROJECT_ROOT, message => messages.push(message)), true);
+
+  const backup = path.join(wrapperBin, 'claude-original.exe');
+  assert.equal(existsSync(backup), true);
+  assert.equal(readFileSync(backup, 'utf8'), 'fake executable');
+  assert.equal(existsSync(path.join(wrapperBin, 'claude.ps1')), true);
+  assert.equal(existsSync(path.join(wrapperBin, 'claude.bat')), true);
+  assert.equal(
+    existsSync(path.join(fakeHome, 'AppData', 'Roaming', 'ClaudeEnterprise', 'baseline.md')),
+    true,
+  );
+  assert.ok(messages.some(message => message.includes('备份已存在')));
+
+  assert.equal(await wrapper.uninstallWrapper(message => messages.push(message)), true);
+  assert.equal(existsSync(backup), false);
+  assert.equal(existsSync(path.join(wrapperBin, 'claude.ps1')), false);
+  assert.equal(existsSync(path.join(wrapperBin, 'claude.bat')), false);
   assert.equal(wrapper.verifyWrapper(() => {}), false);
 });

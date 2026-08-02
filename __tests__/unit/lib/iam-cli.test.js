@@ -1,10 +1,46 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import { mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
+import {
+  getAuthStatus,
+  IamCliError,
+  isFullyAuthenticated,
+  login,
+  pickAnyLoggedUsername,
+  runIam,
+} from '../../../lib/iam-cli.js';
 
-function makeStubIam(output, exitCode = 0) {
+function makeFakeChild(pid = 321) {
+  const child = new EventEmitter();
+  child.pid = pid;
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = { end: (input) => { child.stdinInput = input; } };
+  child.killCalls = [];
+  child.kill = (signal) => child.killCalls.push(signal);
+  return child;
+}
+
+function makeTimeoutHarness() {
+  let handler;
+  return {
+    setTimeoutFn(fn) {
+      handler = fn;
+      return { unref() {} };
+    },
+    clearTimeoutFn() {},
+    fire() {
+      assert.equal(typeof handler, 'function', 'timeout handler must be registered');
+      handler();
+    },
+  };
+}
+
+function makeStubIam(output, exitCode = 0, loginExitCode = 0) {
   const dir = mkdtempSync(path.join(tmpdir(), 'iam-stub-'));
   if (process.platform === 'win32') {
     // Windows: 用 node 脚本 + .cmd shim，避开 CMD echo 的元字符问题。
@@ -15,6 +51,10 @@ function makeStubIam(output, exitCode = 0) {
       '  process.stdout.write(' + JSON.stringify(output) + ' + "\\n");',
       '  process.exit(' + exitCode + ');',
       '}',
+      'if (process.argv[2] === "auth" && process.argv[3] === "login") {',
+      '  if (' + loginExitCode + ' !== 0) process.stderr.write("login failed\\n");',
+      '  process.exit(' + loginExitCode + ');',
+      '}',
       'process.exit(0);',
     ].join('\n');
     writeFileSync(jsPath, jsScript);
@@ -23,7 +63,7 @@ function makeStubIam(output, exitCode = 0) {
     writeFileSync(cmdPath, shim);
   } else {
     const cmd = path.join(dir, 'iam');
-    const script = `#!/bin/bash\nif [ "$1" = "auth" ] && [ "$2" = "status" ]; then\n  echo '${output}'\n  exit ${exitCode}\nfi\nexit 0\n`;
+    const script = `#!/bin/bash\nif [ "$1" = "auth" ] && [ "$2" = "status" ]; then\n  echo '${output}'\n  exit ${exitCode}\nfi\nif [ "$1" = "auth" ] && [ "$2" = "login" ]; then\n  if [ ${loginExitCode} -ne 0 ]; then echo 'login failed' >&2; fi\n  exit ${loginExitCode}\nfi\nexit 0\n`;
     writeFileSync(cmd, script);
     chmodSync(cmd, 0o755);
   }
@@ -40,7 +80,6 @@ test('getAuthStatus uses --json flag and parses credentials-only payload', async
   process.env.PATH = `${stubDir}${path.delimiter}${process.env.PATH}`;
   t.after(() => { process.env.PATH = oldPath; });
 
-  const { getAuthStatus } = await import('../../../lib/iam-cli.js?' + Date.now());
   const status = await getAuthStatus();
   assert.ok(Array.isArray(status.credentials));
   assert.equal(status.credentials.length, 2);
@@ -55,7 +94,6 @@ test('getAuthStatus throws on command missing', async (t) => {
   process.env.PATH = '/nonexistent';
   t.after(() => { process.env.PATH = oldPath; });
 
-  const { getAuthStatus, IamCliError } = await import('../../../lib/iam-cli.js?' + Date.now());
   await assert.rejects(() => getAuthStatus(), IamCliError);
 });
 
@@ -66,7 +104,6 @@ test('getAuthStatus throws on non-zero exit', async (t) => {
   process.env.PATH = `${stubDir}${path.delimiter}${process.env.PATH}`;
   t.after(() => { process.env.PATH = oldPath; });
 
-  const { getAuthStatus, IamCliError } = await import('../../../lib/iam-cli.js?' + Date.now());
   await assert.rejects(() => getAuthStatus(), IamCliError);
 });
 
@@ -78,7 +115,6 @@ test('getAuthStatus throws on missing credentials field', async (t) => {
   process.env.PATH = `${stubDir}${path.delimiter}${process.env.PATH}`;
   t.after(() => { process.env.PATH = oldPath; });
 
-  const { getAuthStatus, IamCliError } = await import('../../../lib/iam-cli.js?' + Date.now());
   await assert.rejects(() => getAuthStatus(), (err) => {
     assert.ok(err instanceof IamCliError);
     assert.equal(err.code, 'IAM_SCHEMA_MISMATCH');
@@ -86,8 +122,177 @@ test('getAuthStatus throws on missing credentials field', async (t) => {
   });
 });
 
+test('getAuthStatus wraps invalid JSON output', async (t) => {
+  const stubDir = makeStubIam('not-json');
+  t.after(() => rmSync(stubDir, { recursive: true, force: true }));
+  const oldPath = process.env.PATH;
+  process.env.PATH = `${stubDir}${path.delimiter}${process.env.PATH}`;
+  t.after(() => { process.env.PATH = oldPath; });
+
+  await assert.rejects(() => getAuthStatus(), { code: 'IAM_INVALID_JSON' });
+});
+
+test('runIam uses a Windows shell and taskkill for timeout cleanup', async () => {
+  const child = makeFakeChild();
+  const timeout = makeTimeoutHarness();
+  const spawnCalls = [];
+  const execCalls = [];
+
+  const result = runIam(['auth', 'status'], {
+    platform: 'win32',
+    timeoutMs: 50,
+    spawnFn(command, args, options) {
+      spawnCalls.push({ command, args, options });
+      return child;
+    },
+    execFileFn(command, args, options) {
+      execCalls.push({ command, args, options });
+    },
+    setTimeoutFn: timeout.setTimeoutFn,
+    clearTimeoutFn: timeout.clearTimeoutFn,
+  });
+
+  timeout.fire();
+  await assert.rejects(result, (error) => {
+    assert.ok(error instanceof IamCliError);
+    assert.equal(error.code, 'IAM_TIMEOUT');
+    return true;
+  });
+  assert.deepEqual(spawnCalls, [{
+    command: 'iam',
+    args: ['auth', 'status'],
+    options: {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      detached: false,
+      shell: true,
+    },
+  }]);
+  assert.deepEqual(execCalls, [{
+    command: 'taskkill',
+    args: ['/PID', 321, '/T', '/F'],
+    options: { stdio: 'ignore' },
+  }]);
+  assert.deepEqual(child.killCalls, []);
+});
+
+test('runIam uses a detached POSIX process group and kills its negative pid on timeout', async () => {
+  const child = makeFakeChild(654);
+  const timeout = makeTimeoutHarness();
+  const spawnCalls = [];
+  const killCalls = [];
+
+  const result = runIam(['auth', 'status'], {
+    platform: 'linux',
+    timeoutMs: 50,
+    spawnFn(command, args, options) {
+      spawnCalls.push({ command, args, options });
+      return child;
+    },
+    killFn(pid, signal) {
+      killCalls.push({ pid, signal });
+    },
+    setTimeoutFn: timeout.setTimeoutFn,
+    clearTimeoutFn: timeout.clearTimeoutFn,
+  });
+
+  timeout.fire();
+  await assert.rejects(result, { code: 'IAM_TIMEOUT' });
+  assert.deepEqual(spawnCalls[0].options, {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    detached: true,
+    shell: false,
+  });
+  assert.deepEqual(killCalls, [{ pid: -654, signal: 'SIGKILL' }]);
+  assert.deepEqual(child.killCalls, []);
+});
+
+test('runIam falls back to killing the POSIX child when process-group cleanup fails', async () => {
+  const child = makeFakeChild(987);
+  const timeout = makeTimeoutHarness();
+
+  const result = runIam(['auth', 'status'], {
+    platform: 'darwin',
+    timeoutMs: 50,
+    spawnFn: () => child,
+    killFn: () => { throw new Error('process group missing'); },
+    setTimeoutFn: timeout.setTimeoutFn,
+    clearTimeoutFn: timeout.clearTimeoutFn,
+  });
+
+  timeout.fire();
+  await assert.rejects(result, { code: 'IAM_TIMEOUT' });
+  assert.deepEqual(child.killCalls, ['SIGKILL']);
+});
+
+test('runIam collects output, forwards stdin, and clears its timer on close', async () => {
+  const child = makeFakeChild(246);
+  const timeout = makeTimeoutHarness();
+  const clearedTimers = [];
+
+  const result = runIam(['auth', 'login'], {
+    input: 'secret',
+    timeoutMs: 50,
+    platform: 'linux',
+    spawnFn: () => child,
+    setTimeoutFn: timeout.setTimeoutFn,
+    clearTimeoutFn: (timer) => clearedTimers.push(timer),
+  });
+  child.stdout.write('logged ');
+  child.stdout.write('in');
+  child.stderr.write('warning');
+  child.emit('close', 0);
+
+  assert.deepEqual(await result, { exitCode: 0, stdout: 'logged in', stderr: 'warning' });
+  assert.equal(child.stdinInput, 'secret');
+  assert.equal(clearedTimers.length, 1);
+  timeout.fire();
+  assert.deepEqual(child.killCalls, []);
+});
+
+test('runIam wraps spawn errors and clears its timer', async () => {
+  const child = makeFakeChild();
+  const timeout = makeTimeoutHarness();
+  const clearedTimers = [];
+  const cause = new Error('spawn failed');
+
+  const result = runIam(['auth', 'status'], {
+    timeoutMs: 50,
+    spawnFn: () => child,
+    setTimeoutFn: timeout.setTimeoutFn,
+    clearTimeoutFn: (timer) => clearedTimers.push(timer),
+  });
+  child.emit('error', cause);
+
+  await assert.rejects(result, (error) => {
+    assert.ok(error instanceof IamCliError);
+    assert.equal(error.code, 'IAM_SPAWN_FAILED');
+    assert.equal(error.cause, cause);
+    return true;
+  });
+  assert.equal(clearedTimers.length, 1);
+});
+
+test('login returns ok for successful authentication', async (t) => {
+  const stubDir = makeStubIam('{}');
+  t.after(() => rmSync(stubDir, { recursive: true, force: true }));
+  const oldPath = process.env.PATH;
+  process.env.PATH = `${stubDir}${path.delimiter}${process.env.PATH}`;
+  t.after(() => { process.env.PATH = oldPath; });
+
+  assert.deepEqual(await login('alice', 'secret'), { ok: true });
+});
+
+test('login returns stderr for failed authentication', async (t) => {
+  const stubDir = makeStubIam('{}', 0, 7);
+  t.after(() => rmSync(stubDir, { recursive: true, force: true }));
+  const oldPath = process.env.PATH;
+  process.env.PATH = `${stubDir}${path.delimiter}${process.env.PATH}`;
+  t.after(() => { process.env.PATH = oldPath; });
+
+  assert.deepEqual(await login('alice', 'wrong'), { ok: false, error: 'login failed' });
+});
+
 test('isFullyAuthenticated returns true when all required systems logged', async () => {
-  const { isFullyAuthenticated } = await import('../../../lib/iam-cli.js');
   const status = {
     credentials: [
       { username: 'deepus',  status: 'logged', is_api_key_true: true  },
@@ -98,7 +303,6 @@ test('isFullyAuthenticated returns true when all required systems logged', async
 });
 
 test('isFullyAuthenticated returns false when fewer than required', async () => {
-  const { isFullyAuthenticated } = await import('../../../lib/iam-cli.js');
   const status = {
     credentials: [
       { username: 'deepus', status: 'logged', is_api_key_true: true },
@@ -109,7 +313,6 @@ test('isFullyAuthenticated returns false when fewer than required', async () => 
 });
 
 test('isFullyAuthenticated returns false when any credential not logged', async () => {
-  const { isFullyAuthenticated } = await import('../../../lib/iam-cli.js');
   const status = {
     credentials: [
       { username: 'deepus',  status: 'logged',    is_api_key_true: true  },
@@ -120,14 +323,12 @@ test('isFullyAuthenticated returns false when any credential not logged', async 
 });
 
 test('isFullyAuthenticated handles empty credentials', async () => {
-  const { isFullyAuthenticated } = await import('../../../lib/iam-cli.js');
   assert.equal(isFullyAuthenticated({ credentials: [] }, 2), false);
   assert.equal(isFullyAuthenticated({}, 2), false);
   assert.equal(isFullyAuthenticated(null, 2), false);
 });
 
 test('pickAnyLoggedUsername returns first logged username', async () => {
-  const { pickAnyLoggedUsername } = await import('../../../lib/iam-cli.js');
   const status = {
     credentials: [
       { username: 'deepus',  status: 'logged' },
@@ -138,7 +339,6 @@ test('pickAnyLoggedUsername returns first logged username', async () => {
 });
 
 test('pickAnyLoggedUsername returns null when none logged', async () => {
-  const { pickAnyLoggedUsername } = await import('../../../lib/iam-cli.js');
   assert.equal(pickAnyLoggedUsername({ credentials: [] }), null);
   assert.equal(pickAnyLoggedUsername({
     credentials: [{ username: 'x', status: 'expired' }],

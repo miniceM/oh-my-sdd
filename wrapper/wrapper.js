@@ -7,18 +7,22 @@ import { isWindows, getHomeDir } from '../lib/platform.js';
 // ============================================
 // 目录配置（用户级，无需管理员权限）
 // ============================================
-export function getWrapperBinDir() {
-  if (isWindows()) {
-    return path.join(getHomeDir(), 'bin');
+export function getWrapperBinDir({ platform = process.platform, homeDir = getHomeDir() } = {}) {
+  if (isWindows(platform)) {
+    return path.join(homeDir, 'bin');
   }
-  return path.join(getHomeDir(), '.local', 'bin');
+  return path.join(homeDir, '.local', 'bin');
 }
 
-export function getEnterpriseConfigDir() {
-  if (isWindows()) {
-    return path.join(getHomeDir(), 'AppData', 'Roaming', 'ClaudeEnterprise');
+export function getEnterpriseConfigDir({ platform = process.platform, homeDir = getHomeDir() } = {}) {
+  if (isWindows(platform)) {
+    return path.join(homeDir, 'AppData', 'Roaming', 'ClaudeEnterprise');
   }
-  return path.join(getHomeDir(), '.config', 'claude-enterprise');
+  return path.join(homeDir, '.config', 'claude-enterprise');
+}
+
+export function getDefaultShellConfig(platform = process.platform) {
+  return platform === 'darwin' ? '.zshrc' : '.bashrc';
 }
 
 export function getRulesPath() {
@@ -233,7 +237,7 @@ async function configurePath(binDir, announce) {
     }
 
     // 添加到 .zshrc（macOS 默认）或 .bashrc（Linux 默认）
-    const targetCfg = process.platform === 'darwin' ? '.zshrc' : '.bashrc';
+    const targetCfg = getDefaultShellConfig();
     const targetPath = path.join(homeDir, targetCfg);
 
     try {
