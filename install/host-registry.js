@@ -18,7 +18,7 @@ const REGISTRY = new Map([
 /**
  * Look up the adapter class for a given tool id.
  * Throws with a helpful message listing supported tools if not found.
- * @param {string} tool - Tool identifier ('claude', 'lingma', 'opencode')
+ * @param {string} tool - Tool identifier ('claude', 'lingma', 'opencode', 'kilocode')
  * @returns {typeof import('./host-adapter.js').HostAdapter}
  */
 export function getAdapter(tool) {

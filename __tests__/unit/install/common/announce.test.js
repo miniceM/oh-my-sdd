@@ -2,7 +2,6 @@
  * Tests for install/common/announce.js - Shared progress output helper
  */
 
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { describe, it, mock } from 'node:test';
 import { announce } from '../../../../install/common/announce.js';
