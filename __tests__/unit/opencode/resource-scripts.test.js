@@ -1,9 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { copyDirSafe } from '../../../opencode/scripts/postinstall.mjs';
 import {
@@ -645,6 +647,57 @@ test('resource sync excludes declared noise directories', () => {
     assert.ok(existsSync(join(dst, 'skill', 'SKILL.md')));
     assert.equal(existsSync(join(dst, 'node_modules')), false);
     assert.equal(existsSync(join(dst, '__tests__')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource sync preserves the existing destination when staging copy fails', () => {
+  const root = fixture();
+  try {
+    const src = join(root, 'src');
+    const dst = join(root, 'dst');
+    mkdirSync(src, { recursive: true });
+    mkdirSync(dst, { recursive: true });
+    writeFileSync(join(src, 'new.txt'), 'new');
+    writeFileSync(join(dst, 'old.txt'), 'old');
+
+    assert.throws(
+      () => syncResourceTree(src, dst, { cpSync: () => { throw new Error('injected copy failure'); } }),
+      /injected copy failure/,
+    );
+    assert.equal(readFileSync(join(dst, 'old.txt'), 'utf8'), 'old');
+    assert.equal(existsSync(join(dst, 'new.txt')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource sync waits for an existing destination lock before replacing it', async () => {
+  const root = fixture();
+  try {
+    const src = join(root, 'src');
+    const dst = join(root, 'dst');
+    const lock = `${dst}.oh-my-sdd-sync.lock`;
+    mkdirSync(src, { recursive: true });
+    mkdirSync(lock, { recursive: true });
+    writeFileSync(join(src, 'new.txt'), 'new');
+
+    const moduleUrl = pathToFileURL(join(process.cwd(), 'opencode', 'scripts', 'copy-resources.mjs')).href;
+    const child = spawn(process.execPath, [
+      '--input-type=module',
+      '--eval',
+      `import { syncResourceTree } from ${JSON.stringify(moduleUrl)}; syncResourceTree(${JSON.stringify(src)}, ${JSON.stringify(dst)});`,
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.equal(child.exitCode, null, 'sync must remain blocked while the lock exists');
+    assert.equal(existsSync(dst), false);
+
+    rmSync(lock, { recursive: true, force: true });
+    const [code] = await once(child, 'exit');
+    assert.equal(code, 0);
+    assert.equal(readFileSync(join(dst, 'new.txt'), 'utf8'), 'new');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

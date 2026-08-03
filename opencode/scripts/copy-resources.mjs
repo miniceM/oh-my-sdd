@@ -21,7 +21,8 @@
  * Fail-fast: if any parent source dir is missing, exit non-zero. Silent otherwise.
  */
 
-import { cpSync, existsSync, rmSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -53,12 +54,84 @@ export function shouldCopy(name) {
   return !EXCLUDE_BASENAMES.has(name);
 }
 
-export function syncResourceTree(src, dst) {
-  rmSync(dst, { recursive: true, force: true });
-  cpSync(src, dst, {
-    recursive: true,
-    force: true,
-    filter: (source) => shouldCopy(basename(source)),
+/**
+ * Run a synchronous operation while holding an exclusive per-destination lock.
+ *
+ * @param {string} lockPath directory used as the cross-process lock
+ * @param {() => unknown} operation work to execute while the lock is held
+ * @param {{ timeoutMs?: number, pollMs?: number, mkdirSync?: Function, rmSync?: Function }} [ops]
+ * @returns {unknown} the operation result
+ */
+export function withSyncLock(lockPath, operation, ops = {}) {
+  const makeDirectory = ops.mkdirSync ?? mkdirSync;
+  const remove = ops.rmSync ?? rmSync;
+  const timeoutMs = ops.timeoutMs ?? 10_000;
+  const pollMs = ops.pollMs ?? 25;
+  const startedAt = Date.now();
+  const signal = new Int32Array(new SharedArrayBuffer(4));
+
+  while (true) {
+    try {
+      makeDirectory(lockPath);
+      break;
+    } catch (error) {
+      if (error?.code !== 'EEXIST') throw error;
+      if (Date.now() - startedAt >= timeoutMs) {
+        throw new Error(`[copy-resources] timed out waiting for lock: ${lockPath}`);
+      }
+      Atomics.wait(signal, 0, 0, pollMs);
+    }
+  }
+
+  try {
+    return operation();
+  } finally {
+    remove(lockPath, { recursive: true, force: true });
+  }
+}
+
+export function syncResourceTree(src, dst, ops = {}) {
+  const copy = ops.cpSync ?? cpSync;
+  const exists = ops.existsSync ?? existsSync;
+  const rename = ops.renameSync ?? renameSync;
+  const remove = ops.rmSync ?? rmSync;
+  const suffix = `${process.pid}-${randomUUID()}`;
+  const staging = `${dst}.oh-my-sdd-sync.staging-${suffix}`;
+  const backup = `${dst}.oh-my-sdd-sync.backup-${suffix}`;
+  const lock = `${dst}.oh-my-sdd-sync.lock`;
+
+  mkdirSync(dirname(dst), { recursive: true });
+  return withSyncLock(lock, () => {
+    let movedExisting = false;
+    try {
+      copy(src, staging, {
+        recursive: true,
+        force: true,
+        filter: (source) => shouldCopy(basename(source)),
+      });
+      if (exists(dst)) {
+        rename(dst, backup);
+        movedExisting = true;
+      }
+      try {
+        rename(staging, dst);
+      } catch (error) {
+        if (movedExisting && !exists(dst)) rename(backup, dst);
+        throw error;
+      }
+      if (movedExisting) remove(backup, { recursive: true, force: true });
+    } catch (error) {
+      if (movedExisting && exists(backup) && !exists(dst)) rename(backup, dst);
+      throw error;
+    } finally {
+      remove(staging, { recursive: true, force: true });
+      if (exists(backup) && exists(dst)) remove(backup, { recursive: true, force: true });
+    }
+  }, {
+    timeoutMs: ops.lockTimeoutMs,
+    pollMs: ops.lockPollMs,
+    mkdirSync: ops.mkdirSync,
+    rmSync: remove,
   });
 }
 
