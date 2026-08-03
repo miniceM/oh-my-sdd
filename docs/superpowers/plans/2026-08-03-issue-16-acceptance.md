@@ -27,7 +27,7 @@
 - 参考：`opencode/.opencode/commands/sdd-plan.md`
 - 参考：`opencode/oms-skills/sdd-plan/SKILL.md`
 
-- [ ] **步骤 RED 1：编写正常 chain 的失败测试**
+- [x] **步骤 RED 1：编写正常 chain 的失败测试**
 
 测试在临时 HOME 中运行 `opencode/scripts/postinstall.mjs`，断言 PATH 中不存在 `claude` shim，然后调用尚不存在的 `runSddPlanHarness()`：
 
@@ -46,7 +46,7 @@ assert.deepEqual(result.events.map((event) => event.type), [
 ]);
 ```
 
-- [ ] **步骤 RED 2：运行正常 chain 测试并确认失败**
+- [x] **步骤 RED 2：运行正常 chain 测试并确认失败**
 
 运行：
 
@@ -56,7 +56,7 @@ node --test __tests__/integration/opencode/sdd-plan-harness.test.js
 
 预期：FAIL，错误包含 `ERR_MODULE_NOT_FOUND` 或 `runSddPlanHarness is not defined`。
 
-- [ ] **步骤 GREEN 1：实现最小 harness**
+- [x] **步骤 GREEN 1：实现最小 harness**
 
 导出以下接口：
 
@@ -72,7 +72,7 @@ export function runSddPlanHarness({ home, commandPath, approved }) {
 
 `resolveDelegate()` 必须去除 `superpowers:`，按 command 声明顺序检查隔离 HOME 下的 OpenCode、Agents、Claude 路径。每次解析记录 `{ requested, normalized, source, mode }`。
 
-- [ ] **步骤 GREEN 2：运行正常 chain 测试并确认通过**
+- [x] **步骤 GREEN 2：运行正常 chain 测试并确认通过**
 
 运行：
 
@@ -82,7 +82,7 @@ node --test __tests__/integration/opencode/sdd-plan-harness.test.js
 
 预期：正常 chain 测试 PASS。
 
-- [ ] **步骤 RED 3：编写缺失 skill fallback 的失败测试**
+- [x] **步骤 RED 3：编写缺失 skill fallback 的失败测试**
 
 复制 clean HOME fixture 后删除 `~/.config/opencode/skills/brainstorming`，再次运行 harness：
 
@@ -97,15 +97,15 @@ assert.ok(result.events.some((event) => event.type === 'brainstorming-question')
 assert.ok(result.events.some((event) => event.type === 'writing-plans-started'));
 ```
 
-- [ ] **步骤 RED 4：运行 fallback 测试并确认正确失败**
+- [x] **步骤 RED 4：运行 fallback 测试并确认正确失败**
 
 运行同一测试文件。预期：FAIL，原因是 resolver 在文件缺失时停止或未记录 inline fallback。
 
-- [ ] **步骤 GREEN 3：实现 fallback 和未批准分支**
+- [x] **步骤 GREEN 3：实现 fallback 和未批准分支**
 
 文件缺失时，从主 skill 中对应委派段落生成 inline 内容摘要，记录 fallback 后继续。`approved === false` 时事件必须停在 `brainstorming-approval-requested`，不得记录 `writing-plans-started`。
 
-- [ ] **步骤 REFACTOR 1：回归并提交**
+- [x] **步骤 REFACTOR 1：回归并提交**
 
 运行：
 
@@ -128,7 +128,7 @@ git commit -m "[OPEN02] test: T1 - verify sdd-plan delegation behavior"
 - 修改：`opencode/scripts/copy-resources.mjs:24-106`
 - 修改：`__tests__/unit/opencode/resource-scripts.test.js`
 
-- [ ] **步骤 RED 1：测试复制失败不破坏旧目标**
+- [x] **步骤 RED 1：测试复制失败不破坏旧目标**
 
 向 `syncResourceTree()` 注入在复制时抛错的 `copy` 操作：
 
@@ -139,11 +139,11 @@ assert.throws(() => syncResourceTree(src, dst, {
 assert.equal(readFileSync(join(dst, 'stable.txt'), 'utf8'), 'stable');
 ```
 
-- [ ] **步骤 RED 2：测试现有锁会阻塞同步**
+- [x] **步骤 RED 2：测试现有锁会阻塞同步**
 
 父测试创建 `${dst}.oh-my-sdd-sync.lock`。子进程调用 `syncResourceTree(src, dst)`；父进程等待 200 ms 后删除锁。断言子进程在锁删除前未完成，之后退出码为 0 且目标完整。
 
-- [ ] **步骤 RED 3：运行测试并确认旧实现失败**
+- [x] **步骤 RED 3：运行测试并确认旧实现失败**
 
 运行：
 
@@ -153,7 +153,7 @@ node --test __tests__/unit/opencode/resource-scripts.test.js
 
 预期：至少两个新增测试 FAIL；旧目标已被删除或子进程忽略锁。
 
-- [ ] **步骤 GREEN 1：实现目录锁**
+- [x] **步骤 GREEN 1：实现目录锁**
 
 新增并导出带 JSDoc 的 helper：
 
@@ -169,7 +169,7 @@ export function withSyncLock(target, action, {
 
 仅锁定同一目标目录；超时错误必须包含目标路径和等待时长。
 
-- [ ] **步骤 GREEN 2：实现临时目录复制和可恢复替换**
+- [x] **步骤 GREEN 2：实现临时目录复制和可恢复替换**
 
 `syncResourceTree(src, dst, ops = {})` 在锁内执行：
 
@@ -189,7 +189,7 @@ try {
 }
 ```
 
-- [ ] **步骤 GREEN 3：运行聚焦测试**
+- [x] **步骤 GREEN 3：运行聚焦测试**
 
 运行：
 
@@ -199,7 +199,7 @@ node --test __tests__/unit/opencode/resource-scripts.test.js
 
 预期：全部 PASS，且无残留 `.oh-my-sdd-staging-*`、`.oh-my-sdd-previous-*` 或 lock 目录。
 
-- [ ] **步骤 REFACTOR 1：验证两个并发 pack**
+- [x] **步骤 REFACTOR 1：验证两个并发 pack**
 
 同时启动两个命令：
 
@@ -210,7 +210,7 @@ npm pack --dry-run --json --cache /private/tmp/oms-pack-b
 
 预期：两者退出码均为 0，pack 均含 5 个主委派 skill，`git status --short` 无变化。
 
-- [ ] **步骤 REFACTOR 2：提交**
+- [x] **步骤 REFACTOR 2：提交**
 
 ```bash
 git add opencode/scripts/copy-resources.mjs __tests__/unit/opencode/resource-scripts.test.js
@@ -224,11 +224,11 @@ git commit -m "[OPEN02] fix: T2 - serialize package resource sync"
 - 修改：`docs/release/internal-publish-runbook.md`
 - 修改：`__tests__/unit/opencode/resource-scripts.test.js`
 
-- [ ] **步骤 RED 1：增加公共导出文档测试**
+- [x] **步骤 RED 1：增加公共导出文档测试**
 
 读取 `postinstall.mjs`，断言 `DELEGATED_SKILLS_SOURCE`、`DELEGATED_SKILL_NAMES`、`DELEGATED_SUPPORT_SKILL_NAMES` 前均存在 `/** ... */` JSDoc。
 
-- [ ] **步骤 RED 2：运行并确认失败**
+- [x] **步骤 RED 2：运行并确认失败**
 
 运行：
 
@@ -238,11 +238,11 @@ node --test __tests__/unit/opencode/resource-scripts.test.js
 
 预期：FAIL，指出首个缺少 JSDoc 的导出。
 
-- [ ] **步骤 GREEN 1：补齐 JSDoc 与 runbook**
+- [x] **步骤 GREEN 1：补齐 JSDoc 与 runbook**
 
 JSDoc 必须说明固定来源、5 个强依赖、3 个传递依赖及只读数组语义。发布 runbook 增加：隔离 harness、fallback、并发 pack 和 pack 后 clean status 四项命令。
 
-- [ ] **步骤 GREEN 2：运行聚焦测试与构建**
+- [x] **步骤 GREEN 2：运行聚焦测试与构建**
 
 ```bash
 node --test __tests__/integration/opencode/sdd-plan-harness.test.js __tests__/integration/opencode/install.test.js __tests__/unit/opencode/resource-scripts.test.js
@@ -252,7 +252,7 @@ cd opencode && npm run build
 
 预期：全部 PASS。
 
-- [ ] **步骤 REFACTOR 1：安全与发布检查**
+- [x] **步骤 REFACTOR 1：安全与发布检查**
 
 ```bash
 cd opencode
@@ -262,7 +262,7 @@ npm pack --dry-run --json --cache /private/tmp/oms-final-pack-cache
 
 预期：0 vulnerabilities；pack 包含 5 个主委派 skill、6 个 commands 和卸载器。
 
-- [ ] **步骤 REFACTOR 2：对照 Issue #16 验收并提交**
+- [x] **步骤 REFACTOR 2：对照 Issue #16 验收并提交**
 
 逐项记录 11/11 PASS 的文件与测试证据。运行 `git diff --check`，确认工作树仅包含本任务文件。
 

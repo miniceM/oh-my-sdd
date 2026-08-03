@@ -314,6 +314,26 @@ npm pack
 # 以 npm pack 输出为准；必须包含 dist/、.opencode/commands/、oms-skills/、
 # delegated-skills/、bin/、hooks/、content/、scripts/ 和 README.md
 
+# 发布前自动化验收（离线、可控 harness，不调用真实模型；从仓库根目录执行）
+node --test \
+  __tests__/integration/opencode/sdd-plan-harness.test.js \
+  __tests__/integration/opencode/concurrent-pack.test.js \
+  __tests__/unit/opencode/resource-scripts.test.js
+# 期望: 0 failure；harness 覆盖 /sdd-plan 的 brainstorming → writing-plans 链路、
+#       委派 skill 缺失时的 inline-content-resolution fallback、隔离 HOME/PATH
+#       （无 claude shim）以及并发 npm pack 的资源同步串行化
+
+# 并发 prepack 稳定性（两个进程同时打包）
+mkdir -p /private/tmp/oms-pack-a /private/tmp/oms-pack-b
+npm pack --dry-run --json --cache /private/tmp/oms-pack-a --pack-destination /private/tmp/oms-pack-a &
+npm pack --dry-run --json --cache /private/tmp/oms-pack-b --pack-destination /private/tmp/oms-pack-b &
+wait
+# 期望: 两个进程均退出码 0，pack 清单各含 5 个主委派 skill
+
+# pack 后工作区无内容漂移
+git status --porcelain
+# 期望: 无输出（prepack 的资源同步不得污染工作区）
+
 # 发布到企业 registry
 npm publish --registry=https://npm.enterprise.com/
 

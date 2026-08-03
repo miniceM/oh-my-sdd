@@ -83,6 +83,22 @@ Harness 位于测试目录，不包含在 `opencode/package.json#files` 中。�
 - `git diff --check` 通过，执行 pack 后工作区保持干净。
 - npm 审计为 0 vulnerabilities。
 
+## 验收证据（Issue #16 11/11 PASS）
+
+| # | Issue #16 验收标准 | 证据（文件 / 测试） |
+|---|-------------------|---------------------|
+| 1 | npm 包清单包含 5 个委派 skills | `opencode/package.json#files` 含 `delegated-skills/`；`npm package exposes every delegated workflow skill from its canonical bundle`；并发 pack 测试断言清单含 5 个 `PRIMARY_DELEGATES` |
+| 2 | 全新 HOME 安装后 `~/.config/opencode/skills/brainstorming/SKILL.md` 存在 | `postinstall installs delegated skills into a clean OpenCode HOME...`；harness 正常链路 `resolutions[1].source` 命中该路径 |
+| 3 | 全新 HOME 安装后 `~/.config/opencode/skills/writing-plans/SKILL.md` 存在 | 同上；harness `resolutions[2]` 解析到该路径并读取成功 |
+| 4 | `/sdd-plan` 能进入 brainstorming 问答和设计确认阶段 | harness 事件 `brainstorming-question` + `brainstorming-approval-requested`；语义负例测试拒绝缺失/反向契约 |
+| 5 | brainstorming 完成后能继续执行 writing-plans | harness 事件 `brainstorming-approved` → `writing-plans-started`；`unapproved design does not enter writing-plans` 验证未批准时停止 |
+| 6 | 委派 skill 缺失时走 `inline-content-resolution` 而非停止 | `missing brainstorming skill...` 与 `missing writing-plans skill...` 两个 fallback 测试 |
+| 7 | `superpowers:xxx` 稳定解析到无 namespace 安装目录 | harness 记录 `normalized: brainstorming/writing-plans` 且从去 namespace 路径读取；`published sdd-plan command...` 断言 namespace 归一化说明 |
+| 8 | 升级安装不覆盖用户修改过的同名 skill | `npm resource upgrades do not overwrite user modifications made after install`、`postinstall preserves an existing skill when its backup fails` |
+| 9 | 卸载删除插件创建的委派 skill 并恢复用户同名 skill | `npm resource ownership restores user data and removes plugin-created resources`、`npm resource upgrades retain the original user backup for uninstall` |
+| 10 | npm pack/install 集成测试覆盖纯 OpenCode、无 Claude Code 环境 | `sdd-plan-harness.test.js` 隔离 HOME/PATH（断言无 `claude` shim）后真实 pack + `npm install --global --foreground-scripts`；`install.test.js` 覆盖隔离 Windows HOME |
+| 11 | 回归测试确保 command 模板含 namespace resolver 与 fallback chain | `published sdd-plan command resolves namespaced delegates and retains inline fallback`、`all published commands retain the generator skill-resolution contract`（6 个 command 全覆盖） |
+
 ## 错误处理
 
 - command 缺少主 skill 契约时，harness 以明确错误退出。

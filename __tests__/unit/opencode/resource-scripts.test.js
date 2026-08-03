@@ -400,6 +400,28 @@ test('npm package exposes every delegated workflow skill from its canonical bund
   }
 });
 
+test('postinstall delegated-skill exports document pinned source and read-only arrays', () => {
+  const source = readFileSync(
+    join(process.cwd(), 'opencode', 'scripts', 'postinstall.mjs'),
+    'utf8',
+  );
+  const exportedDocs = {
+    DELEGATED_SKILLS_SOURCE: [/pinned source/i],
+    DELEGATED_SKILL_NAMES: [/\b5\b/, /strongly required|strong dependencies/i, /read-only|frozen/i],
+    DELEGATED_SUPPORT_SKILL_NAMES: [/\b3\b/, /transitive support/i, /read-only|frozen/i],
+  };
+
+  for (const [name, required] of Object.entries(exportedDocs)) {
+    const doc = source.match(
+      new RegExp(`/\\*\\*[\\s\\S]*?\\*/\\s*export const ${name}\\b`),
+    )?.[0];
+    assert.ok(doc, `${name} must be preceded by a JSDoc block`);
+    for (const pattern of required) {
+      assert.match(doc, pattern, `${name} JSDoc must document ${pattern}`);
+    }
+  }
+});
+
 test('postinstall installs delegated skills into a clean OpenCode HOME with actionable diagnostics', () => {
   const home = fixture();
   try {
