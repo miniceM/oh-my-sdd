@@ -43,7 +43,7 @@
 
 ---
 
-## 2. OpenCode 子包 `@enterprise/oh-my-sdd-opencode`
+## 2. OpenCode 子包 `@cli-tools/oh-my-sdd-opencode`
 
 ### 安装与注册
 

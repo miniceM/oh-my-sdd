@@ -1,5 +1,5 @@
 {
-  "name": "@enterprise/oh-my-sdd-opencode",
+  "name": "@cli-tools/oh-my-sdd-opencode",
   "version": "0.2.0",
   "description": "Enterprise SDD Agent - OpenCode Plugin with HARD/SOFT rule enforcement, 7-layer onion architecture, and SDD workflow commands",
   "type": "module",

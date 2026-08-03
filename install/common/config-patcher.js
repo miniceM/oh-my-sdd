@@ -30,7 +30,10 @@ export function patchOpencodeJson() {
 
   // Clean up legacy entries
   const cleaned = plugins.filter((p) =>
-    p !== 'oh-my-sdd' && p !== './plugins/oh-my-sdd/plugin.js'
+    p !== 'oh-my-sdd'
+    && p !== './plugins/oh-my-sdd/plugin.js'
+    && p !== './plugins/oh-my-sdd/index.js'
+    && p !== '@enterprise/oh-my-sdd-opencode'
   );
 
   if (!cleaned.includes(OPENCODE_PLUGIN_ENTRY)) {
@@ -70,6 +73,8 @@ export function unpatchOpencodeJson() {
   const toRemove = new Set([
     'oh-my-sdd',
     './plugins/oh-my-sdd/plugin.js',
+    './plugins/oh-my-sdd/index.js',
+    '@enterprise/oh-my-sdd-opencode',
     OPENCODE_PLUGIN_ENTRY
   ]);
 

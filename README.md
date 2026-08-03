@@ -23,7 +23,7 @@ OpenCode 会自动安装和更新插件，无需手动管理。
 ```bash
 # 在 ~/.config/opencode/opencode.json 中配置：
 {
-  "plugin": ["@enterprise/oh-my-sdd-opencode"]
+  "plugin": ["@cli-tools/oh-my-sdd-opencode"]
 }
 
 # 启动 OpenCode，插件自动加载

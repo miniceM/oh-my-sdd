@@ -18,9 +18,10 @@ export function main({
   manifestPath = MANIFEST_PATH,
   allowedRoots = ALLOWED_ROOTS,
   warn = console.warn,
+  log = console.log,
 } = {}) {
   const result = uninstallOwnedResources({ manifestPath, allowedRoots, warn });
-  console.log(
+  log(
     `[preuninstall] oh-my-sdd removed: ${result.removed}, restored: ${result.restored}, preserved: ${result.preserved}`,
   );
   return result;

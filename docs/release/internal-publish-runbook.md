@@ -300,7 +300,7 @@ npm view @cli-tools/oh-my-sdd versions --registry=https://npm.enterprise.com/
 
 ### 5.4 OpenCode 子包发布（可选）
 
-OpenCode 插件是独立的 npm 包 `@enterprise/oh-my-sdd-opencode`，发布流程独立：
+OpenCode 插件是独立的 npm 包 `@cli-tools/oh-my-sdd-opencode`，发布流程独立：
 
 ```bash
 # 进入 opencode 子目录
@@ -317,7 +317,7 @@ npm pack
 npm publish --registry=https://npm.enterprise.com/
 
 # 验证
-npm view @enterprise/oh-my-sdd-opencode@0.2.0 --registry=https://npm.enterprise.com/
+npm view @cli-tools/oh-my-sdd-opencode@0.2.0 --registry=https://npm.enterprise.com/
 # 期望: 显示包元信息
 ```
 
@@ -370,11 +370,11 @@ claude
 # 期望回答含: "企业 SDD Agent"
 ```
 
-### 6.2 OpenCode 子包 `@enterprise/oh-my-sdd-opencode` 验证（可选）
+### 6.2 OpenCode 子包 `@cli-tools/oh-my-sdd-opencode` 验证（可选）
 
 ```bash
 # 安装 OpenCode 插件
-npm install -g @enterprise/oh-my-sdd-opencode
+npm install -g @cli-tools/oh-my-sdd-opencode
 
 # 验证 postinstall 脚本执行
 ls ~/.opencode/skills/
@@ -423,7 +423,7 @@ opencode
   - macOS / Linux / Windows 跨平台
 
 【OpenCode 用户（可选）】
-  npm install -g @enterprise/oh-my-sdd-opencode
+  npm install -g @cli-tools/oh-my-sdd-opencode
   # 启动 OpenCode 即可使用 /sdd-* 命令
 
 【已知限制】
@@ -573,7 +573,7 @@ npm install -g --foreground-scripts @cli-tools/oh-my-sdd
 - [ ] `cd opencode && npm run build` → TypeScript 编译成功
 - [ ] `npm pack` → ~195 个文件
 - [ ] `npm publish` 成功
-- [ ] `npm view @enterprise/oh-my-sdd-opencode@0.2.0` 能查到
+- [ ] `npm view @cli-tools/oh-my-sdd-opencode@0.2.0` 能查到
 - [ ] 测试机安装 → postinstall 复制 skills/commands 到 ~/.opencode/
 
 **全部勾选 = 发布成功** 🎉

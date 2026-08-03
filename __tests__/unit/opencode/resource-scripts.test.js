@@ -5,7 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { copyDirSafe } from '../../../opencode/scripts/postinstall.mjs';
-import { shouldCopy, syncResourceTree } from '../../../opencode/scripts/copy-resources.mjs';
+import {
+  shouldCopy,
+  syncCommandLayouts,
+  syncResourceTree,
+} from '../../../opencode/scripts/copy-resources.mjs';
 import {
   readOwnershipManifest,
   uninstallOwnedResources,
@@ -277,6 +281,34 @@ test('OpenCode package declares ownership cleanup before uninstall', () => {
   const pkg = JSON.parse(readFileSync(join(process.cwd(), 'opencode', 'package.json'), 'utf8'));
   assert.equal(pkg.scripts.preuninstall, 'node scripts/uninstall.mjs');
   assert.ok(pkg.files.includes('scripts'));
+});
+
+test('npm package exposes every supported SDD slash command', () => {
+  const expected = ['sdd-spec', 'sdd-plan', 'sdd-task', 'sdd-apply', 'sdd-review', 'sdd-doc'];
+  for (const command of expected) {
+    assert.ok(
+      existsSync(join(process.cwd(), 'opencode', '.opencode', 'command', `${command}.md`)),
+      `.opencode/command/${command}.md should be packaged`,
+    );
+  }
+});
+
+test('resource sync mirrors OpenCode commands into the agents package layout', () => {
+  const root = fixture();
+  try {
+    const source = join(root, '.opencode', 'command');
+    mkdirSync(source, { recursive: true });
+    writeFileSync(join(source, 'sdd-doc.md'), 'doc command');
+
+    syncCommandLayouts(root);
+
+    assert.equal(
+      readFileSync(join(root, '.agents', 'command', 'sdd-doc.md'), 'utf8'),
+      'doc command',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('resource sync excludes declared noise directories', () => {
