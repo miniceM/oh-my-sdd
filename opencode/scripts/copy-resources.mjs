@@ -16,7 +16,8 @@
  *   - opencode/src/, opencode/dist/   ← TypeScript source + compiled output
  *
  * Bound to `prepack` and `prepublishOnly` so local installs and publishes ship fresh
- * mirrors. Idempotent: rm -rf destination then cp -R source.
+ * mirrors. Concurrent runs serialize on a per-destination lock; each tree is copied
+ * to a sibling staging path and atomically renamed only after the copy succeeds.
  *
  * Fail-fast: if any parent source dir is missing, exit non-zero. Silent otherwise.
  */
