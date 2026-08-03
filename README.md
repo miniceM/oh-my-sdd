@@ -145,15 +145,16 @@ oms-install --tool kilocode        # 再装 KiloCode
 ```bash
 oms-uninstall --tool claude     # 仅清 Claude 路径
 oms-uninstall --tool lingma     # 仅清 lingma 路径
+oms-uninstall --tool opencode   # 仅清 OpenCode 路径
 ```
 
 ### 完整卸载
 
-`npm uninstall -g` 会触发 `preuninstall` 钩子，自动清理 Claude / lingma 两套产物的 skills、rules、plugin、wrapper。状态目录 `~/.oh-my-sdd/` 默认保留（可重装复用）。
+现代 npm 不执行卸载生命周期脚本。必须先运行 ownership-aware 卸载器清理或恢复安装产物，再移除 npm 包。状态目录 `~/.oh-my-sdd/` 默认保留（可重装复用）。
 
 ```bash
-# 一步搞定（保留 ~/.oh-my-sdd/ 状态目录，重装可复用）
-npm uninstall -g @cli-tools/oh-my-sdd
+# 按顺序执行（保留 ~/.oh-my-sdd/ 状态目录，重装可复用）
+oms-uninstall && npm uninstall -g @cli-tools/oh-my-sdd
 ```
 
 ### 彻底清空（含状态目录）
@@ -164,7 +165,7 @@ npm uninstall -g @cli-tools/oh-my-sdd
 oms-uninstall --purge && npm uninstall -g @cli-tools/oh-my-sdd && rm -rf ~/.oh-my-sdd/
 ```
 
-**为什么不能反过来**：旧版"先 npm uninstall 再 oms-uninstall --purge"会在第二步失败——`oms-uninstall` 命令本身由被卸载的包提供，包卸了命令也消失了。
+**为什么不能反过来**：`oms-uninstall` 命令本身由被卸载的包提供，包卸了命令也消失；同时 npm 不会代为执行资源清理。
 
 ## 强制约束体系（洋葱模型）
 

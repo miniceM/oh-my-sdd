@@ -311,20 +311,21 @@ npm run build
 
 # 打 tgz 验证
 npm pack
-# 期望: ~195 个文件（含 .opencode/、.agents/、hooks/、skills/、content/、scripts/）
+# 以 npm pack 输出为准；必须包含 dist/、.opencode/commands/、oms-skills/、
+# delegated-skills/、bin/、hooks/、content/、scripts/ 和 README.md
 
 # 发布到企业 registry
 npm publish --registry=https://npm.enterprise.com/
 
 # 验证
-npm view @cli-tools/oh-my-sdd-opencode@0.2.0 --registry=https://npm.enterprise.com/
+npm view @cli-tools/oh-my-sdd-opencode@0.2.1 --registry=https://npm.enterprise.com/
 # 期望: 显示包元信息
 ```
 
 ⚠️ **OpenCode 包特殊点**：
-- 用户安装后 `postinstall` 脚本自动复制 skills/commands 到 `~/.opencode/skills/`
+- 用户安装后 `postinstall` 脚本自动复制 skills/commands 到 `~/.config/opencode/`
 - 依赖 `@opencode-ai/plugin` 1.15+ 的 `experimental.chat.system.transform` hook
-- 版本号独立管理（主包 0.1.0，OpenCode 包 0.2.0）
+- 版本号独立管理（主包 0.1.0，OpenCode 包 0.2.1）
 
 ---
 
@@ -377,10 +378,10 @@ claude
 npm install -g @cli-tools/oh-my-sdd-opencode
 
 # 验证 postinstall 脚本执行
-ls ~/.opencode/skills/
+ls ~/.config/opencode/skills/
 # 期望: 含 sdd-spec, sdd-plan, sdd-task, sdd-apply, sdd-review 等
 
-ls ~/.opencode/command/
+ls ~/.config/opencode/commands/
 # 期望: 含 sdd-spec.md, sdd-plan.md, sdd-task.md, sdd-apply.md, sdd-review.md
 
 # 启动 OpenCode
@@ -571,10 +572,10 @@ npm install -g --foreground-scripts @cli-tools/oh-my-sdd
 ### OpenCode 子包 Checklist（可选）
 
 - [ ] `cd opencode && npm run build` → TypeScript 编译成功
-- [ ] `npm pack` → ~195 个文件
+- [ ] `npm pack` → 包含 `.opencode/commands/`、`oms-skills/`、`delegated-skills/` 和 `bin/`
 - [ ] `npm publish` 成功
-- [ ] `npm view @cli-tools/oh-my-sdd-opencode@0.2.0` 能查到
-- [ ] 测试机安装 → postinstall 复制 skills/commands 到 ~/.opencode/
+- [ ] `npm view @cli-tools/oh-my-sdd-opencode@0.2.1` 能查到
+- [ ] 测试机安装 → postinstall 复制 skills/commands 到 `~/.config/opencode/`
 
 **全部勾选 = 发布成功** 🎉
 

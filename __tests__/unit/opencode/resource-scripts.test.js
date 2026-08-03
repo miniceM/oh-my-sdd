@@ -1,10 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync, spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { copyDirSafe } from '../../../opencode/scripts/postinstall.mjs';
+import {
+  buildNpmInvocation,
+  main as uninstallPackage,
+} from '../../../opencode/bin/oms-opencode-uninstall.mjs';
+import { unregisterOpenCodePlugin } from '../../../opencode/scripts/uninstall.mjs';
 import {
   shouldCopy,
   syncCommandLayouts,
@@ -19,6 +25,17 @@ import {
 function fixture() {
   return mkdtempSync(join(tmpdir(), 'oms-resource-test-'));
 }
+
+const DELEGATED_SKILLS = [
+  'brainstorming',
+  'writing-plans',
+  'executing-plans',
+  'subagent-driven-development',
+  'requesting-code-review',
+  'using-git-worktrees',
+  'finishing-a-development-branch',
+  'test-driven-development',
+];
 
 test('postinstall preserves an existing skill when its backup fails', () => {
   const root = fixture();
@@ -277,26 +294,325 @@ test('npm resource upgrades do not overwrite user modifications made after insta
   }
 });
 
-test('OpenCode package declares ownership cleanup before uninstall', () => {
+test('OpenCode package exposes an explicit ownership-aware uninstaller', () => {
   const pkg = JSON.parse(readFileSync(join(process.cwd(), 'opencode', 'package.json'), 'utf8'));
-  assert.equal(pkg.scripts.preuninstall, 'node scripts/uninstall.mjs');
+  assert.equal(pkg.scripts.preuninstall, undefined, 'must not claim unsupported npm uninstall hooks');
+  assert.equal(pkg.bin['oms-opencode-uninstall'], './bin/oms-opencode-uninstall.mjs');
+  assert.ok(pkg.files.includes('bin'));
   assert.ok(pkg.files.includes('scripts'));
+});
+
+test('OpenCode uninstaller removes the npm package before cleaning owned resources', () => {
+  const calls = [];
+  uninstallPackage({
+    cleanup: () => calls.push('cleanup'),
+    spawn: (command, args, options) => {
+      calls.push({ command, args, options });
+      return { status: 0 };
+    },
+    env: { npm_config_prefix: '/tmp/test-prefix' },
+    platform: 'linux',
+  });
+
+  assert.deepEqual(calls[0].args, [
+    'uninstall',
+    '--global',
+    '@cli-tools/oh-my-sdd-opencode',
+  ]);
+  assert.equal(calls[1], 'cleanup');
+});
+
+test('OpenCode uninstaller preserves resources when npm uninstall fails', () => {
+  let cleanupCalls = 0;
+
+  assert.throws(
+    () => uninstallPackage({
+      cleanup: () => cleanupCalls++,
+      spawn: () => ({ status: 1 }),
+      platform: 'linux',
+    }),
+    /npm uninstall exited with status 1/,
+  );
+  assert.equal(cleanupCalls, 0);
+});
+
+test('OpenCode uninstaller invokes npm.cmd through ComSpec on Windows', () => {
+  assert.deepEqual(
+    buildNpmInvocation(
+      ['uninstall', '--global', '@cli-tools/oh-my-sdd-opencode'],
+      { platform: 'win32', comspec: 'C:\\Windows\\System32\\cmd.exe' },
+    ),
+    {
+      command: 'C:\\Windows\\System32\\cmd.exe',
+      args: [
+        '/d',
+        '/s',
+        '/c',
+        'npm.cmd',
+        'uninstall',
+        '--global',
+        '@cli-tools/oh-my-sdd-opencode',
+      ],
+    },
+  );
+});
+
+test('OpenCode uninstaller removes only OMS plugin entries from opencode.json', () => {
+  const root = fixture();
+  const configPath = join(root, 'opencode.json');
+  try {
+    writeFileSync(configPath, JSON.stringify({
+      plugin: ['other-plugin', '@cli-tools/oh-my-sdd-opencode', './plugins/oh-my-sdd/index.js'],
+      theme: 'user-theme',
+    }));
+
+    assert.equal(unregisterOpenCodePlugin({ configPath, warn: () => {} }), 2);
+    assert.deepEqual(JSON.parse(readFileSync(configPath, 'utf8')), {
+      plugin: ['other-plugin'],
+      theme: 'user-theme',
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('npm package exposes every delegated workflow skill from its canonical bundle', () => {
+  const packageRoot = join(process.cwd(), 'opencode');
+  const pkg = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'));
+
+  assert.ok(
+    pkg.files.includes('delegated-skills'),
+    'npm files must include the canonical delegated-skills bundle',
+  );
+  assert.ok(pkg.files.includes('oms-skills'), 'npm files must include tracked OMS skills');
+  assert.ok(
+    existsSync(join(packageRoot, 'oms-skills', 'sdd-plan', 'SKILL.md')),
+    'clean-clone npm source must contain the main sdd-plan skill',
+  );
+  for (const skill of DELEGATED_SKILLS) {
+    assert.ok(
+      existsSync(join(packageRoot, 'delegated-skills', skill, 'SKILL.md')),
+      `delegated-skills/${skill}/SKILL.md should be packaged`,
+    );
+  }
+});
+
+test('postinstall installs delegated skills into a clean OpenCode HOME with actionable diagnostics', () => {
+  const home = fixture();
+  try {
+    const output = execFileSync('node', ['scripts/postinstall.mjs'], {
+      cwd: join(process.cwd(), 'opencode'),
+      env: { ...process.env, HOME: home, USERPROFILE: home },
+      encoding: 'utf8',
+    });
+
+    for (const skill of DELEGATED_SKILLS) {
+      assert.ok(
+        existsSync(join(home, '.config', 'opencode', 'skills', skill, 'SKILL.md')),
+        `${skill} should be discoverable from ~/.config/opencode/skills after postinstall`,
+      );
+      assert.match(output, new RegExp(`\\b${skill}\\b`), `${skill} should be named in diagnostics`);
+    }
+
+    const diagnosticLines = output.split(/\r?\n/);
+    const omsLine = diagnosticLines.find((line) => /oms-skills/i.test(line));
+    const delegatedLine = diagnosticLines.find((line) => /delegated-skills/i.test(line));
+    const commandLine = diagnosticLines.find((line) => /\[postinstall\] commands:/i.test(line));
+    assert.ok(omsLine, 'diagnostics should report OMS skills separately');
+    assert.ok(delegatedLine, 'diagnostics should report delegated skills separately');
+    assert.ok(commandLine, 'diagnostics should classify command outcomes separately');
+    assert.match(commandLine, /installed=\d+, unchanged=\d+, preserved=\d+, failed=\d+/);
+    assert.notEqual(omsLine, delegatedLine, 'OMS and delegated skill diagnostics must be distinct');
+    assert.match(output, /bundled superpowers-zh@1\.5\.0/i, 'diagnostics should identify the bundle source');
+    assert.match(
+      output,
+      /missing[- ]dependencies\s*:\s*(?:none|\[\])/i,
+      'diagnostics should explicitly report that no strong delegated dependencies are missing',
+    );
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test('npm package exposes every supported SDD slash command', () => {
   const expected = ['sdd-spec', 'sdd-plan', 'sdd-task', 'sdd-apply', 'sdd-review', 'sdd-doc'];
   for (const command of expected) {
+    const commandPath = join(process.cwd(), 'opencode', '.opencode', 'commands', `${command}.md`);
     assert.ok(
-      existsSync(join(process.cwd(), 'opencode', '.opencode', 'command', `${command}.md`)),
-      `.opencode/command/${command}.md should be packaged`,
+      existsSync(commandPath),
+      `.opencode/commands/${command}.md should be packaged`,
     );
+    assert.match(
+      readFileSync(commandPath, 'utf8'),
+      /\$ARGUMENTS/,
+      `${command}.md must expose OpenCode invocation arguments to the prompt`,
+    );
+  }
+});
+
+test('vendored brainstorming lifecycle scripts validate paths and process identity', () => {
+  const scripts = join(
+    process.cwd(),
+    'opencode',
+    'delegated-skills',
+    'brainstorming',
+    'scripts',
+  );
+  const start = readFileSync(join(scripts, 'start-server.sh'), 'utf8');
+  const stop = readFileSync(join(scripts, 'stop-server.sh'), 'utf8');
+
+  assert.doesNotMatch(start, /kill\s+"?\$old_pid/);
+  assert.match(start, /SERVER_SCRIPT/);
+  assert.match(start, /mktemp -d/);
+  assert.match(start, /chmod 700/);
+  assert.match(start, /randomBytes\(32\)/);
+  assert.match(start, /BRAINSTORM_TOKEN/);
+  assert.match(start, /--host must be loopback/);
+  assert.match(stop, /pwd -P/);
+  assert.match(stop, /pid does not belong to this brainstorm server/);
+  assert.match(stop, /SESSION_PARENT.*TMP_ROOT/s);
+  assert.match(stop, /\^brainstorm-\(/);
+  assert.doesNotMatch(stop, /\[\[\s*"\$SESSION_DIR"\s*==\s*\/tmp\/\*/);
+
+  if (process.platform !== 'win32') {
+    execFileSync('bash', ['-n', join(scripts, 'start-server.sh')]);
+    execFileSync('bash', ['-n', join(scripts, 'stop-server.sh')]);
+  }
+});
+
+test('brainstorm companion requires one session token for HTTP and WebSocket access', () => {
+  const scripts = join(process.cwd(), 'opencode', 'delegated-skills', 'brainstorming', 'scripts');
+  const server = readFileSync(join(scripts, 'server.cjs'), 'utf8');
+  const helper = readFileSync(join(scripts, 'helper.js'), 'utf8');
+
+  assert.match(server, /timingSafeEqual/);
+  assert.match(server, /requestToken\(req\)/);
+  assert.match(server, /isAllowedOrigin\(req\)/);
+  assert.match(server, /MAX_WS_MESSAGE_BYTES/);
+  assert.match(server, /encodeURIComponent\(SESSION_TOKEN\)/);
+  assert.doesNotMatch(helper, /window\.location\.search/);
+  assert.match(server, /Location: '\/'/);
+  assert.match(server, /ALLOWED_HOSTS/);
+  assert.match(server, /rate\.count > 30/);
+});
+
+test('brainstorm stop helper refuses an unrelated PID without terminating it', (t) => {
+  if (process.platform === 'win32') {
+    t.skip('bash lifecycle helper is POSIX-only');
+    return;
+  }
+
+  const root = fixture();
+  const scripts = join(
+    process.cwd(),
+    'opencode',
+    'delegated-skills',
+    'brainstorming',
+    'scripts',
+  );
+  const sleeper = spawn('sleep', ['30'], { stdio: 'ignore' });
+  try {
+    const state = join(root, 'state');
+    mkdirSync(state, { recursive: true });
+    writeFileSync(join(state, 'server.pid'), String(sleeper.pid));
+    writeFileSync(join(state, 'server.script'), join(scripts, 'server.cjs'));
+
+    let output = '';
+    assert.throws(() => {
+      execFileSync('bash', [join(scripts, 'stop-server.sh'), root], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    }, (error) => {
+      output = error.stdout ?? '';
+      return true;
+    });
+    assert.match(output, /pid does not belong to this brainstorm server/);
+    assert.doesNotThrow(() => process.kill(sleeper.pid, 0));
+  } finally {
+    sleeper.kill('SIGTERM');
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('brainstorm start helper fails fast when a value option is missing its value', (t) => {
+  if (process.platform === 'win32') {
+    t.skip('bash lifecycle helper is POSIX-only');
+    return;
+  }
+
+  const start = join(
+    process.cwd(),
+    'opencode',
+    'delegated-skills',
+    'brainstorming',
+    'scripts',
+    'start-server.sh',
+  );
+  for (const option of ['--project-dir', '--host', '--url-host']) {
+    assert.throws(() => {
+      execFileSync('bash', [start, option], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 1000,
+      });
+    }, (error) => {
+      assert.equal(error.status, 1, `${option} should fail instead of timing out`);
+      assert.match(error.stdout ?? '', new RegExp(`Missing value for ${option}`));
+      return true;
+    });
+  }
+});
+
+test('published sdd-plan command resolves namespaced delegates and retains inline fallback', () => {
+  const command = readFileSync(
+    join(process.cwd(), 'opencode', '.opencode', 'commands', 'sdd-plan.md'),
+    'utf8',
+  );
+
+  assert.match(command, /superpowers:brainstorming[\s\S]*brainstorming\/SKILL\.md/);
+  assert.match(command, /superpowers:writing-plans[\s\S]*writing-plans\/SKILL\.md/);
+  assert.match(
+    command,
+    /name-without-namespace|strip(?:ping)?\s+(?:the\s+)?(?:skill\s+)?namespace|remove(?:s|d|ing)?\s+(?:the\s+)?(?:skill\s+)?namespace/i,
+    'command must explain how superpowers:<name> resolves to an unnamespaced directory',
+  );
+  assert.match(
+    command,
+    /inline-content-resolution/i,
+    'command must retain an explicit fallback when delegated skill content cannot be read',
+  );
+});
+
+test('all published commands retain the generator skill-resolution contract', () => {
+  const commandRoot = join(process.cwd(), 'opencode', '.opencode', 'commands');
+  const commands = ['sdd-spec', 'sdd-plan', 'sdd-task', 'sdd-apply', 'sdd-review', 'sdd-doc'];
+
+  for (const name of commands) {
+    const command = readFileSync(join(commandRoot, `${name}.md`), 'utf8');
+    assert.match(command, new RegExp(`skills/${name}/SKILL\\.md`), `${name} needs project skill lookup`);
+    assert.match(
+      command,
+      new RegExp(`~/.config/opencode/skills/${name}/SKILL\\.md`),
+      `${name} needs global OpenCode skill lookup`,
+    );
+    assert.match(command, /name-without-namespace/, `${name} needs namespace normalization`);
+    assert.match(command, /~\/.agents\/skills\/<name-without-namespace>\//, `${name} needs agents fallback`);
+    assert.match(command, /~\/.claude\/skills\/<name-without-namespace>\//, `${name} needs Claude fallback`);
+    assert.match(command, /inline-content-resolution/, `${name} needs content fallback`);
+    assert.match(
+      command,
+      /does not select who executes|does not select who\s+executes/s,
+      `${name} must keep content resolution independent from execution mode`,
+    );
+    assert.match(command, /\$ARGUMENTS/, `${name} must forward invocation arguments`);
   }
 });
 
 test('resource sync mirrors OpenCode commands into the agents package layout', () => {
   const root = fixture();
   try {
-    const source = join(root, '.opencode', 'command');
+    const source = join(root, '.opencode', 'commands');
     mkdirSync(source, { recursive: true });
     writeFileSync(join(source, 'sdd-doc.md'), 'doc command');
 

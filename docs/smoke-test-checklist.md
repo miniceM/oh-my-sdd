@@ -36,7 +36,7 @@
 
 ### 卸载
 
-- [ ] 17. `npm uninstall -g @cli-tools/oh-my-sdd`
+- [ ] 17. `oms-uninstall && npm uninstall -g @cli-tools/oh-my-sdd`
 - [ ] 18. `~/.claude/plugins/oh-my-sdd/` 已删
 - [ ] 19. `~/.oh-my-sdd/` 仍存在（state 保留）
 - [ ] 20. 重装后配置和会话历史可继续使用
@@ -58,7 +58,7 @@
 
 ### 卸载
 
-- [ ] 26. `oms-uninstall --tool opencode`
+- [ ] 26. 独立安装子包时运行 `oms-opencode-uninstall`；主包安装时运行 `oms-uninstall --tool opencode`
 - [ ] 27. `~/.config/opencode/plugins/oh-my-sdd/` 已删
 - [ ] 28. `opencode.json` 的 `plugin` 数组已移除 `oh-my-sdd`
 

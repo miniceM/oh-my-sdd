@@ -1,0 +1,22 @@
+{
+  "package": "superpowers-zh",
+  "version": "1.5.0",
+  "source": "https://www.npmjs.com/package/superpowers-zh/v/1.5.0",
+  "repository": "https://github.com/jnMetaCode/superpowers-zh",
+  "license": "MIT",
+  "tarball_sha1": "067556c93af5f38ec5b3009d6e5c89201455c304",
+  "npm_integrity": "sha512-4SBz8YjxxQ+P+uFShnuffnBs+gkN9EYk6znPt4g50Mr0xD0nbCggGT1ciB2ygGUxBuv8PdrJYX3iwsYAqvYc/g==",
+  "local_modifications": [
+    "Harden brainstorming server lifecycle scripts with canonical path and process identity checks"
+  ],
+  "skills": [
+    "brainstorming",
+    "writing-plans",
+    "executing-plans",
+    "subagent-driven-development",
+    "requesting-code-review",
+    "using-git-worktrees",
+    "finishing-a-development-branch",
+    "test-driven-development"
+  ]
+}

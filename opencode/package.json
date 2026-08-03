@@ -1,6 +1,6 @@
 {
   "name": "@cli-tools/oh-my-sdd-opencode",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Enterprise SDD Agent - OpenCode Plugin with HARD/SOFT rule enforcement, 7-layer onion architecture, and SDD workflow commands",
   "type": "module",
   "main": "./dist/index.js",
@@ -11,13 +11,17 @@
       "types": "./dist/index.d.ts"
     }
   },
+  "bin": {
+    "oms-opencode-uninstall": "./bin/oms-opencode-uninstall.mjs"
+  },
   "files": [
+    "bin",
     "dist",
-    ".opencode",
-    ".agents",
+    ".opencode/commands",
+    "oms-skills",
+    "delegated-skills",
     "hooks",
     "content",
-    "skills",
     "scripts",
     "README.md"
   ],
@@ -26,7 +30,7 @@
     "typecheck": "tsc --noEmit",
     "sync:resources": "node scripts/copy-resources.mjs",
     "postinstall": "node scripts/postinstall.mjs",
-    "preuninstall": "node scripts/uninstall.mjs",
+    "prepack": "npm run sync:resources && npm run build",
     "prepublishOnly": "npm run sync:resources && npm run build"
   },
   "keywords": [

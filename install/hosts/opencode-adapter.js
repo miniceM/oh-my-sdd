@@ -7,18 +7,14 @@
 // Windows 不支持：OpenCode 主要跑在 macOS/Linux。
 
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { HostAdapter } from '../host-adapter.js';
 import { rmIfExistsSync } from '../common/fs.js';
 import { isCliInPath, isDirPresent } from '../common/detect.js';
-import { SDD_COMMANDS } from '../../lib/command-generator.js';
 import { patchOpencodeJson, unpatchOpencodeJson } from '../common/config-patcher.js';
 import { removeSentinelBlock } from '../common/sentinel.js';
 import { main as cleanupNpmResources } from '../../opencode/scripts/uninstall.mjs';
 import {
   OPENCODE_PLUGIN_DIR,
-  OPENCODE_COMMANDS_DIR,
   OPENCODE_CONFIG_DIR,
   OPENCODE_AGENTS_MD,
 } from '../../lib/paths.js';
@@ -68,24 +64,10 @@ export class OpenCodeAdapter extends HostAdapter {
       announce(`  ✓ 已删除: ${OPENCODE_PLUGIN_DIR}`);
     }
 
-    // 2. 删 command 文件
-    if (existsSync(OPENCODE_COMMANDS_DIR)) {
-      let removed = 0;
-      for (const cmd of SDD_COMMANDS) {
-        const f = join(OPENCODE_COMMANDS_DIR, `${cmd.name}.md`);
-        if (rmIfExistsSync(f)) {
-          removed++;
-        }
-      }
-      if (removed > 0) {
-        announce(`  ✓ 已删除 ${removed} 个 slash command 文件`);
-      }
-    }
-
-    // 3. 从 opencode.json 移除
+    // 2. 从 opencode.json 移除
     unpatchOpencodeJson();
 
-    // 4. 精准移除 fallback AGENTS.md 中的 OMS 区块，保留用户内容
+    // 3. 精准移除 fallback AGENTS.md 中的 OMS 区块，保留用户内容
     if (existsSync(OPENCODE_AGENTS_MD)) {
       const existing = readFileSync(OPENCODE_AGENTS_MD, 'utf8');
       const preserved = removeSentinelBlock(existing);
@@ -93,12 +75,13 @@ export class OpenCodeAdapter extends HostAdapter {
       else writeFileSync(OPENCODE_AGENTS_MD, preserved);
     }
 
-    // 5. 清理 npm postinstall 写入的资源，并恢复被覆盖前的用户文件。
+    // 4. 仅通过 ownership manifest 清理 npm postinstall 写入的资源。
+    // 用户修改过的 command 会被保留为带 .oh-my-sdd-modified-* 后缀的同级文件。
     cleanupNpmResources({
       warn: (message) => announce(`  ⚠️  ${message}`),
       log: (message) => announce(`  ✓ ${message}`),
     });
 
-    // 6. 保留其余 ~/.oh-my-sdd/ 状态（除非 --purge 由 caller 处理）
+    // 5. 保留其余 ~/.oh-my-sdd/ 状态（除非 --purge 由 caller 处理）
   }
 }

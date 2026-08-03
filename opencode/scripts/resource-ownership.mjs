@@ -110,15 +110,15 @@ export function uninstallOwnedResources({
   for (let index = resources.length - 1; index >= 0; index--) {
     const record = resources[index];
     if (!isWithinAllowedRoot(record.target, allowedRoots)) {
-      warn(`[preuninstall] refusing out-of-scope target: ${record.target}`);
+      warn(`[uninstall] refusing out-of-scope target: ${record.target}`);
       continue;
     }
     if (record.backup && !isWithinAllowedRoot(record.backup, allowedRoots)) {
-      warn(`[preuninstall] refusing out-of-scope backup: ${record.backup}`);
+      warn(`[uninstall] refusing out-of-scope backup: ${record.backup}`);
       continue;
     }
     if (record.backup && !existsSync(record.backup)) {
-      warn(`[preuninstall] original backup missing; preserving target: ${record.target}`);
+      warn(`[uninstall] original backup missing; preserving target: ${record.target}`);
       continue;
     }
 
@@ -134,7 +134,7 @@ export function uninstallOwnedResources({
       } else {
         const preservedPath = uniqueSibling(record.target, 'oh-my-sdd-modified', now);
         renameSync(record.target, preservedPath);
-        warn(`[preuninstall] preserved modified resource: ${preservedPath}`);
+        warn(`[uninstall] preserved modified resource: ${preservedPath}`);
         preserved++;
       }
     }

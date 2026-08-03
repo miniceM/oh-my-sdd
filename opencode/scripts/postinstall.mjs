@@ -4,11 +4,11 @@
  * global discovery paths.
  *
  * Background:
- *   OpenCode does NOT scan `.opencode/skills/` or `.opencode/command/` inside
+ *   OpenCode does NOT scan `.opencode/skills/` or `.opencode/commands/` inside
  *   npm-installed plugin packages. It only scans:
  *     - `~/.config/opencode/skills/<name>/SKILL.md`     (global skills)
- *     - `~/.config/opencode/command/<name>.md`          (global commands)
- *     - `<project>/.opencode/skills/` & `<project>/.opencode/command/` (project-level)
+ *     - `~/.config/opencode/commands/<name>.md`         (global commands)
+ *     - `<project>/.opencode/skills/` & `<project>/.opencode/commands/` (project-level)
  *     - `~/.claude/skills/`, `~/.agents/skills/`        (external / cross-tool)
  *
  *   So after OpenCode installs `@cli-tools/oh-my-sdd-opencode`, this script
@@ -22,10 +22,10 @@
  *   - If target missing → copy.
  *
  * Scope guard:
- *   - Only copies skills whose directory name matches the plugin's known set
- *     (sdd-*, api-design, business-modeling, db-conventions, doc-writer,
- *     fe-*, security-check, testing-strategy). This avoids clobbering user's
- *     unrelated skills that happen to be in the same layout.
+ *   - OMS skills and third-party delegated skills use separate bundled source
+ *     trees and separate allowlists. Delegated skills are vendored from a
+ *     pinned release; postinstall never executes a package manager or network
+ *     installer.
  *   - Command files are scoped by filename prefix `sdd-*.md`.
  *
  * Failure mode:
@@ -60,15 +60,34 @@ const PLUGIN_ROOT = resolve(__dirname, '..');
 // Home-dir targets (OpenCode's global discovery paths).
 const HOME = homedir();
 const OPENCODE_SKILLS_DIR = join(HOME, '.config', 'opencode', 'skills');
-const OPENCODE_COMMAND_DIR = join(HOME, '.config', 'opencode', 'command');
+const OPENCODE_COMMANDS_DIR = join(HOME, '.config', 'opencode', 'commands');
 const AGENTS_SKILLS_DIR = join(HOME, '.agents', 'skills');
 const AGENTS_COMMAND_DIR = join(HOME, '.agents', 'command');
 const OWNERSHIP_MANIFEST = join(HOME, '.oh-my-sdd', 'opencode-npm-resources.json');
 
-// Plugin-side source dirs (mirrored into `.opencode/` and `.agents/` by
-// copy-resources.mjs — we read from `.opencode/` which is canonical).
-const PLUGIN_SKILLS_SRC = join(PLUGIN_ROOT, '.opencode', 'skills');
-const PLUGIN_COMMAND_SRC = join(PLUGIN_ROOT, '.opencode', 'command');
+// Plugin-side source dirs. `oms-skills/` is tracked and explicitly packaged so
+// `npm install -g .` from a clean clone cannot depend on ignored build mirrors.
+const PLUGIN_SKILLS_SRC = join(PLUGIN_ROOT, 'oms-skills');
+const PLUGIN_COMMAND_SRC = join(PLUGIN_ROOT, '.opencode', 'commands');
+const DELEGATED_SKILLS_SRC = join(PLUGIN_ROOT, 'delegated-skills');
+
+export const DELEGATED_SKILLS_SOURCE = 'bundled superpowers-zh@1.5.0';
+export const DELEGATED_SKILL_NAMES = Object.freeze([
+  'brainstorming',
+  'writing-plans',
+  'executing-plans',
+  'subagent-driven-development',
+  'requesting-code-review',
+]);
+export const DELEGATED_SUPPORT_SKILL_NAMES = Object.freeze([
+  'using-git-worktrees',
+  'finishing-a-development-branch',
+  'test-driven-development',
+]);
+const ALL_DELEGATED_SKILL_NAMES = Object.freeze([
+  ...DELEGATED_SKILL_NAMES,
+  ...DELEGATED_SUPPORT_SKILL_NAMES,
+]);
 
 // Scope guards — only install skills/commands we know we own.
 const OWNED_SKILL_PREFIXES = [
@@ -88,6 +107,24 @@ function isOwnedSkill(name) {
 }
 function isOwnedCommand(name) {
   return OWNED_COMMAND_PREFIXES.some((p) => name.startsWith(p));
+}
+
+function isDelegatedSkill(name) {
+  return ALL_DELEGATED_SKILL_NAMES.includes(name)
+    && existsSync(join(DELEGATED_SKILLS_SRC, name, 'SKILL.md'));
+}
+
+function recordResult(summary, status, name) {
+  if (!summary) return;
+  summary[status] = (summary[status] ?? 0) + 1;
+  if (!summary.names) summary.names = {};
+  if (!summary.names[status]) summary.names[status] = [];
+  summary.names[status].push(name);
+}
+
+function ownershipMetadata(ops, name) {
+  if (typeof ops.ownershipMetadata === 'function') return ops.ownershipMetadata(name);
+  return ops.ownershipMetadata ?? {};
 }
 
 function fileContentEqual(a, b) {
@@ -151,6 +188,7 @@ export function copyDirSafe(srcDir, dstDir, filterFn, label, ops = {}) {
 
   if (!exists(srcDir) || !stat(srcDir).isDirectory()) {
     warn(`[postinstall] ${label}: source missing ${srcDir}`);
+    recordResult(ops.summary, 'failed', '<source>');
     return 0;
   }
   mkdir(dstDir, { recursive: true });
@@ -165,7 +203,14 @@ export function copyDirSafe(srcDir, dstDir, filterFn, label, ops = {}) {
 
     if (exists(dst)) {
       if (resourcesEqual(src, dst)) {
-        if (prior) recordOwnership({ ...prior, installed_digest: digest(dst) });
+        if (prior) {
+          recordOwnership({
+            ...prior,
+            ...ownershipMetadata(ops, name),
+            installed_digest: digest(dst),
+          });
+        }
+        recordResult(ops.summary, 'unchanged', name);
         continue;
       }
 
@@ -175,10 +220,12 @@ export function copyDirSafe(srcDir, dstDir, filterFn, label, ops = {}) {
           currentDigest = digest(dst);
         } catch {
           warn(`[postinstall] ${label}: cannot verify owned resource ${name}; preserving existing target`);
+          recordResult(ops.summary, 'preserved', name);
           continue;
         }
         if (currentDigest !== prior.installed_digest) {
           warn(`[postinstall] ${label}: ${name} was modified after install; preserving user changes`);
+          recordResult(ops.summary, 'preserved', name);
           continue;
         }
       }
@@ -191,6 +238,7 @@ export function copyDirSafe(srcDir, dstDir, filterFn, label, ops = {}) {
 
       if (prior && !prior.created && (!prior.backup || !exists(prior.backup))) {
         warn(`[postinstall] ${label}: original backup missing for ${name}; preserving existing target`);
+        recordResult(ops.summary, 'preserved', name);
         continue;
       }
 
@@ -200,6 +248,7 @@ export function copyDirSafe(srcDir, dstDir, filterFn, label, ops = {}) {
         if (!prior) warn(`[postinstall] ${label}: backed up ${name} -> ${backup}`);
       } catch (e) {
         warn(`[postinstall] ${label}: backup failed for ${name}; preserving existing target: ${e.message}`);
+        recordResult(ops.summary, 'preserved', name);
         continue;
       }
 
@@ -208,14 +257,20 @@ export function copyDirSafe(srcDir, dstDir, filterFn, label, ops = {}) {
         remove(dst, { recursive: true, force: true });
       } catch (e) {
         warn(`[postinstall] ${label}: could not replace ${name}; preserving existing target: ${e.message}`);
+        recordResult(ops.summary, 'preserved', name);
         continue;
       }
 
       try {
         copy(src, dst, { recursive: true });
         const record = prior ?? { target: dst, backup, created: false };
-        recordOwnership({ ...record, installed_digest: digest(dst) });
+        recordOwnership({
+          ...record,
+          ...ownershipMetadata(ops, name),
+          installed_digest: digest(dst),
+        });
         installed++;
+        recordResult(ops.summary, 'installed', name);
         if (prior) {
           try {
             remove(backup, { recursive: true, force: true });
@@ -225,6 +280,7 @@ export function copyDirSafe(srcDir, dstDir, filterFn, label, ops = {}) {
         }
       } catch (e) {
         warn(`[postinstall] ${label}: copy failed ${name}: ${e.message}`);
+        recordResult(ops.summary, 'failed', name);
         try {
           remove(dst, { recursive: true, force: true });
           copy(backup, dst, { recursive: true });
@@ -240,14 +296,34 @@ export function copyDirSafe(srcDir, dstDir, filterFn, label, ops = {}) {
     try {
       copy(src, dst, { recursive: true });
       const record = prior ?? { target: dst, backup: null, created: true };
-      recordOwnership({ ...record, installed_digest: digest(dst) });
+      recordOwnership({
+        ...record,
+        ...ownershipMetadata(ops, name),
+        installed_digest: digest(dst),
+      });
       installed++;
+      recordResult(ops.summary, 'installed', name);
     } catch (e) {
       warn(`[postinstall] ${label}: copy failed ${name}: ${e.message}`);
+      recordResult(ops.summary, 'failed', name);
       remove(dst, { recursive: true, force: true });
     }
   }
   return installed;
+}
+
+function createSummary() {
+  return { installed: 0, unchanged: 0, preserved: 0, failed: 0, names: {} };
+}
+
+function formatSummary(summary) {
+  return `installed=${summary.installed}, unchanged=${summary.unchanged}, preserved=${summary.preserved}, failed=${summary.failed}`;
+}
+
+function findMissingDelegatedSkills() {
+  return ALL_DELEGATED_SKILL_NAMES.filter((name) => (
+    !existsSync(join(DELEGATED_SKILLS_SRC, name, 'SKILL.md'))
+  ));
 }
 
 export function main() {
@@ -260,20 +336,105 @@ export function main() {
   };
   const ops = { ownership, recordOwnership };
 
-  const n1 = copyDirSafe(PLUGIN_SKILLS_SRC, OPENCODE_SKILLS_DIR, isOwnedSkill, 'opencode-skills', ops);
+  const omsOpenCode = createSummary();
+  const omsAgents = createSummary();
+  const delegatedOpenCode = createSummary();
+  const delegatedAgents = createSummary();
+  const commandsOpenCode = createSummary();
+  const commandsAgents = createSummary();
+
+  const n1 = copyDirSafe(
+    PLUGIN_SKILLS_SRC,
+    OPENCODE_SKILLS_DIR,
+    isOwnedSkill,
+    'opencode-skills',
+    {
+      ...ops,
+      summary: omsOpenCode,
+      ownershipMetadata: (name) => ({ resource_kind: 'oms-skill', resource_name: name }),
+    },
+  );
   results.push(`opencode-skills: ${n1}`);
 
-  const n2 = copyDirSafe(PLUGIN_COMMAND_SRC, OPENCODE_COMMAND_DIR, isOwnedCommand, 'opencode-commands', ops);
+  const commandOps = {
+    ...ops,
+    ownershipMetadata: (name) => ({ resource_kind: 'oms-command', resource_name: name }),
+  };
+  const n2 = copyDirSafe(
+    PLUGIN_COMMAND_SRC,
+    OPENCODE_COMMANDS_DIR,
+    isOwnedCommand,
+    'opencode-commands',
+    { ...commandOps, summary: commandsOpenCode },
+  );
   results.push(`opencode-commands: ${n2}`);
 
   // Mirror to ~/.agents/ for Claude Code / Codex compatibility.
-  const n3 = copyDirSafe(PLUGIN_SKILLS_SRC, AGENTS_SKILLS_DIR, isOwnedSkill, 'agents-skills', ops);
+  const n3 = copyDirSafe(
+    PLUGIN_SKILLS_SRC,
+    AGENTS_SKILLS_DIR,
+    isOwnedSkill,
+    'agents-skills',
+    {
+      ...ops,
+      summary: omsAgents,
+      ownershipMetadata: (name) => ({ resource_kind: 'oms-skill', resource_name: name }),
+    },
+  );
   results.push(`agents-skills: ${n3}`);
 
-  const n4 = copyDirSafe(PLUGIN_COMMAND_SRC, AGENTS_COMMAND_DIR, isOwnedCommand, 'agents-commands', ops);
+  const n4 = copyDirSafe(
+    PLUGIN_COMMAND_SRC,
+    AGENTS_COMMAND_DIR,
+    isOwnedCommand,
+    'agents-commands',
+    { ...commandOps, summary: commandsAgents },
+  );
   results.push(`agents-commands: ${n4}`);
 
-  console.log(`[postinstall] oh-my-sdd installed: ${results.join(', ')}`);
+  const delegatedOps = {
+    ...ops,
+    ownershipMetadata: (name) => ({
+      resource_kind: 'delegated-skill',
+      resource_name: name,
+      resource_source: DELEGATED_SKILLS_SOURCE,
+    }),
+  };
+  const n5 = copyDirSafe(
+    DELEGATED_SKILLS_SRC,
+    OPENCODE_SKILLS_DIR,
+    isDelegatedSkill,
+    'opencode-delegated-skills',
+    { ...delegatedOps, summary: delegatedOpenCode },
+  );
+  results.push(`opencode-delegated-skills: ${n5}`);
+
+  const n6 = copyDirSafe(
+    DELEGATED_SKILLS_SRC,
+    AGENTS_SKILLS_DIR,
+    isDelegatedSkill,
+    'agents-delegated-skills',
+    { ...delegatedOps, summary: delegatedAgents },
+  );
+  results.push(`agents-delegated-skills: ${n6}`);
+
+  const missing = findMissingDelegatedSkills();
+  for (const name of missing) {
+    recordResult(delegatedOpenCode, 'failed', name);
+    recordResult(delegatedAgents, 'failed', name);
+  }
+  console.log(
+    `[postinstall] oms-skills: opencode ${formatSummary(omsOpenCode)}; agents ${formatSummary(omsAgents)}`,
+  );
+  console.log(
+    `[postinstall] commands: opencode ${formatSummary(commandsOpenCode)}; agents ${formatSummary(commandsAgents)}`,
+  );
+  console.log(
+    `[postinstall] delegated-skills: source=${DELEGATED_SKILLS_SOURCE}; names=${DELEGATED_SKILL_NAMES.join(',')}; supporting-dependencies=${DELEGATED_SUPPORT_SKILL_NAMES.join(',')}; missing-dependencies: ${missing.length === 0 ? 'none' : missing.join(',')}; opencode ${formatSummary(delegatedOpenCode)}; agents ${formatSummary(delegatedAgents)}`,
+  );
+
+  console.log(`[postinstall] resource changes this run: ${results.join(', ')}`);
+  console.log('[postinstall] uninstall: run oms-opencode-uninstall (npm does not run uninstall lifecycle scripts)');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

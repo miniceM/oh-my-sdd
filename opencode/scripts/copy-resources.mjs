@@ -4,17 +4,18 @@
  *
  * Source of truth is the parent repo:
  *   <repo>/skills/    → opencode/skills/
+ *                   → opencode/oms-skills/          (tracked npm source)
  *                   → opencode/.opencode/skills/   (OpenCode convention)
  *                   → opencode/.agents/skills/     (Claude Code / Codex convention)
  *   <repo>/content/   → opencode/content/          (baseline + welcome + auth)
  *   <repo>/hooks/     → opencode/hooks/            (PreToolUse etc. runtime hooks)
  *
  * Command resources:
- *   - opencode/.opencode/command/     ← slash command definitions (authored here)
+ *   - opencode/.opencode/commands/    ← slash command definitions (authored here)
  *   - opencode/.agents/command/       ← generated mirror of the above
  *   - opencode/src/, opencode/dist/   ← TypeScript source + compiled output
  *
- * Bound to `prepublishOnly` in package.json so `npm publish` always ships fresh
+ * Bound to `prepack` and `prepublishOnly` so local installs and publishes ship fresh
  * mirrors. Idempotent: rm -rf destination then cp -R source.
  *
  * Fail-fast: if any parent source dir is missing, exit non-zero. Silent otherwise.
@@ -31,6 +32,7 @@ const ROOT_DIR = resolve(OPENCODE_DIR, '..');
 // [sourceRelToRoot, destRelToOpencode]
 const SYNC_MAP = [
   ['skills', 'skills'],
+  ['skills', 'oms-skills'],
   ['skills', '.opencode/skills'],
   ['skills', '.agents/skills'],
   ['content', 'content'],
@@ -62,7 +64,7 @@ export function syncResourceTree(src, dst) {
 
 export function syncCommandLayouts(opencodeDir = OPENCODE_DIR) {
   syncResourceTree(
-    join(opencodeDir, '.opencode', 'command'),
+    join(opencodeDir, '.opencode', 'commands'),
     join(opencodeDir, '.agents', 'command'),
   );
 }
@@ -90,9 +92,9 @@ export function main() {
 
   try {
     syncCommandLayouts();
-    console.log('[copy-resources] OK  .opencode/command -> .agents/command');
+    console.log('[copy-resources] OK  .opencode/commands -> .agents/command');
   } catch (err) {
-    console.error(`[copy-resources] FAIL .opencode/command -> .agents/command: ${err.message}`);
+    console.error(`[copy-resources] FAIL .opencode/commands -> .agents/command: ${err.message}`);
     failed = true;
   }
 
