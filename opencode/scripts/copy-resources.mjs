@@ -9,9 +9,9 @@
  *   <repo>/content/   → opencode/content/          (baseline + welcome + auth)
  *   <repo>/hooks/     → opencode/hooks/            (PreToolUse etc. runtime hooks)
  *
- * NOT synced (owned by opencode/ sub-project):
+ * Command resources:
  *   - opencode/.opencode/command/     ← slash command definitions (authored here)
- *   - opencode/.agents/command/       ← mirror of the above
+ *   - opencode/.agents/command/       ← generated mirror of the above
  *   - opencode/src/, opencode/dist/   ← TypeScript source + compiled output
  *
  * Bound to `prepublishOnly` in package.json so `npm publish` always ships fresh
@@ -60,6 +60,13 @@ export function syncResourceTree(src, dst) {
   });
 }
 
+export function syncCommandLayouts(opencodeDir = OPENCODE_DIR) {
+  syncResourceTree(
+    join(opencodeDir, '.opencode', 'command'),
+    join(opencodeDir, '.agents', 'command'),
+  );
+}
+
 export function main() {
   let failed = false;
   for (const [fromRel, toRel] of SYNC_MAP) {
@@ -79,6 +86,14 @@ export function main() {
     console.error(`[copy-resources] FAIL ${fromRel} -> ${toRel}: ${err.message}`);
     failed = true;
   }
+  }
+
+  try {
+    syncCommandLayouts();
+    console.log('[copy-resources] OK  .opencode/command -> .agents/command');
+  } catch (err) {
+    console.error(`[copy-resources] FAIL .opencode/command -> .agents/command: ${err.message}`);
+    failed = true;
   }
 
   if (failed) {

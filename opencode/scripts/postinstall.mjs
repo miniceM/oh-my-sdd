@@ -11,7 +11,7 @@
  *     - `<project>/.opencode/skills/` & `<project>/.opencode/command/` (project-level)
  *     - `~/.claude/skills/`, `~/.agents/skills/`        (external / cross-tool)
  *
- *   So after `npm install -g @enterprise/oh-my-sdd-opencode`, this script
+ *   So after OpenCode installs `@cli-tools/oh-my-sdd-opencode`, this script
  *   copies the plugin's bundled skills & commands to `~/.config/opencode/`
  *   (and mirrors to `~/.agents/` for Claude Code / Codex).
  *
