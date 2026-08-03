@@ -12,9 +12,41 @@ function firstExisting(candidates) {
   return selected;
 }
 
+function allowedSkillRoots(home, projectRoot) {
+  return [
+    path.join(home, '.config', 'opencode', 'skills'),
+    path.join(home, '.agents', 'skills'),
+    path.join(home, '.claude', 'skills'),
+    path.join(projectRoot, 'skills'),
+    path.join(projectRoot, '.opencode', 'skills'),
+    path.join(projectRoot, '.agents', 'skills'),
+    path.join(projectRoot, '.claude', 'skills'),
+  ].map((root) => path.resolve(root));
+}
+
+function isWithin(candidate, root) {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function assertSafeCandidate(raw, resolved, roots) {
+  const segments = raw.replaceAll('\\', '/').split('/');
+  if (path.isAbsolute(raw) || path.win32.isAbsolute(raw) || segments.includes('..')) {
+    throw new Error(`unsafe skill candidate: ${raw}`);
+  }
+  if (!roots.some((root) => isWithin(resolved, root))) {
+    throw new Error(`unsafe skill candidate outside allowed roots: ${raw}`);
+  }
+}
+
 function parseMainSkillCandidates(command, home, projectRoot) {
+  const roots = allowedSkillRoots(home, projectRoot);
   const candidates = [...command.matchAll(/`([^`]*skills\/sdd-plan\/SKILL\.md)`/g)]
-    .map((match) => expandCandidate(match[1], home, projectRoot));
+    .map((match) => {
+      const resolved = expandCandidate(match[1], home, projectRoot);
+      assertSafeCandidate(match[1], resolved, roots);
+      return resolved;
+    });
   if (candidates.length === 0) throw new Error('/sdd-plan command has no main skill contract');
   return candidates;
 }
@@ -34,9 +66,12 @@ function parseDelegatedTemplates(command) {
 }
 
 function delegatedCandidates(templates, name, home, projectRoot) {
+  const roots = allowedSkillRoots(home, projectRoot);
   return templates.map((template) => {
     const candidate = template.replace('<name-without-namespace>', name);
-    return path.join(expandCandidate(candidate, home, projectRoot), 'SKILL.md');
+    const resolved = path.join(expandCandidate(candidate, home, projectRoot), 'SKILL.md');
+    assertSafeCandidate(candidate, resolved, roots);
+    return resolved;
   });
 }
 
@@ -56,19 +91,16 @@ function resolveDelegated(requested, templates, command, home, projectRoot) {
 }
 
 function assertMainSkillSemantics(mainSkill) {
-  const question = mainSkill.includes('问问题');
-  const approval = /用户\s+approve/.test(mainSkill);
-  const chainedSkill = mainSkill.match(/自动\s+chain\s+([a-z0-9-]+)/)?.[1];
-  if (!question) {
+  const positiveContract = mainSkill.match(
+    /^brainstorming 会：问问题 → 提方案 → 用户 approve → \*\*自动 chain ([a-z0-9-]+)\*\* → 产 tasks 清单。$/m,
+  );
+  if (!mainSkill.includes('问问题')) {
     throw new Error('sdd-plan main skill missing brainstorming question semantics');
   }
-  if (!approval) {
-    throw new Error('sdd-plan main skill missing brainstorming approval semantics');
+  if (!positiveContract) {
+    throw new Error('sdd-plan semantic contract error: expected positive question, approval, and chain step');
   }
-  if (!chainedSkill) {
-    throw new Error('sdd-plan main skill missing writing-plans chain semantics');
-  }
-  return { question, approval, chainedSkill };
+  return { question: true, approval: true, chainedSkill: positiveContract[1] };
 }
 
 /**
@@ -87,10 +119,15 @@ export function runSddPlanHarness({ home, approved, projectRoot = home }) {
 
   const brainstorming = delegatedName(brainstormingRef);
   const events = ['main-skill-loaded'];
-  const resolutions = [
+  const resolutions = [{
+    requested: 'sdd-plan',
+    normalized: 'sdd-plan',
+    source: mainSkillPath,
+    mode: 'skill-file',
+  },
     resolveDelegated(brainstormingRef, templates, command, home, projectRoot),
   ];
-  const brainstormingPath = resolutions[0].source;
+  const brainstormingPath = resolutions[1].source;
 
   if (brainstormingPath) {
     const content = fs.readFileSync(brainstormingPath, 'utf8');

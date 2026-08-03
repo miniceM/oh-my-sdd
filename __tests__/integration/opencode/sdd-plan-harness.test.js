@@ -87,6 +87,11 @@ test('installed /sdd-plan resolves superpowers namespace and chains approved des
       requested, normalized, mode,
     })), [
       {
+        requested: 'sdd-plan',
+        normalized: 'sdd-plan',
+        mode: 'skill-file',
+      },
+      {
         requested: 'superpowers:brainstorming',
         normalized: 'brainstorming',
         mode: 'skill-file',
@@ -98,9 +103,14 @@ test('installed /sdd-plan resolves superpowers namespace and chains approved des
       },
     ]);
     assert.match(
-      result.resolutions[0].source.replaceAll('\\', '/'),
+      result.resolutions[1].source.replaceAll('\\', '/'),
       /\.config\/opencode\/skills\/brainstorming\/SKILL\.md$/,
     );
+    for (const resolution of result.resolutions) {
+      if (!resolution.source) continue;
+      const relative = path.relative(home, resolution.source);
+      assert.equal(relative.startsWith('..') || path.isAbsolute(relative), false);
+    }
   });
 });
 
@@ -138,8 +148,8 @@ test('missing brainstorming skill uses inline content resolution and continues',
       'brainstorming-approved',
       'writing-plans-started',
     ]);
-    assert.equal(result.resolutions[0].mode, 'inline-content-resolution');
-    assert.equal(result.resolutions[0].source, null);
+    assert.equal(result.resolutions[1].mode, 'inline-content-resolution');
+    assert.equal(result.resolutions[1].source, null);
   });
 });
 
@@ -159,8 +169,8 @@ test('missing writing-plans skill uses inline content resolution and continues',
       'inline-content-resolution',
       'writing-plans-started',
     ]);
-    assert.equal(result.resolutions[1].mode, 'inline-content-resolution');
-    assert.equal(result.resolutions[1].source, null);
+    assert.equal(result.resolutions[2].mode, 'inline-content-resolution');
+    assert.equal(result.resolutions[2].source, null);
   });
 });
 
@@ -174,5 +184,43 @@ test('main skill without brainstorming interaction semantics fails explicitly', 
       () => runSddPlanHarness({ home, approved: true }),
       /missing brainstorming question semantics/,
     );
+  });
+});
+
+test('negated brainstorming semantics do not satisfy the positive contract', () => {
+  withInstalledResources((home) => {
+    const mainSkill = path.join(home, '.config', 'opencode', 'skills', 'sdd-plan', 'SKILL.md');
+    const content = fs.readFileSync(mainSkill, 'utf8').replace(
+      'brainstorming 会：问问题 → 提方案 → 用户 approve → **自动 chain writing-plans** → 产 tasks 清单。',
+      'brainstorming 会：不问问题 → 提方案 → 不要用户 approve → **不要自动 chain writing-plans** → 产 tasks 清单。',
+    );
+    fs.writeFileSync(mainSkill, content);
+
+    assert.throws(
+      () => runSddPlanHarness({ home, approved: true }),
+      /semantic contract error/,
+    );
+  });
+});
+
+test('resolver rejects absolute and parent-traversal command candidates', () => {
+  withInstalledResources((home) => {
+    const commandPath = path.join(home, '.config', 'opencode', 'commands', 'sdd-plan.md');
+    const original = fs.readFileSync(commandPath, 'utf8');
+    const mutations = [
+      original.replace('`skills/sdd-plan/SKILL.md`', '`/tmp/escape/skills/sdd-plan/SKILL.md`'),
+      original.replace(
+        '`~/.config/opencode/skills/<name-without-namespace>/`',
+        '`../escape/skills/<name-without-namespace>/`',
+      ),
+    ];
+
+    for (const malicious of mutations) {
+      fs.writeFileSync(commandPath, malicious);
+      assert.throws(
+        () => runSddPlanHarness({ home, approved: true }),
+        /unsafe skill candidate/,
+      );
+    }
   });
 });
