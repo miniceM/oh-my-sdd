@@ -131,8 +131,12 @@ export function runSddPlanHarness({ home, approved, projectRoot = home }) {
 
   if (brainstormingPath) {
     const content = fs.readFileSync(brainstormingPath, 'utf8');
-    if (!content.includes('writing-plans')) {
-      throw new Error('brainstorming skill does not chain to writing-plans');
+    if (!/^\*\*终止状态是调用 writing-plans。\*\*(?:\s|$)/m.test(content)) {
+      const error = new Error(
+        'delegated semantic contract error: brainstorming lacks a positive writing-plans terminal step',
+      );
+      error.events = [...events];
+      throw error;
     }
   } else {
     events.push('inline-content-resolution');

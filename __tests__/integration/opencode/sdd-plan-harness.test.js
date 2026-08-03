@@ -224,3 +224,21 @@ test('resolver rejects absolute and parent-traversal command candidates', () => 
     }
   });
 });
+
+test('negated delegated chain does not start writing-plans', () => {
+  withInstalledResources((home) => {
+    const skillPath = path.join(home, '.config', 'opencode', 'skills', 'brainstorming', 'SKILL.md');
+    const content = fs.readFileSync(skillPath, 'utf8')
+      .replaceAll('调用 writing-plans', '禁止调用 writing-plans');
+    fs.writeFileSync(skillPath, content);
+
+    let failure;
+    try {
+      runSddPlanHarness({ home, approved: true });
+    } catch (error) {
+      failure = error;
+    }
+    assert.match(failure?.message ?? '', /delegated semantic contract error/);
+    assert.equal(failure?.events?.includes('writing-plans-started'), false);
+  });
+});
