@@ -6,16 +6,10 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { runSddPlanHarness } from '../../helpers/opencode-command-harness.js';
+import { resolveNpmCli } from '../../helpers/resolve-npm-cli.js';
 
 const worktreeRoot = process.cwd();
-const npmExecPath = process.env.npm_execpath ?? path.join(
-  execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['root', '--global'], {
-    encoding: 'utf8',
-  }).trim(),
-  'npm',
-  'bin',
-  'npm-cli.js',
-);
+const npmExecPath = resolveNpmCli();
 
 function runNpm(args, options) {
   return execFileSync(process.execPath, [npmExecPath, ...args], options);

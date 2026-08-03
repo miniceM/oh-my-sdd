@@ -9,12 +9,13 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
-  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, dirname, join, relative } from 'node:path';
+import { join, relative } from 'node:path';
+
+import { resolveNpmCli } from '../../helpers/resolve-npm-cli.js';
 
 const SOURCE_ROOT = process.cwd();
 const PRIMARY_DELEGATES = [
@@ -30,27 +31,6 @@ function parsePackManifest(output) {
   return JSON.parse(json);
 }
 
-function resolveNpmCli() {
-  if (process.env.npm_execpath && existsSync(process.env.npm_execpath)) {
-    return process.env.npm_execpath;
-  }
-  const candidates = [
-    join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-    join(dirname(dirname(process.execPath)), 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-  ];
-  for (const directory of (process.env.PATH ?? '').split(delimiter)) {
-    if (!directory) continue;
-    candidates.push(join(directory, 'node_modules', 'npm', 'bin', 'npm-cli.js'));
-    const launcher = join(directory, process.platform === 'win32' ? 'npm.cmd' : 'npm');
-    if (process.platform !== 'win32' && existsSync(launcher)) {
-      try { candidates.push(realpathSync(launcher)); } catch { /* try the next candidate */ }
-    }
-  }
-  const npmCli = candidates.find((candidate) => existsSync(candidate));
-  assert.ok(npmCli, 'could not resolve npm-cli.js for shell-free package test');
-  return npmCli;
-}
-
 function createRepositoryFixture(root) {
   const repository = join(root, 'repository');
   for (const name of ['skills', 'content', 'hooks', 'opencode']) {
@@ -59,7 +39,14 @@ function createRepositoryFixture(root) {
       filter: (source) => !['node_modules', '.git', '.worktrees'].includes(source.split(/[\\/]/).at(-1)),
     });
   }
-  const packagePath = join(repository, 'opencode', 'package.json');
+  const opencodeDir = join(repository, 'opencode');
+  // Drop every pre-copied mirror so the pack's prepack sync is the only way
+  // these destinations can exist; the later assertions then prove the
+  // concurrent syncs materialized complete trees.
+  for (const rel of ['skills', '.opencode/skills', '.agents/skills', '.agents/command', 'content', 'hooks']) {
+    rmSync(join(opencodeDir, rel), { recursive: true, force: true });
+  }
+  const packagePath = join(opencodeDir, 'package.json');
   const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
   packageJson.scripts.prepack = 'npm run sync:resources';
   writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
@@ -77,6 +64,21 @@ function directoryDigest(root) {
   };
   visit(root);
   return hash.digest('hex');
+}
+
+function findSyncResidue(root) {
+  const found = [];
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name.includes('.oh-my-sdd-sync.')) found.push(path);
+        else visit(path);
+      }
+    }
+  };
+  if (existsSync(root)) visit(root);
+  return found;
 }
 
 function run(executable, args, options = {}) {
@@ -131,7 +133,47 @@ test('concurrent package syncs are serialized and leave the worktree unchanged',
           `package must include delegated-skills/${skill}/SKILL.md`,
         );
       }
+      for (const required of ['content/enterprise-baseline.md', 'hooks/hooks.json']) {
+        assert.ok(
+          files.includes(required),
+          `package must include ${required} materialized by prepack sync`,
+        );
+      }
     }
+
+    // Directly verify every sync destination tree equals its source: the fixture
+    // packs run the real prepack synchronizer concurrently, so the final state
+    // must be complete and correct rather than half-synced.
+    const skillsSource = join(repository, 'skills');
+    const skillsDigest = directoryDigest(skillsSource);
+    for (const target of [
+      join(opencodeDir, 'skills'),
+      join(opencodeDir, 'oms-skills'),
+      join(opencodeDir, '.opencode', 'skills'),
+      join(opencodeDir, '.agents', 'skills'),
+    ]) {
+      assert.equal(directoryDigest(target), skillsDigest, `${target} must mirror the skills source`);
+    }
+    assert.equal(
+      directoryDigest(join(opencodeDir, 'content')),
+      directoryDigest(join(repository, 'content')),
+      'content sync destination must mirror its source',
+    );
+    assert.equal(
+      directoryDigest(join(opencodeDir, 'hooks')),
+      directoryDigest(join(repository, 'hooks')),
+      'hooks sync destination must mirror its source',
+    );
+    assert.equal(
+      directoryDigest(join(opencodeDir, '.agents', 'command')),
+      directoryDigest(join(opencodeDir, '.opencode', 'commands')),
+      'agents command mirror must match the authored commands',
+    );
+    assert.deepEqual(
+      findSyncResidue(opencodeDir),
+      [],
+      'no staging, backup, or lock residue may survive concurrent packs',
+    );
     assert.equal(directoryDigest(sourceMirror), sourceDigestBefore, 'fixture pack must not mutate source files');
   } finally {
     rmSync(root, { recursive: true, force: true });

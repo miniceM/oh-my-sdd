@@ -136,6 +136,13 @@ function reclaimStaleLock(lockPath, staleThresholdMs, now, rename, remove) {
  * @param {() => unknown} operation work to execute while the lock is held
  * @param {{ timeoutMs?: number, pollMs?: number, staleThresholdMs?: number, mkdirSync?: Function, renameSync?: Function, rmSync?: Function, now?: () => number }} [ops]
  * @returns {unknown} the operation result
+ *
+ * Stale-lock policy (deliberate trade-off): a lock whose owner PID is dead is
+ * reclaimed immediately; a lock older than `staleThresholdMs` is also reclaimed
+ * even when the PID is alive, as a fallback against PID reuse. The 30-minute
+ * default is far longer than any prepack sync, so a live writer is only ever
+ * displaced in pathological cases — keeping `staleThresholdMs` above the
+ * expected operation duration preserves mutual exclusion in practice.
  */
 export function withSyncLock(lockPath, operation, ops = {}) {
   const makeDirectory = ops.mkdirSync ?? mkdirSync;
@@ -180,6 +187,19 @@ export function withSyncLock(lockPath, operation, ops = {}) {
   }
 }
 
+/**
+ * Synchronize a source tree into a destination atomically.
+ *
+ * The full source tree is copied to a unique sibling staging directory while a
+ * per-destination cross-process lock is held; the destination is replaced only
+ * after the copy succeeds. On failure the last complete destination is restored
+ * and staging/backup directories are cleaned up.
+ *
+ * @param {string} src source directory to mirror
+ * @param {string} dst destination directory to replace
+ * @param {{ cpSync?: Function, existsSync?: Function, renameSync?: Function, rmSync?: Function, mkdirSync?: Function, lockTimeoutMs?: number, lockPollMs?: number, staleLockThresholdMs?: number }} [ops] injectable fs/lock options for tests
+ * @returns {unknown} the operation result
+ */
 export function syncResourceTree(src, dst, ops = {}) {
   const copy = ops.cpSync ?? cpSync;
   const exists = ops.existsSync ?? existsSync;
@@ -237,22 +257,22 @@ export function syncCommandLayouts(opencodeDir = OPENCODE_DIR) {
 export function main() {
   let failed = false;
   for (const [fromRel, toRel] of SYNC_MAP) {
-  const src = join(ROOT_DIR, fromRel);
-  const dst = join(OPENCODE_DIR, toRel);
+    const src = join(ROOT_DIR, fromRel);
+    const dst = join(OPENCODE_DIR, toRel);
 
-  if (!existsSync(src) || !statSync(src).isDirectory()) {
-    console.error(`[copy-resources] MISSING source: ${src}`);
-    failed = true;
-    continue;
-  }
+    if (!existsSync(src) || !statSync(src).isDirectory()) {
+      console.error(`[copy-resources] MISSING source: ${src}`);
+      failed = true;
+      continue;
+    }
 
-  try {
-    syncResourceTree(src, dst);
-    console.log(`[copy-resources] OK  ${fromRel} -> ${toRel}`);
-  } catch (err) {
-    console.error(`[copy-resources] FAIL ${fromRel} -> ${toRel}: ${err.message}`);
-    failed = true;
-  }
+    try {
+      syncResourceTree(src, dst);
+      console.log(`[copy-resources] OK  ${fromRel} -> ${toRel}`);
+    } catch (err) {
+      console.error(`[copy-resources] FAIL ${fromRel} -> ${toRel}: ${err.message}`);
+      failed = true;
+    }
   }
 
   try {
