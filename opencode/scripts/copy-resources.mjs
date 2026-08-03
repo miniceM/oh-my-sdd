@@ -22,7 +22,16 @@
  * Fail-fast: if any parent source dir is missing, exit non-zero. Silent otherwise.
  */
 
-import { cpSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -55,30 +64,108 @@ export function shouldCopy(name) {
   return !EXCLUDE_BASENAMES.has(name);
 }
 
+const LOCK_OWNER_FILE = 'owner.json';
+const DEFAULT_STALE_LOCK_MS = 30 * 60 * 1000;
+
+function readLockOwner(lockPath) {
+  try {
+    return JSON.parse(readFileSync(join(lockPath, LOCK_OWNER_FILE), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function ownerIsAlive(ownerPid) {
+  if (!Number.isSafeInteger(ownerPid) || ownerPid <= 0) return false;
+  try {
+    process.kill(ownerPid, 0);
+    return true;
+  } catch (error) {
+    if (error?.code === 'EPERM') return true;
+    return error?.code !== 'ESRCH';
+  }
+}
+
+function lockIsStale(lockPath, staleThresholdMs, now) {
+  const owner = readLockOwner(lockPath);
+  const createdAt = Number.isFinite(owner?.createdAt)
+    ? owner.createdAt
+    : statSync(lockPath).mtimeMs;
+  return !ownerIsAlive(owner?.ownerPid) || now() - createdAt >= staleThresholdMs;
+}
+
+function reclaimStaleLock(lockPath, staleThresholdMs, now, rename, remove) {
+  let observed;
+  let observedOwner;
+  try {
+    observed = statSync(lockPath);
+    observedOwner = readLockOwner(lockPath);
+    if (!lockIsStale(lockPath, staleThresholdMs, now)) return false;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return true;
+    throw error;
+  }
+
+  const takeover = `${lockPath}.takeover-${process.pid}-${randomUUID()}`;
+  try {
+    rename(lockPath, takeover);
+    const moved = statSync(takeover);
+    const movedOwner = readLockOwner(takeover);
+    if (
+      observed.dev !== moved.dev
+      || observed.ino !== moved.ino
+      || JSON.stringify(observedOwner) !== JSON.stringify(movedOwner)
+    ) {
+      if (!existsSync(lockPath)) rename(takeover, lockPath);
+      return false;
+    }
+    remove(takeover, { recursive: true, force: true });
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'EEXIST') return true;
+    throw error;
+  } finally {
+    if (existsSync(takeover)) remove(takeover, { recursive: true, force: true });
+  }
+}
+
 /**
  * Run a synchronous operation while holding an exclusive per-destination lock.
  *
  * @param {string} lockPath directory used as the cross-process lock
  * @param {() => unknown} operation work to execute while the lock is held
- * @param {{ timeoutMs?: number, pollMs?: number, mkdirSync?: Function, rmSync?: Function }} [ops]
+ * @param {{ timeoutMs?: number, pollMs?: number, staleThresholdMs?: number, mkdirSync?: Function, renameSync?: Function, rmSync?: Function, now?: () => number }} [ops]
  * @returns {unknown} the operation result
  */
 export function withSyncLock(lockPath, operation, ops = {}) {
   const makeDirectory = ops.mkdirSync ?? mkdirSync;
+  const rename = ops.renameSync ?? renameSync;
   const remove = ops.rmSync ?? rmSync;
   const timeoutMs = ops.timeoutMs ?? 10_000;
   const pollMs = ops.pollMs ?? 25;
-  const startedAt = Date.now();
+  const staleThresholdMs = ops.staleThresholdMs ?? DEFAULT_STALE_LOCK_MS;
+  const now = ops.now ?? Date.now;
+  const startedAt = now();
+  const owner = { ownerPid: process.pid, createdAt: startedAt, token: randomUUID() };
   const signal = new Int32Array(new SharedArrayBuffer(4));
 
   while (true) {
     try {
       makeDirectory(lockPath);
+      try {
+        writeFileSync(join(lockPath, LOCK_OWNER_FILE), JSON.stringify(owner));
+      } catch (error) {
+        remove(lockPath, { recursive: true, force: true });
+        throw error;
+      }
       break;
     } catch (error) {
       if (error?.code !== 'EEXIST') throw error;
-      if (Date.now() - startedAt >= timeoutMs) {
-        throw new Error(`[copy-resources] timed out waiting for lock: ${lockPath}`);
+      if (reclaimStaleLock(lockPath, staleThresholdMs, now, rename, remove)) continue;
+      if (now() - startedAt >= timeoutMs) {
+        throw new Error(
+          `[copy-resources] timed out after ${timeoutMs}ms waiting for target lock: ${lockPath}`,
+        );
       }
       Atomics.wait(signal, 0, 0, pollMs);
     }
@@ -87,7 +174,9 @@ export function withSyncLock(lockPath, operation, ops = {}) {
   try {
     return operation();
   } finally {
-    remove(lockPath, { recursive: true, force: true });
+    if (readLockOwner(lockPath)?.token === owner.token) {
+      remove(lockPath, { recursive: true, force: true });
+    }
   }
 }
 
@@ -131,7 +220,9 @@ export function syncResourceTree(src, dst, ops = {}) {
   }, {
     timeoutMs: ops.lockTimeoutMs,
     pollMs: ops.lockPollMs,
+    staleThresholdMs: ops.staleLockThresholdMs,
     mkdirSync: ops.mkdirSync,
+    renameSync: rename,
     rmSync: remove,
   });
 }

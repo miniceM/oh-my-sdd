@@ -17,6 +17,7 @@ import {
   shouldCopy,
   syncCommandLayouts,
   syncResourceTree,
+  withSyncLock,
 } from '../../../opencode/scripts/copy-resources.mjs';
 import {
   readOwnershipManifest,
@@ -682,6 +683,11 @@ test('resource sync waits for an existing destination lock before replacing it',
     mkdirSync(src, { recursive: true });
     mkdirSync(lock, { recursive: true });
     writeFileSync(join(src, 'new.txt'), 'new');
+    writeFileSync(join(lock, 'owner.json'), JSON.stringify({
+      ownerPid: process.pid,
+      createdAt: Date.now(),
+      token: 'test-owner',
+    }));
 
     const moduleUrl = pathToFileURL(join(process.cwd(), 'opencode', 'scripts', 'copy-resources.mjs')).href;
     const child = spawn(process.execPath, [
@@ -698,6 +704,83 @@ test('resource sync waits for an existing destination lock before replacing it',
     const [code] = await once(child, 'exit');
     assert.equal(code, 0);
     assert.equal(readFileSync(join(dst, 'new.txt'), 'utf8'), 'new');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource sync reclaims a lock whose owner process is dead', () => {
+  const root = fixture();
+  try {
+    const src = join(root, 'src');
+    const dst = join(root, 'dst');
+    const lock = `${dst}.oh-my-sdd-sync.lock`;
+    mkdirSync(src, { recursive: true });
+    mkdirSync(lock, { recursive: true });
+    writeFileSync(join(src, 'new.txt'), 'new');
+    writeFileSync(join(lock, 'owner.json'), JSON.stringify({
+      ownerPid: 2_147_483_647,
+      createdAt: Date.now(),
+    }));
+
+    syncResourceTree(src, dst, { lockTimeoutMs: 250, lockPollMs: 10 });
+
+    assert.equal(readFileSync(join(dst, 'new.txt'), 'utf8'), 'new');
+    assert.equal(existsSync(lock), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource sync never takes over a live owner before timing out', () => {
+  const root = fixture();
+  try {
+    const lock = join(root, 'target.oh-my-sdd-sync.lock');
+    mkdirSync(lock, { recursive: true });
+    writeFileSync(join(lock, 'owner.json'), JSON.stringify({
+      ownerPid: process.pid,
+      createdAt: Date.now(),
+    }));
+
+    assert.throws(
+      () => withSyncLock(lock, () => assert.fail('live lock was stolen'), {
+        timeoutMs: 60,
+        pollMs: 10,
+        staleThresholdMs: 60_000,
+      }),
+      (error) => {
+        assert.match(error.message, new RegExp(lock.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+        assert.match(error.message, /60ms/);
+        return true;
+      },
+    );
+    assert.equal(existsSync(join(lock, 'owner.json')), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource sync reclaims an over-age lock despite a reused live PID', () => {
+  const root = fixture();
+  try {
+    const lock = join(root, 'target.oh-my-sdd-sync.lock');
+    mkdirSync(lock, { recursive: true });
+    writeFileSync(join(lock, 'owner.json'), JSON.stringify({
+      ownerPid: process.pid,
+      createdAt: 1,
+      token: 'possibly-reused-pid',
+    }));
+
+    let ran = false;
+    withSyncLock(lock, () => { ran = true; }, {
+      timeoutMs: 100,
+      pollMs: 10,
+      staleThresholdMs: 50,
+      now: () => 1_000,
+    });
+
+    assert.equal(ran, true);
+    assert.equal(existsSync(lock), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
