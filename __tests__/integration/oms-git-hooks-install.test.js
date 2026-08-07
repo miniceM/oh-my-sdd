@@ -25,7 +25,6 @@ const MARKER_PREFIX = '# oh-my-sdd-git-hook:';
 function setupGitRepo() {
   const dir = mkdtempSync(path.join(tmpdir(), 'oms-installer-'));
   execFileSync('git', ['init'], { cwd: dir, stdio: 'ignore' });
-  execFileSync('git', ['branch', '-m', 'main'], { cwd: dir, stdio: 'ignore' });
   execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: dir, stdio: 'ignore' });
   execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir, stdio: 'ignore' });
   return dir;

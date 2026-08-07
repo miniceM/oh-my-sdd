@@ -8,7 +8,6 @@ import { execSync } from 'node:child_process';
 function setupGitRepo() {
   const dir = mkdtempSync(path.join(tmpdir(), 'oms-git-'));
   execSync('git init', { cwd: dir, stdio: 'ignore' });
-  execSync('git branch -m main', { cwd: dir, stdio: 'ignore' });
   execSync('git config user.email test@test.com', { cwd: dir });
   execSync('git config user.name Test', { cwd: dir });
   return dir;
