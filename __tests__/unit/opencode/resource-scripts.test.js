@@ -791,10 +791,10 @@ test('resource sync waits for an existing destination lock before replacing it',
     const child = spawn(process.execPath, [
       '--input-type=module',
       '--eval',
-      `import { syncResourceTree } from ${JSON.stringify(moduleUrl)}; syncResourceTree(${JSON.stringify(src)}, ${JSON.stringify(dst)});`,
+      `import { syncResourceTree } from ${JSON.stringify(moduleUrl)}; process.stdout.write('ready\\n'); syncResourceTree(${JSON.stringify(src)}, ${JSON.stringify(dst)});`,
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    await once(child.stdout, 'data');
     assert.equal(child.exitCode, null, 'sync must remain blocked while the lock exists');
     assert.equal(existsSync(dst), false);
 
