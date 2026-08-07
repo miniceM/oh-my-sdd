@@ -119,10 +119,10 @@ npm install @zyfp-dcjs/siriusBridge -S
 
 **使用示例**
 ```javascript
-import { 
-  getEnvironmentSync, 
-  canUse, 
-  request, 
+import {
+  getEnvironmentSync,
+  canUse,
+  request,
   showToast,
   onLoad,
   onUnload
@@ -151,7 +151,6 @@ onUnload(() => {
 ```
 
 ---
-
 ## 构建配置
 
 ### 环境模式
@@ -238,4 +237,3 @@ onLoad(cb) / onUnload(cb) // 生命周期
 - **技术支持**: 杨朋飞-001833
 
 ---
-

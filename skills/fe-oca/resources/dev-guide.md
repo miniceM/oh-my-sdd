@@ -134,7 +134,7 @@ proxy: {
 
 ### 环境变量
 
-**Vue 3**: `env/.development.ini` → `process.env.SIRIUS_APP_*`  
+**Vue 3**: `env/.development.ini` → `process.env.SIRIUS_APP_*`
 **Vue 2**: `LOGIC_SYS`、`BASE_URL`、`NODE_ENV`、`WALLE_BUILD_ENV`
 
 ---
@@ -260,7 +260,7 @@ auth.getToken() / auth.getTeamID()     // 认证信息
 - Walle 构建: http://10.102.20.111/walle/
 
 ### 关键依赖包
-**Vue 3:** `@zyfp/oca3-app`、`@zyfp/oca3-store`、`@zyfp/oca3-router`  
+**Vue 3:** `@zyfp/oca3-app`、`@zyfp/oca3-store`、`@zyfp/oca3-router`
 **Vue 2:** `@zyfp/element`、`@zyfp/feedback`、`@zyfp/walle`
 
 ### 技术支持
@@ -268,4 +268,3 @@ auth.getToken() / auth.getTeamID()     // 认证信息
 - OCA 文档: http://wiki.tech.zyb/zyfp-docs/oca/
 
 ---
-

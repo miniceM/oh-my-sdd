@@ -71,7 +71,20 @@ const PLUGIN_SKILLS_SRC = join(PLUGIN_ROOT, 'oms-skills');
 const PLUGIN_COMMAND_SRC = join(PLUGIN_ROOT, '.opencode', 'commands');
 const DELEGATED_SKILLS_SRC = join(PLUGIN_ROOT, 'delegated-skills');
 
+/**
+ * Pinned source of the vendored superpowers delegation skills.
+ * Postinstall installs from the bundled `delegated-skills/` tree only; it never
+ * runs a network installer, so this constant documents the exact upstream
+ * release the pinned tree was vendored from.
+ */
 export const DELEGATED_SKILLS_SOURCE = 'bundled superpowers-zh@1.5.0';
+
+/**
+ * Strongly required delegation skills (5) shipped in `delegated-skills/`.
+ * A command such as `/sdd-plan` resolves `superpowers:<name>` against these
+ * unnamespaced skill directories; when one is missing, the command falls back
+ * to inline content resolution instead of failing. Read-only frozen array.
+ */
 export const DELEGATED_SKILL_NAMES = Object.freeze([
   'brainstorming',
   'writing-plans',
@@ -79,6 +92,12 @@ export const DELEGATED_SKILL_NAMES = Object.freeze([
   'subagent-driven-development',
   'requesting-code-review',
 ]);
+
+/**
+ * Transitive support skills (3) vendored alongside the strongly required ones.
+ * They are installed so that delegated workflows (worktrees, branch finishing,
+ * TDD) keep working in a pure OpenCode environment. Read-only frozen array.
+ */
 export const DELEGATED_SUPPORT_SKILL_NAMES = Object.freeze([
   'using-git-worktrees',
   'finishing-a-development-branch',

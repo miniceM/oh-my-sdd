@@ -26,6 +26,7 @@ __pycache__/
 .claude/settings.local.json
 openspec/
 .sisyphus/
+.worktrees/
 .claude/skills/
 
 # superpowers-zh / OpenCode runtime dirs (TOP-LEVEL only — the `/` prefix is

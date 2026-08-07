@@ -1,9 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { once } from 'node:events';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { copyDirSafe } from '../../../opencode/scripts/postinstall.mjs';
 import {
@@ -15,6 +17,7 @@ import {
   shouldCopy,
   syncCommandLayouts,
   syncResourceTree,
+  withSyncLock,
 } from '../../../opencode/scripts/copy-resources.mjs';
 import {
   readOwnershipManifest,
@@ -397,6 +400,28 @@ test('npm package exposes every delegated workflow skill from its canonical bund
   }
 });
 
+test('postinstall delegated-skill exports document pinned source and read-only arrays', () => {
+  const source = readFileSync(
+    join(process.cwd(), 'opencode', 'scripts', 'postinstall.mjs'),
+    'utf8',
+  );
+  const exportedDocs = {
+    DELEGATED_SKILLS_SOURCE: [/pinned source/i],
+    DELEGATED_SKILL_NAMES: [/\b5\b/, /strongly required|strong dependencies/i, /read-only|frozen/i],
+    DELEGATED_SUPPORT_SKILL_NAMES: [/\b3\b/, /transitive support/i, /read-only|frozen/i],
+  };
+
+  for (const [name, required] of Object.entries(exportedDocs)) {
+    const doc = source.match(
+      new RegExp(`/\\*\\*[\\s\\S]*?\\*/\\s*export const ${name}\\b`),
+    )?.[0];
+    assert.ok(doc, `${name} must be preceded by a JSDoc block`);
+    for (const pattern of required) {
+      assert.match(doc, pattern, `${name} JSDoc must document ${pattern}`);
+    }
+  }
+});
+
 test('postinstall installs delegated skills into a clean OpenCode HOME with actionable diagnostics', () => {
   const home = fixture();
   try {
@@ -645,6 +670,215 @@ test('resource sync excludes declared noise directories', () => {
     assert.ok(existsSync(join(dst, 'skill', 'SKILL.md')));
     assert.equal(existsSync(join(dst, 'node_modules')), false);
     assert.equal(existsSync(join(dst, '__tests__')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource sync preserves the existing destination when staging copy fails', () => {
+  const root = fixture();
+  try {
+    const src = join(root, 'src');
+    const dst = join(root, 'dst');
+    mkdirSync(src, { recursive: true });
+    mkdirSync(dst, { recursive: true });
+    writeFileSync(join(src, 'new.txt'), 'new');
+    writeFileSync(join(dst, 'old.txt'), 'old');
+
+    assert.throws(
+      () => syncResourceTree(src, dst, { cpSync: () => { throw new Error('injected copy failure'); } }),
+      /injected copy failure/,
+    );
+    assert.equal(readFileSync(join(dst, 'old.txt'), 'utf8'), 'old');
+    assert.equal(existsSync(join(dst, 'new.txt')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource sync retries a transient Windows rename lock and still replaces the destination', () => {
+  const root = fixture();
+  try {
+    const src = join(root, 'src');
+    const dst = join(root, 'dst');
+    mkdirSync(src, { recursive: true });
+    mkdirSync(dst, { recursive: true });
+    writeFileSync(join(src, 'new.txt'), 'new');
+    writeFileSync(join(dst, 'old.txt'), 'old');
+
+    const realRename = renameSync;
+    let backupAttempts = 0;
+    syncResourceTree(src, dst, {
+      renameAttempts: 5,
+      renameDelayMs: 1,
+      renameSync: (from, to) => {
+        if (to.includes('.oh-my-sdd-sync.backup-')) {
+          backupAttempts += 1;
+          if (backupAttempts === 1) {
+            const error = new Error('injected EPERM rename lock');
+            error.code = 'EPERM';
+            throw error;
+          }
+        }
+        return realRename(from, to);
+      },
+    });
+
+    assert.equal(backupAttempts, 2, 'the destination rename should retry once after EPERM');
+    assert.equal(readFileSync(join(dst, 'new.txt'), 'utf8'), 'new');
+    assert.equal(existsSync(join(dst, 'old.txt')), false);
+    assert.deepEqual(
+      readdirSync(dirname(dst)).filter((name) => name.startsWith(`${basename(dst)}.oh-my-sdd-sync.`)),
+      [],
+      'no staging, backup, or lock residue may survive the retried sync',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource sync fails loudly when the destination rename stays locked and preserves it', () => {
+  const root = fixture();
+  try {
+    const src = join(root, 'src');
+    const dst = join(root, 'dst');
+    mkdirSync(src, { recursive: true });
+    mkdirSync(dst, { recursive: true });
+    writeFileSync(join(src, 'new.txt'), 'new');
+    writeFileSync(join(dst, 'old.txt'), 'old');
+
+    let attempts = 0;
+    assert.throws(
+      () => syncResourceTree(src, dst, {
+        renameAttempts: 3,
+        renameDelayMs: 1,
+        renameSync: (from, to) => {
+          if (to.includes('.oh-my-sdd-sync.backup-')) {
+            attempts += 1;
+            const error = new Error('destination locked');
+            error.code = 'EPERM';
+            throw error;
+          }
+          return renameSync(from, to);
+        },
+      }),
+      /destination locked/,
+    );
+    assert.equal(attempts, 3, 'the destination rename should exhaust its retries');
+    assert.equal(readFileSync(join(dst, 'old.txt'), 'utf8'), 'old');
+    assert.equal(existsSync(join(dst, 'new.txt')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource sync waits for an existing destination lock before replacing it', async () => {
+  const root = fixture();
+  try {
+    const src = join(root, 'src');
+    const dst = join(root, 'dst');
+    const lock = `${dst}.oh-my-sdd-sync.lock`;
+    mkdirSync(src, { recursive: true });
+    mkdirSync(lock, { recursive: true });
+    writeFileSync(join(src, 'new.txt'), 'new');
+    writeFileSync(join(lock, 'owner.json'), JSON.stringify({
+      ownerPid: process.pid,
+      createdAt: Date.now(),
+      token: 'test-owner',
+    }));
+
+    const moduleUrl = pathToFileURL(join(process.cwd(), 'opencode', 'scripts', 'copy-resources.mjs')).href;
+    const child = spawn(process.execPath, [
+      '--input-type=module',
+      '--eval',
+      `import { syncResourceTree } from ${JSON.stringify(moduleUrl)}; syncResourceTree(${JSON.stringify(src)}, ${JSON.stringify(dst)});`,
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.equal(child.exitCode, null, 'sync must remain blocked while the lock exists');
+    assert.equal(existsSync(dst), false);
+
+    rmSync(lock, { recursive: true, force: true });
+    const [code] = await once(child, 'exit');
+    assert.equal(code, 0);
+    assert.equal(readFileSync(join(dst, 'new.txt'), 'utf8'), 'new');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource sync reclaims a lock whose owner process is dead', () => {
+  const root = fixture();
+  try {
+    const src = join(root, 'src');
+    const dst = join(root, 'dst');
+    const lock = `${dst}.oh-my-sdd-sync.lock`;
+    mkdirSync(src, { recursive: true });
+    mkdirSync(lock, { recursive: true });
+    writeFileSync(join(src, 'new.txt'), 'new');
+    writeFileSync(join(lock, 'owner.json'), JSON.stringify({
+      ownerPid: 2_147_483_647,
+      createdAt: Date.now(),
+    }));
+
+    syncResourceTree(src, dst, { lockTimeoutMs: 250, lockPollMs: 10 });
+
+    assert.equal(readFileSync(join(dst, 'new.txt'), 'utf8'), 'new');
+    assert.equal(existsSync(lock), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource sync never takes over a live owner before timing out', () => {
+  const root = fixture();
+  try {
+    const lock = join(root, 'target.oh-my-sdd-sync.lock');
+    mkdirSync(lock, { recursive: true });
+    writeFileSync(join(lock, 'owner.json'), JSON.stringify({
+      ownerPid: process.pid,
+      createdAt: Date.now(),
+    }));
+
+    assert.throws(
+      () => withSyncLock(lock, () => assert.fail('live lock was stolen'), {
+        timeoutMs: 60,
+        pollMs: 10,
+        staleThresholdMs: 60_000,
+      }),
+      (error) => {
+        assert.match(error.message, new RegExp(lock.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+        assert.match(error.message, /60ms/);
+        return true;
+      },
+    );
+    assert.equal(existsSync(join(lock, 'owner.json')), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource sync reclaims an over-age lock despite a reused live PID', () => {
+  const root = fixture();
+  try {
+    const lock = join(root, 'target.oh-my-sdd-sync.lock');
+    mkdirSync(lock, { recursive: true });
+    writeFileSync(join(lock, 'owner.json'), JSON.stringify({
+      ownerPid: process.pid,
+      createdAt: 1,
+      token: 'possibly-reused-pid',
+    }));
+
+    let ran = false;
+    withSyncLock(lock, () => { ran = true; }, {
+      timeoutMs: 100,
+      pollMs: 10,
+      staleThresholdMs: 50,
+      now: () => 1_000,
+    });
+
+    assert.equal(ran, true);
+    assert.equal(existsSync(lock), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
