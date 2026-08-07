@@ -794,13 +794,19 @@ test('resource sync waits for an existing destination lock before replacing it',
       `import { syncResourceTree } from ${JSON.stringify(moduleUrl)}; process.stdout.write('ready\\n'); syncResourceTree(${JSON.stringify(src)}, ${JSON.stringify(dst)});`,
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
+    let childStdout = '';
+    let childStderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { childStdout += chunk; });
+    child.stderr.on('data', (chunk) => { childStderr += chunk; });
     await once(child.stdout, 'data');
     assert.equal(child.exitCode, null, 'sync must remain blocked while the lock exists');
     assert.equal(existsSync(dst), false);
 
     rmSync(lock, { recursive: true, force: true });
     const [code] = await once(child, 'exit');
-    assert.equal(code, 0);
+    assert.equal(code, 0, `child exited with ${code}; stdout: ${childStdout}; stderr: ${childStderr}`);
     assert.equal(readFileSync(join(dst, 'new.txt'), 'utf8'), 'new');
   } finally {
     rmSync(root, { recursive: true, force: true });
