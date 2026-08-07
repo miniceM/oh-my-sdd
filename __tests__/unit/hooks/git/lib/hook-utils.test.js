@@ -23,7 +23,6 @@ import {
 function setupGitRepo() {
   const dir = mkdtempSync(path.join(tmpdir(), 'oms-hook-utils-'));
   execFileSync('git', ['init'], { cwd: dir, stdio: 'ignore' });
-  execFileSync('git', ['branch', '-m', 'main'], { cwd: dir, stdio: 'ignore' });
   execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: dir, stdio: 'ignore' });
   execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir, stdio: 'ignore' });
   return dir;
