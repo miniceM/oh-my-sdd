@@ -2,9 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { copyDirSafe } from '../../../opencode/scripts/postinstall.mjs';
@@ -689,6 +689,82 @@ test('resource sync preserves the existing destination when staging copy fails',
       () => syncResourceTree(src, dst, { cpSync: () => { throw new Error('injected copy failure'); } }),
       /injected copy failure/,
     );
+    assert.equal(readFileSync(join(dst, 'old.txt'), 'utf8'), 'old');
+    assert.equal(existsSync(join(dst, 'new.txt')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource sync retries a transient Windows rename lock and still replaces the destination', () => {
+  const root = fixture();
+  try {
+    const src = join(root, 'src');
+    const dst = join(root, 'dst');
+    mkdirSync(src, { recursive: true });
+    mkdirSync(dst, { recursive: true });
+    writeFileSync(join(src, 'new.txt'), 'new');
+    writeFileSync(join(dst, 'old.txt'), 'old');
+
+    const realRename = renameSync;
+    let backupAttempts = 0;
+    syncResourceTree(src, dst, {
+      renameAttempts: 5,
+      renameDelayMs: 1,
+      renameSync: (from, to) => {
+        if (to.includes('.oh-my-sdd-sync.backup-')) {
+          backupAttempts += 1;
+          if (backupAttempts === 1) {
+            const error = new Error('injected EPERM rename lock');
+            error.code = 'EPERM';
+            throw error;
+          }
+        }
+        return realRename(from, to);
+      },
+    });
+
+    assert.equal(backupAttempts, 2, 'the destination rename should retry once after EPERM');
+    assert.equal(readFileSync(join(dst, 'new.txt'), 'utf8'), 'new');
+    assert.equal(existsSync(join(dst, 'old.txt')), false);
+    assert.deepEqual(
+      readdirSync(dirname(dst)).filter((name) => name.startsWith(`${basename(dst)}.oh-my-sdd-sync.`)),
+      [],
+      'no staging, backup, or lock residue may survive the retried sync',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource sync fails loudly when the destination rename stays locked and preserves it', () => {
+  const root = fixture();
+  try {
+    const src = join(root, 'src');
+    const dst = join(root, 'dst');
+    mkdirSync(src, { recursive: true });
+    mkdirSync(dst, { recursive: true });
+    writeFileSync(join(src, 'new.txt'), 'new');
+    writeFileSync(join(dst, 'old.txt'), 'old');
+
+    let attempts = 0;
+    assert.throws(
+      () => syncResourceTree(src, dst, {
+        renameAttempts: 3,
+        renameDelayMs: 1,
+        renameSync: (from, to) => {
+          if (to.includes('.oh-my-sdd-sync.backup-')) {
+            attempts += 1;
+            const error = new Error('destination locked');
+            error.code = 'EPERM';
+            throw error;
+          }
+          return renameSync(from, to);
+        },
+      }),
+      /destination locked/,
+    );
+    assert.equal(attempts, 3, 'the destination rename should exhaust its retries');
     assert.equal(readFileSync(join(dst, 'old.txt'), 'utf8'), 'old');
     assert.equal(existsSync(join(dst, 'new.txt')), false);
   } finally {
