@@ -8,6 +8,7 @@ import {
   resourceDigest,
   writeOwnershipManifest,
 } from '../../../opencode/scripts/resource-ownership.mjs';
+import { parseNpmPackJson } from '../../helpers/opencode-e2e-harness.js';
 
 const worktreeRoot = process.cwd();
 
@@ -121,9 +122,8 @@ test('packed OpenCode package installs from a clean tarball and its wrapper full
   };
 
   try {
-    const packed = JSON.parse(runNpm([
+    const packed = parseNpmPackJson(runNpm([
       'pack',
-      '--ignore-scripts',
       '--json',
       '--pack-destination',
       packDir,
@@ -134,6 +134,13 @@ test('packed OpenCode package installs from a clean tarball and its wrapper full
       stdio: ['ignore', 'pipe', 'pipe'],
     }));
     const tarball = path.join(packDir, packed[0].filename);
+    const tarballFiles = new Set(packed[0].files.map((file) => file.path));
+    for (const requiredRuntimeFile of ['lib/rules.js', 'lib/iam-cli.js', 'lib/dop-client.js']) {
+      assert.ok(
+        tarballFiles.has(requiredRuntimeFile),
+        `packed OpenCode plugin must include hook runtime dependency: ${requiredRuntimeFile}`,
+      );
+    }
 
     runNpm([
       'install',

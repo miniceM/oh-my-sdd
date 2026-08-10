@@ -11,6 +11,7 @@
 //   - Write:    tool_input.content            (full new file body)
 //   - Edit:     tool_input.newString         (replacement fragment)
 //   - MultiEdit: tool_input.edits[].newString (concatenated)
+//   - Bash:     tool_input.command            (shell command)
 //
 // SOFT rules that scan whole-file structure (readme-missing-quickstart,
 // public-api-missing-docstring) are best-effort under Edit/MultiEdit — they
@@ -26,7 +27,7 @@ import { error } from '../lib/log.js';
 const STDIN_TIMEOUT_MS = 5_000; // 增大超时,避免大型 payload 竞争
 
 // 规则引擎扫描 content 的工具集合。Claude Code 协议保证 tool_name 是 PascalCase。
-const TRACKED_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
+const TRACKED_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'Bash']);
 
 async function readStdin() {
   return new Promise((resolve) => {
@@ -48,6 +49,9 @@ async function readStdin() {
 
 function extractContentAndPath(toolName, toolInput) {
   if (!toolInput || typeof toolInput !== 'object') return null;
+  if (toolName === 'Bash') {
+    return { content: typeof toolInput.command === 'string' ? toolInput.command : '', filePath: '' };
+  }
   const filePath = toolInput.filePath;
   if (!filePath || typeof filePath !== 'string') return null;
 

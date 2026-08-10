@@ -62,6 +62,32 @@ test('pre-tool-use denies MultiEdit with rm -rf / in any edit', async () => {
   assert.match(out.hookSpecificOutput?.permissionDecisionReason, /destructive-rm-rf-root/);
 });
 
+test('pre-tool-use denies Bash with rm -rf /', async () => {
+  const result = await runHook(HOOK_PATH, {
+    session_id: 'test',
+    tool_name: 'Bash',
+    tool_input: { command: 'rm -rf /' },
+  });
+
+  assert.equal(result.exitCode, 0);
+  const out = JSON.parse(result.stdout);
+  assert.equal(out.hookSpecificOutput?.permissionDecision, 'deny');
+  assert.match(out.hookSpecificOutput?.permissionDecisionReason, /destructive-rm-rf-root/);
+});
+
+test('pre-tool-use denies Bash force-push to main', async () => {
+  const result = await runHook(HOOK_PATH, {
+    session_id: 'test',
+    tool_name: 'Bash',
+    tool_input: { command: 'git push --force origin main' },
+  });
+
+  assert.equal(result.exitCode, 0);
+  const out = JSON.parse(result.stdout);
+  assert.equal(out.hookSpecificOutput?.permissionDecision, 'deny');
+  assert.match(out.hookSpecificOutput?.permissionDecisionReason, /destructive-git-force-main/);
+});
+
 test('pre-tool-use denies direct .env file edit (filePattern only)', async () => {
   const result = await runHook(HOOK_PATH, {
     session_id: 'test',

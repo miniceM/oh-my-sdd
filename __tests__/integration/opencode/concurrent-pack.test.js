@@ -33,7 +33,7 @@ function parsePackManifest(output) {
 
 function createRepositoryFixture(root) {
   const repository = join(root, 'repository');
-  for (const name of ['skills', 'content', 'hooks', 'opencode']) {
+  for (const name of ['skills', 'content', 'hooks', 'lib', 'opencode']) {
     cpSync(join(SOURCE_ROOT, name), join(repository, name), {
       recursive: true,
       filter: (source) => !['node_modules', '.git', '.worktrees'].includes(source.split(/[\\/]/).at(-1)),
@@ -43,7 +43,7 @@ function createRepositoryFixture(root) {
   // Drop every pre-copied mirror so the pack's prepack sync is the only way
   // these destinations can exist; the later assertions then prove the
   // concurrent syncs materialized complete trees.
-  for (const rel of ['skills', '.opencode/skills', '.agents/skills', '.agents/command', 'content', 'hooks']) {
+  for (const rel of ['skills', '.opencode/skills', '.agents/skills', '.agents/command', 'content', 'hooks', 'lib']) {
     rmSync(join(opencodeDir, rel), { recursive: true, force: true });
   }
   const packagePath = join(opencodeDir, 'package.json');
@@ -133,7 +133,7 @@ test('concurrent package syncs are serialized and leave the worktree unchanged',
           `package must include delegated-skills/${skill}/SKILL.md`,
         );
       }
-      for (const required of ['content/enterprise-baseline.md', 'hooks/hooks.json']) {
+      for (const required of ['content/enterprise-baseline.md', 'hooks/hooks.json', 'lib/rules.js']) {
         assert.ok(
           files.includes(required),
           `package must include ${required} materialized by prepack sync`,
@@ -163,6 +163,11 @@ test('concurrent package syncs are serialized and leave the worktree unchanged',
       directoryDigest(join(opencodeDir, 'hooks')),
       directoryDigest(join(repository, 'hooks')),
       'hooks sync destination must mirror its source',
+    );
+    assert.equal(
+      directoryDigest(join(opencodeDir, 'lib')),
+      directoryDigest(join(repository, 'lib')),
+      'lib sync destination must mirror its source',
     );
     assert.equal(
       directoryDigest(join(opencodeDir, '.agents', 'command')),

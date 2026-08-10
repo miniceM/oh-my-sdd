@@ -100,9 +100,17 @@ test('mappers: mapPreToolUse tracked tool returns mapped payload', () => {
   });
 });
 
-test('mappers: mapPreToolUse untracked tool returns null', () => {
-  const out = mapPreToolUse({ tool: 'bash', input: {}, sessionID: 's1' });
-  assert.equal(out, null);
+test('mappers: mapPreToolUse bash maps to the shared Bash hard-rule gate', () => {
+  const out = mapPreToolUse({
+    tool: 'bash',
+    input: { command: 'rm -rf /' },
+    sessionID: 's1',
+  });
+  assert.deepEqual(out, {
+    tool_name: 'Bash',
+    tool_input: { command: 'rm -rf /' },
+    session_id: 's1',
+  });
 });
 
 test('mappers: mapPreToolUse applies new_string normalization', () => {
