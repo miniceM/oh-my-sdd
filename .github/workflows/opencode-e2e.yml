@@ -1,0 +1,41 @@
+name: OpenCode E2E
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  opencode-e2e:
+    name: OpenCode E2E (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      OMS_OPENCODE_E2E: '1'
+      OMS_MOCK_USER: ci
+      OPENCODE_PACKAGE: opencode-ai
+      OPENCODE_VERSION: 1.18.15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Put repository mocks first on PATH
+        shell: bash
+        run: echo "${{ github.workspace }}/scripts" >> "$GITHUB_PATH"
+      - run: npm ci --ignore-scripts
+      - run: npm ci --prefix opencode --ignore-scripts
+      - run: npm run test:e2e:opencode
+      - name: Upload OpenCode E2E artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-e2e-${{ matrix.os }}
+          path: .e2e-artifacts
+          include-hidden-files: true
+          if-no-files-found: warn

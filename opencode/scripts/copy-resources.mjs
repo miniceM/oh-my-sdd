@@ -9,6 +9,7 @@
  *                   → opencode/.agents/skills/     (Claude Code / Codex convention)
  *   <repo>/content/   → opencode/content/          (baseline + welcome + auth)
  *   <repo>/hooks/     → opencode/hooks/            (PreToolUse etc. runtime hooks)
+ *   <repo>/lib/       → opencode/lib/              (runtime dependencies of hooks)
  *
  * Command resources:
  *   - opencode/.opencode/commands/    ← slash command definitions (authored here)
@@ -48,6 +49,7 @@ const SYNC_MAP = [
   ['skills', '.agents/skills'],
   ['content', 'content'],
   ['hooks', 'hooks'],
+  ['lib', 'lib'],
 ];
 
 // Files / dirs to skip inside any synced tree (never escape parent repo noise).

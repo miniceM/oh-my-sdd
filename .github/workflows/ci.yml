@@ -21,6 +21,7 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: node --version
       - run: npm install --ignore-scripts
+      - run: npm ci --prefix opencode --ignore-scripts
       - run: npm test
       - run: npm run lint:baseline
 
@@ -32,6 +33,7 @@ jobs:
         with:
           node-version: 22
       - run: npm install --ignore-scripts
+      - run: npm ci --prefix opencode --ignore-scripts
       - run: npm run test:coverage
 
   smoke-check:

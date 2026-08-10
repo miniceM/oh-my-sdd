@@ -1,6 +1,6 @@
 ---
 description: SDD Ring 5 - 两阶段：默认创建 PR 并委托 superpowers:requesting-code-review；--finalize 在 PR merge 后做 openspec archive。用户说"创建 PR"/"code review"/"归档"/"跑测试"/"finalize"时使用。
-argument-hint: [slug 或 change-id] 或 --finalize [slug 或 change-id]
+argument-hint: "[slug 或 change-id] 或 --finalize [slug 或 change-id]"
 ---
 
 # /sdd-review — SDD 第 5 环：评审与归档

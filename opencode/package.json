@@ -21,6 +21,7 @@
     "oms-skills",
     "delegated-skills",
     "hooks",
+    "lib",
     "content",
     "scripts",
     "README.md"

@@ -29,6 +29,9 @@ export const TOOL_MAP: Record<string, string> = {
   // Common variants
   multiedit: 'MultiEdit',
   applypatch: 'MultiEdit',
+  // Shell commands carry hard-rule patterns such as rm -rf / and force-push.
+  bash: 'Bash',
+  Bash: 'Bash',
 };
 
 export const TRACKED_TOOLS = new Set(Object.values(TOOL_MAP));

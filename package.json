@@ -21,6 +21,7 @@
     "prepublishOnly": "npm run build && npm run build:opencode",
     "test": "node scripts/run-tests.js",
     "test:coverage": "node scripts/run-tests.js --coverage",
+    "test:e2e:opencode": "node --test __tests__/integration/opencode/real-cli-e2e.test.js",
     "test:glob": "node --test \"__tests__/**/*.test.js\"",
     "lint:baseline": "node scripts/check-baseline-tokens.mjs"
   },

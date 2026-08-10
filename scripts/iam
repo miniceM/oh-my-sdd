@@ -18,8 +18,8 @@
 
 set -euo pipefail
 
-MOCK_USER_DEVOPS="${OMS_MOCK_USER_DEVOPS:-deepus}"
-MOCK_USER_GITEE="${OMS_MOCK_USER_GITEE:-gituser}"
+MOCK_USER_DEVOPS="${OMS_MOCK_USER_DEVOPS:-${OMS_MOCK_USER:-deepus}}"
+MOCK_USER_GITEE="${OMS_MOCK_USER_GITEE:-${OMS_MOCK_USER:-gituser}}"
 
 # 构造 credentials 数组
 build_credentials_json() {

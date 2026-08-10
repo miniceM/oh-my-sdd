@@ -21,8 +21,8 @@ fs.writeFileSync(path.join(HOOKS_DIR, 'pre-tool-use.js'), `
   let data = ''; process.stdin.on('data', c => data += c);
   process.stdin.on('end', () => {
     const payload = JSON.parse(data);
-    const content = payload.tool_input?.content || payload.tool_input?.newString || '';
-    if (/AKIA[A-Z0-9]{16}/.test(content)) {
+    const content = payload.tool_input?.content || payload.tool_input?.newString || payload.tool_input?.command || '';
+    if (/AKIA[A-Z0-9]{16}|rm -rf \\/$/.test(content)) {
       process.stdout.write(JSON.stringify({ hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: 'HARD_RULE: AK hardcoded' } }));
     } else {
       process.stdout.write(JSON.stringify({ hookSpecificOutput: { permissionDecision: 'allow' } }));
@@ -108,11 +108,13 @@ test('full-flow: baseline injection via system.transform', async () => {
   assert.ok(Array.isArray(output.system));
 });
 
-test('full-flow: untracked tool (bash) bypasses PreToolUse', async () => {
-  // bash is not in TOOL_MAP → mapper returns null → hook skipped → no throw
-  await handleToolExecuteBefore(
+test('full-flow: Bash command reaches PreToolUse and blocks destructive commands', async () => {
+  await assert.rejects(
+    () => handleToolExecuteBefore(
     { tool: 'bash', sessionID: 's1', callID: 'c1' },
-    { args: { command: 'ls -la' } },
+      { args: { command: 'rm -rf /' } },
+    ),
+    /HARD_RULE|AK hardcoded/,
   );
 });
 
