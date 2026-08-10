@@ -25,6 +25,7 @@ test('OpenCode E2E harness isolates every mutable OpenCode and npm path', () => 
     assert.equal(env.XDG_CONFIG_HOME, join(root, 'xdg-config'));
     assert.equal(env.OPENCODE_CONFIG, join(root, 'xdg-config', 'opencode', 'opencode.json'));
     assert.equal(env.OPENCODE_CONFIG_DIR, join(root, 'xdg-config', 'opencode'));
+    assert.equal(env.OPENCODE_DISABLE_EXTERNAL_SKILLS, '1');
     assert.ok(env.PATH.startsWith(join(process.cwd(), 'scripts')));
     assert.equal(env.OMS_E2E_TEST_SECRET, undefined);
   } finally {
