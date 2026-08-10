@@ -14,16 +14,22 @@ import {
 
 test('OpenCode E2E harness isolates every mutable OpenCode and npm path', () => {
   const root = mkdtempSync(join(tmpdir(), 'oms-opencode-e2e-env-'));
+  const previousSentinel = process.env.OMS_E2E_TEST_SECRET;
+  process.env.OMS_E2E_TEST_SECRET = 'must-not-reach-opencode';
   try {
     const env = buildE2eEnv({ repoRoot: process.cwd(), root });
     assert.equal(env.HOME, join(root, 'home'));
     assert.equal(env.USERPROFILE, join(root, 'home'));
     assert.equal(env.npm_config_prefix, join(root, 'prefix'));
     assert.equal(env.npm_config_cache, join(root, 'npm-cache'));
-    assert.equal(env.OPENCODE_CONFIG, join(root, 'opencode.json'));
-    assert.equal(env.OPENCODE_CONFIG_DIR, join(root, 'opencode-config'));
+    assert.equal(env.XDG_CONFIG_HOME, join(root, 'xdg-config'));
+    assert.equal(env.OPENCODE_CONFIG, join(root, 'xdg-config', 'opencode', 'opencode.json'));
+    assert.equal(env.OPENCODE_CONFIG_DIR, join(root, 'xdg-config', 'opencode'));
     assert.ok(env.PATH.startsWith(join(process.cwd(), 'scripts')));
+    assert.equal(env.OMS_E2E_TEST_SECRET, undefined);
   } finally {
+    if (previousSentinel === undefined) delete process.env.OMS_E2E_TEST_SECRET;
+    else process.env.OMS_E2E_TEST_SECRET = previousSentinel;
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -49,11 +55,18 @@ test('CI workflows install OpenCode build dependencies without running root life
   }
 });
 
+test('OpenCode E2E workflow uploads hidden failure artifacts', () => {
+  const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', 'opencode-e2e.yml'), 'utf8');
+  assert.match(workflow, /include-hidden-files:\s*true/);
+});
+
 test('OpenCode E2E harness loader re-exports only the globally installed tarball plugin', () => {
   const root = mkdtempSync(join(tmpdir(), 'oms-opencode-e2e-loader-'));
+  const configDir = join(root, 'xdg-config', 'opencode');
   const packageRoot = join(process.cwd(), 'opencode');
   try {
-    const loader = writePluginLoader({ root, packageRoot });
+    const loader = writePluginLoader({ configDir, packageRoot });
+    assert.equal(loader, join(configDir, 'plugins', 'oh-my-sdd-e2e.js'));
     assert.ok(existsSync(loader));
     const source = readFileSync(loader, 'utf8');
     assert.match(source, /export \{ OhMySddPlugin \}/);
@@ -71,7 +84,7 @@ test('OpenCode E2E sandbox creates disposable project and artifact roots', () =>
     assert.ok(existsSync(sandbox.home));
     assert.ok(existsSync(sandbox.projectDir));
     assert.ok(existsSync(sandbox.artifactsDir));
-    assert.equal(sandbox.env.OPENCODE_CONFIG, join(sandbox.root, 'opencode.json'));
+    assert.equal(sandbox.env.OPENCODE_CONFIG, join(sandbox.root, 'xdg-config', 'opencode', 'opencode.json'));
   } finally {
     sandbox.cleanup();
     rmSync(sandbox.artifactsDir, { recursive: true, force: true });

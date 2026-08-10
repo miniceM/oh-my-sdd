@@ -37,4 +37,5 @@ jobs:
         with:
           name: opencode-e2e-${{ matrix.os }}
           path: .e2e-artifacts
+          include-hidden-files: true
           if-no-files-found: warn

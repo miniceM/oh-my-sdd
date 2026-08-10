@@ -18,27 +18,60 @@ const packageName = process.env.OPENCODE_PACKAGE ?? 'opencode-ai';
 const version = process.env.OPENCODE_VERSION;
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
+function quoteForCmd(value) {
+  return `"${String(value).replaceAll('"', '""')}"`;
+}
+
+function npmInvocation(args) {
+  if (process.env.npm_execpath) {
+    return { command: process.execPath, args: [process.env.npm_execpath, ...args] };
+  }
+  if (process.platform === 'win32') {
+    return {
+      command: process.env.ComSpec ?? 'cmd.exe',
+      args: ['/d', '/s', '/c', [npm, ...args].map(quoteForCmd).join(' ')],
+    };
+  }
+  return { command: npm, args };
+}
+
+function execNpm(args, options) {
+  const invocation = npmInvocation(args);
+  return execFileSync(invocation.command, invocation.args, options);
+}
+
 function run(command, args, { timeoutMs = 30_000, ...options }) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { ...options, shell: false });
+    const child = spawn(command, args, { ...options, shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (chunk) => { stdout += chunk; });
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     let timedOut = false;
+    let forceKill;
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill('SIGTERM');
+      forceKill = setTimeout(() => {
+        if (child.exitCode === null) child.kill('SIGKILL');
+      }, 1_000);
     }, timeoutMs);
     child.once('error', (error) => {
       clearTimeout(timer);
+      clearTimeout(forceKill);
       reject(error);
     });
     child.once('close', (code) => {
       clearTimeout(timer);
+      clearTimeout(forceKill);
       resolve({ code, stdout, stderr, timedOut });
     });
   });
+}
+
+function runNpm(args, options) {
+  const invocation = npmInvocation(args);
+  return run(invocation.command, invocation.args, options);
 }
 
 function fail(phase, result, sandbox) {
@@ -66,6 +99,12 @@ function stream(response, delta, finishReason = null) {
 async function startProvider(transcript, projectDir) {
   const seenCases = new Set();
   const server = createServer((request, response) => {
+    if (request.method === 'GET' && request.url?.endsWith('/models')) {
+      transcript.push({ method: request.method, url: request.url, marker: null, body: '' });
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ data: [{ id: 'gpt-4o-mini', object: 'model' }] }));
+      return;
+    }
     let body = '';
     request.on('data', (chunk) => { body += chunk; });
     request.on('end', () => {
@@ -80,7 +119,7 @@ async function startProvider(transcript, projectDir) {
         rm: ['bash', { command: 'rm -rf /' }],
         force: ['bash', { command: 'git push --force origin main' }],
       };
-      if (marker && !seenCases.has(marker)) {
+      if (marker && body.includes('"tools":') && !seenCases.has(marker)) {
         seenCases.add(marker);
         const [name, args] = scriptedTools[marker];
         stream(response, {
@@ -116,8 +155,8 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
   let provider;
   let passed = false;
   try {
-    execFileSync(npm, ['ci', '--prefix', 'opencode'], { cwd: process.cwd(), stdio: 'inherit' });
-    const packed = parseNpmPackJson(execFileSync(npm, [
+    execNpm(['ci', '--prefix', 'opencode'], { cwd: process.cwd(), stdio: 'inherit' });
+    const packed = parseNpmPackJson(execNpm([
       'pack', '--json', '--pack-destination', sandbox.packDir,
     ], {
       cwd: join(process.cwd(), 'opencode'), env: sandbox.env, encoding: 'utf8',
@@ -125,21 +164,21 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
     const tarball = join(sandbox.packDir, packed[0].filename);
     writeFileSync(join(sandbox.artifactsDir, 'tarball-manifest.json'), JSON.stringify(packed, null, 2));
 
-    const install = await run(npm, [
+    const install = await runNpm([
       'install', '--global', '--foreground-scripts', '--legacy-peer-deps', tarball,
     ], { env: sandbox.env, cwd: sandbox.projectDir });
     writeFileSync(join(sandbox.artifactsDir, 'plugin-install.log'), `${install.stdout}\n${install.stderr}`);
     fail('install-plugin-tarball', install, sandbox);
     assert.match(`${install.stdout}\n${install.stderr}`, /failed=0/, 'postinstall must report no resource failures');
 
-    const npmRoot = execFileSync(npm, ['root', '--global'], { env: sandbox.env, encoding: 'utf8' }).trim();
+    const npmRoot = execNpm(['root', '--global'], { env: sandbox.env, encoding: 'utf8' }).trim();
     const packageRoot = join(npmRoot, '@cli-tools', 'oh-my-sdd-opencode');
-    writePluginLoader({ root: sandbox.root, packageRoot });
+    const loader = writePluginLoader({ configDir: sandbox.env.OPENCODE_CONFIG_DIR, packageRoot });
     assert.deepEqual(publishedCommands(packageRoot), [
       'sdd-apply', 'sdd-doc', 'sdd-plan', 'sdd-review', 'sdd-spec', 'sdd-task',
     ]);
 
-    const cliInstall = await run(npm, [
+    const cliInstall = await runNpm([
       'install', '--global', '--foreground-scripts', `${packageName}@${version}`,
     ], { env: sandbox.env, cwd: sandbox.projectDir });
     writeFileSync(join(sandbox.artifactsDir, 'opencode-install.log'), `${cliInstall.stdout}\n${cliInstall.stderr}`);
@@ -149,12 +188,15 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
     writeFileSync(sandbox.env.OPENCODE_CONFIG, JSON.stringify({
       '$schema': 'https://opencode.ai/config.json',
       provider: {
-        openai: {
+        e2e: {
+          npm: '@ai-sdk/openai-compatible',
+          name: 'E2E local provider',
           options: { apiKey: 'e2e-not-a-secret', baseURL: provider.baseURL },
           models: { 'gpt-4o-mini': { name: 'gpt-4o-mini' } },
         },
       },
-      model: 'openai/gpt-4o-mini',
+      model: 'e2e/gpt-4o-mini',
+      permission: { edit: 'allow', bash: 'allow', external_directory: 'allow' },
       autoupdate: false,
     }, null, 2));
 
@@ -163,7 +205,7 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
       : join(sandbox.prefix, 'bin', 'opencode');
     for (const command of publishedCommands(packageRoot)) {
       const result = await run(executable, [
-        'run', '--format', 'json', '--command', command, 'E2E command discovery',
+        'run', '--print-logs', '--format', 'json', '--command', command, 'E2E command discovery',
       ], { env: sandbox.env, cwd: sandbox.projectDir, timeoutMs: 30_000 });
       writeFileSync(join(sandbox.artifactsDir, `${command}.log`), `${result.stdout}\n${result.stderr}`);
       fail(`command-${command}`, result, sandbox);
@@ -172,7 +214,7 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
     for (const [name, expectedDecision] of [
       ['safe', 'allow'], ['aws', 'deny'], ['openai', 'deny'], ['env', 'deny'], ['rm', 'deny'], ['force', 'deny'],
     ]) {
-      const result = await run(executable, ['run', '--format', 'json', `E2E_CASE=${name}`], {
+      const result = await run(executable, ['run', '--print-logs', '--format', 'json', `E2E_CASE=${name}`], {
         env: sandbox.env, cwd: sandbox.projectDir, timeoutMs: 30_000,
       });
       const output = `${result.stdout}\n${result.stderr}`;
@@ -189,6 +231,7 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
     passed = true;
   } finally {
     if (provider) await provider.close();
+    writeFileSync(join(sandbox.artifactsDir, 'provider-transcript.json'), JSON.stringify(transcript, null, 2));
     sandbox.cleanup();
     if (passed) rmSync(sandbox.artifactsDir, { recursive: true, force: true });
   }

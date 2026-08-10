@@ -5,14 +5,20 @@ import { pathToFileURL } from 'node:url';
 
 export function buildE2eEnv({ repoRoot, root }) {
   const home = join(root, 'home');
-  const configDir = join(root, 'opencode-config');
+  const xdgConfigHome = join(root, 'xdg-config');
+  const configDir = join(xdgConfigHome, 'opencode');
+  const inherited = {};
+  for (const name of ['PATH', 'ComSpec', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'TEMP', 'TMP', 'TMPDIR', 'WINDIR']) {
+    if (process.env[name]) inherited[name] = process.env[name];
+  }
   return {
-    ...process.env,
+    ...inherited,
     HOME: home,
     USERPROFILE: home,
     npm_config_prefix: join(root, 'prefix'),
     npm_config_cache: join(root, 'npm-cache'),
-    OPENCODE_CONFIG: join(root, 'opencode.json'),
+    XDG_CONFIG_HOME: xdgConfigHome,
+    OPENCODE_CONFIG: join(configDir, 'opencode.json'),
     OPENCODE_CONFIG_DIR: configDir,
     OPENCODE_DISABLE_AUTOUPDATE: '1',
     OPENCODE_DISABLE_MODELS_FETCH: '1',
@@ -58,12 +64,12 @@ export function publishedCommands(packageRoot) {
     .sort();
 }
 
-export function writePluginLoader({ root, packageRoot }) {
+export function writePluginLoader({ configDir, packageRoot }) {
   const entry = resolve(packageRoot, 'dist', 'index.js');
   if (!existsSync(entry)) throw new Error(`Installed plugin entry missing: ${entry}`);
-  const pluginsDir = join(root, 'opencode-config', 'plugins');
+  const pluginsDir = join(configDir, 'plugins');
   mkdirSync(pluginsDir, { recursive: true });
-  const loader = join(pluginsDir, 'oh-my-sdd-e2e.mjs');
+  const loader = join(pluginsDir, 'oh-my-sdd-e2e.js');
   writeFileSync(loader, `export { OhMySddPlugin } from '${pathToFileURL(entry).href}';\n`);
   return loader;
 }
