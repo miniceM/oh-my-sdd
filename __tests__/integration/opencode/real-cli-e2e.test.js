@@ -20,6 +20,7 @@ const packageName = process.env.OPENCODE_PACKAGE ?? 'opencode-ai';
 const version = process.env.OPENCODE_VERSION;
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const commandTimeoutMs = process.platform === 'win32' ? 120_000 : 30_000;
+const cliInstallTimeoutMs = 120_000;
 
 function quoteForCmd(value) {
   return `"${String(value).replaceAll('"', '""')}"`;
@@ -208,7 +209,7 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
 
     const cliInstall = await runNpm([
       'install', '--global', '--foreground-scripts', `${packageName}@${version}`,
-    ], { env: sandbox.env, cwd: sandbox.projectDir });
+    ], { env: sandbox.env, cwd: sandbox.projectDir, timeoutMs: cliInstallTimeoutMs });
     writeFileSync(join(sandbox.artifactsDir, 'opencode-install.log'), `${cliInstall.stdout}\n${cliInstall.stderr}`);
     fail('install-opencode-cli', cliInstall, sandbox);
 
