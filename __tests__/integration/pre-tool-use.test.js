@@ -104,6 +104,22 @@ test('pre-tool-use denies direct .env file edit (filePattern only)', async () =>
   assert.match(out.hookSpecificOutput?.permissionDecisionReason, /env-file-edit/);
 });
 
+test('pre-tool-use denies a Windows-path .env file edit', async () => {
+  const result = await runHook(HOOK_PATH, {
+    session_id: 'test',
+    tool_name: 'Write',
+    tool_input: {
+      filePath: 'C:\\workspace\\project\\.env',
+      content: 'SECRET=value\n',
+    },
+  });
+
+  assert.equal(result.exitCode, 0);
+  const out = JSON.parse(result.stdout);
+  assert.equal(out.hookSpecificOutput?.permissionDecision, 'deny');
+  assert.match(out.hookSpecificOutput?.permissionDecisionReason, /env-file-edit/);
+});
+
 test('pre-tool-use allows .env.example (filePattern negative)', async () => {
   const result = await runHook(HOOK_PATH, {
     session_id: 'test',
