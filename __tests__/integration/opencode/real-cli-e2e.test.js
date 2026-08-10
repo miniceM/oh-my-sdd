@@ -22,6 +22,16 @@ function quoteForCmd(value) {
   return `"${String(value).replaceAll('"', '""')}"`;
 }
 
+function commandInvocation(command, args) {
+  if (process.platform === 'win32' && command.toLowerCase().endsWith('.cmd')) {
+    return {
+      command: process.env.ComSpec ?? 'cmd.exe',
+      args: ['/d', '/s', '/c', [command, ...args].map(quoteForCmd).join(' ')],
+    };
+  }
+  return { command, args };
+}
+
 function npmInvocation(args) {
   if (process.env.npm_execpath) {
     return { command: process.execPath, args: [process.env.npm_execpath, ...args] };
@@ -42,7 +52,8 @@ function execNpm(args, options) {
 
 function run(command, args, { timeoutMs = 30_000, ...options }) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { ...options, shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+    const invocation = commandInvocation(command, args);
+    const child = spawn(invocation.command, invocation.args, { ...options, shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (chunk) => { stdout += chunk; });
