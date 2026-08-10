@@ -23,7 +23,6 @@ export function buildE2eEnv({ repoRoot, root }) {
     OPENCODE_DISABLE_AUTOUPDATE: '1',
     OPENCODE_DISABLE_MODELS_FETCH: '1',
     OPENCODE_DISABLE_LSP_DOWNLOAD: '1',
-    OPENCODE_DISABLE_EXTERNAL_SKILLS: '1',
     PATH: `${join(repoRoot, 'scripts')}${delimiter}${process.env.PATH ?? ''}`,
   };
 }

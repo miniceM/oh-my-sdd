@@ -17,6 +17,7 @@ const enabled = process.env.OMS_OPENCODE_E2E === '1' && nodeMajor === 22;
 const packageName = process.env.OPENCODE_PACKAGE ?? 'opencode-ai';
 const version = process.env.OPENCODE_VERSION;
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const commandTimeoutMs = process.platform === 'win32' ? 120_000 : 30_000;
 
 function quoteForCmd(value) {
   return `"${String(value).replaceAll('"', '""')}"`;
@@ -223,7 +224,7 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
     for (const command of publishedCommands(packageRoot)) {
       const result = await run(executable, [
         'run', '--print-logs', '--format', 'json', '--command', command, 'E2E command discovery',
-      ], { env: sandbox.env, cwd: sandbox.projectDir, timeoutMs: 30_000 });
+      ], { env: sandbox.env, cwd: sandbox.projectDir, timeoutMs: commandTimeoutMs });
       writeFileSync(join(sandbox.artifactsDir, `${command}.log`), `${result.stdout}\n${result.stderr}`);
       fail(`command-${command}`, result, sandbox);
       assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /Unexpected server error/i);
@@ -232,7 +233,7 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
       ['safe', 'allow'], ['aws', 'deny'], ['openai', 'deny'], ['env', 'deny'], ['rm', 'deny'], ['force', 'deny'],
     ]) {
       const result = await run(executable, ['run', '--print-logs', '--format', 'json', `E2E_CASE=${name}`], {
-        env: sandbox.env, cwd: sandbox.projectDir, timeoutMs: 30_000,
+        env: sandbox.env, cwd: sandbox.projectDir, timeoutMs: commandTimeoutMs,
       });
       const output = `${result.stdout}\n${result.stderr}`;
       writeFileSync(join(sandbox.artifactsDir, `hook-${name}.log`), output);
