@@ -83,7 +83,7 @@ const DESTRUCTIVE_GIT_FORCE_MAIN = {
 const ENV_FILE_EDIT = {
   rule_id: 'env-file-edit',
   severity: 'hard',
-  filePattern: BASE_NAME_RE(/(^|\/)\.env$/),
+  filePattern: BASE_NAME_RE(/(^|[\\/])\.env$/),
   message: '直接编辑 `.env` 文件 — 秘钥仓库禁止直接落盘，请改用 .env.example',
 };
 
@@ -99,7 +99,7 @@ const ENV_FILE_EDIT = {
 const README_MISSING_QUICKSTART = {
   rule_id: 'readme-missing-quickstart',
   severity: 'soft',
-  filePattern: BASE_NAME_RE(/(^|\/)README\.md$/i),
+  filePattern: BASE_NAME_RE(/(^|[\\/])README\.md$/i),
   check(content) {
     // Best-effort: under Edit/MultiEdit only sees newString fragment, not full file.
     // May false-positive if fragment lacks heading but full file has it.
