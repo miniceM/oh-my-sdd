@@ -7,8 +7,10 @@ import { join } from 'node:path';
 import {
   buildE2eEnv,
   createE2eSandbox,
+  formatE2eFailure,
   parseNpmPackJson,
   publishedCommands,
+  publishedSkills,
   writePluginLoader,
 } from '../../../__tests__/helpers/opencode-e2e-harness.js';
 
@@ -40,6 +42,31 @@ test('OpenCode E2E harness publishes the six supported commands and excludes con
     'sdd-apply', 'sdd-doc', 'sdd-plan', 'sdd-review', 'sdd-spec', 'sdd-task',
   ]);
   assert.ok(!commands.includes('sdd-constitution'));
+});
+
+test('OpenCode E2E harness derives every published OMS skill from the package', () => {
+  const skills = publishedSkills(join(process.cwd(), 'opencode'));
+  assert.ok(skills.length > 0);
+  assert.ok(skills.includes('api-design'));
+  assert.ok(skills.includes('sdd-apply'));
+  assert.ok(!skills.includes('brainstorming'));
+});
+
+test('OpenCode E2E harness formats hook failures with environment and artifact context', () => {
+  const detail = formatE2eFailure({
+    phase: 'hook-env',
+    platform: 'win32',
+    node: 'v22.0.0',
+    opencode: 'opencode-ai@1.18.15',
+    artifactsDir: '/tmp/artifacts',
+    output: 'expected denial was missing',
+  });
+  assert.match(detail, /phase=hook-env/);
+  assert.match(detail, /platform=win32/);
+  assert.match(detail, /node=v22\.0\.0/);
+  assert.match(detail, /opencode=opencode-ai@1\.18\.15/);
+  assert.match(detail, /artifacts=\/tmp\/artifacts/);
+  assert.match(detail, /expected denial was missing/);
 });
 
 test('OpenCode E2E harness extracts npm pack JSON after lifecycle output', () => {

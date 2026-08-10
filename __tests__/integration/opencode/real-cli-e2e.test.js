@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { delimiter, join } from 'node:path';
 
 import {
   createE2eSandbox,
+  formatE2eFailure,
   parseNpmPackJson,
   publishedCommands,
+  publishedSkills,
   writePluginLoader,
 } from '../../helpers/opencode-e2e-harness.js';
 
@@ -86,16 +88,13 @@ function runNpm(args, options) {
 }
 
 function fail(phase, result, sandbox) {
-  const detail = [
-    `phase=${phase}`,
-    `platform=${process.platform}`,
-    `node=${process.version}`,
-    `opencode=${packageName}@${version}`,
-    `artifacts=${sandbox.artifactsDir}`,
-    `timedOut=${result.timedOut ?? false}`,
-    `stdout=${result.stdout}`,
-    `stderr=${result.stderr}`,
-  ].join('\n');
+  const detail = formatE2eFailure({
+    phase,
+    opencode: `${packageName}@${version}`,
+    artifactsDir: sandbox.artifactsDir,
+    timedOut: result.timedOut ?? false,
+    output: `stdout=${result.stdout}\nstderr=${result.stderr}`,
+  });
   assert.equal(result.code, 0, detail);
 }
 
@@ -195,6 +194,17 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
     assert.deepEqual(publishedCommands(packageRoot), [
       'sdd-apply', 'sdd-doc', 'sdd-plan', 'sdd-review', 'sdd-spec', 'sdd-task',
     ]);
+    for (const skill of publishedSkills(packageRoot)) {
+      const installedSkill = join(sandbox.home, '.config', 'opencode', 'skills', skill, 'SKILL.md');
+      const detail = formatE2eFailure({
+        phase: `skill-${skill}`,
+        opencode: `${packageName}@${version}`,
+        artifactsDir: sandbox.artifactsDir,
+        output: `expected installed skill=${installedSkill}`,
+      });
+      assert.ok(existsSync(installedSkill), detail);
+      assert.match(readFileSync(installedSkill, 'utf8'), /\S/, detail);
+    }
 
     const cliInstall = await runNpm([
       'install', '--global', '--foreground-scripts', `${packageName}@${version}`,
@@ -227,7 +237,12 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
       ], { env: sandbox.env, cwd: sandbox.projectDir, timeoutMs: commandTimeoutMs });
       writeFileSync(join(sandbox.artifactsDir, `${command}.log`), `${result.stdout}\n${result.stderr}`);
       fail(`command-${command}`, result, sandbox);
-      assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /Unexpected server error/i);
+      assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /Unexpected server error/i, formatE2eFailure({
+        phase: `command-${command}-startup`,
+        opencode: `${packageName}@${version}`,
+        artifactsDir: sandbox.artifactsDir,
+        output: `${result.stdout}\n${result.stderr}`,
+      }));
     }
     for (const [name, expectedDecision] of [
       ['safe', 'allow'], ['aws', 'deny'], ['openai', 'deny'], ['env', 'deny'], ['rm', 'deny'], ['force', 'deny'],
@@ -237,14 +252,26 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
       });
       const output = `${result.stdout}\n${result.stderr}`;
       writeFileSync(join(sandbox.artifactsDir, `hook-${name}.log`), output);
-      assert.equal(result.timedOut, false, `hook-${name} timed out; artifacts=${sandbox.artifactsDir}`);
+      const detail = formatE2eFailure({
+        phase: `hook-${name}`,
+        opencode: `${packageName}@${version}`,
+        artifactsDir: sandbox.artifactsDir,
+        timedOut: result.timedOut,
+        output,
+      });
+      assert.equal(result.timedOut, false, detail);
       if (expectedDecision === 'allow') {
         fail(`hook-${name}`, result, sandbox);
       } else {
-        assert.match(output, /HARD_RULE violated|hardcoded-|destructive-|env-file-edit/, `hook-${name}: ${output}`);
+        assert.match(output, /HARD_RULE violated|hardcoded-|destructive-|env-file-edit/, detail);
       }
     }
-    assert.ok(transcript.length >= 12, 'scripted provider should observe commands and tool invocations');
+    assert.ok(transcript.length >= 12, formatE2eFailure({
+      phase: 'provider-transcript',
+      opencode: `${packageName}@${version}`,
+      artifactsDir: sandbox.artifactsDir,
+      output: `expected at least 12 requests, actual=${transcript.length}`,
+    }));
     writeFileSync(join(sandbox.artifactsDir, 'provider-transcript.json'), JSON.stringify(transcript, null, 2));
     passed = true;
   } finally {

@@ -65,6 +65,34 @@ export function publishedCommands(packageRoot) {
     .sort();
 }
 
+export function publishedSkills(packageRoot) {
+  const skillsDir = join(packageRoot, 'oms-skills');
+  if (!existsSync(skillsDir)) throw new Error(`Published OMS skill directory missing: ${skillsDir}`);
+  return readdirSync(skillsDir)
+    .filter((name) => existsSync(join(skillsDir, name, 'SKILL.md')))
+    .sort();
+}
+
+export function formatE2eFailure({
+  phase,
+  platform = process.platform,
+  node = process.version,
+  opencode,
+  artifactsDir,
+  output = '',
+  timedOut,
+}) {
+  return [
+    `phase=${phase}`,
+    `platform=${platform}`,
+    `node=${node}`,
+    `opencode=${opencode}`,
+    `artifacts=${artifactsDir}`,
+    ...(timedOut === undefined ? [] : [`timedOut=${timedOut}`]),
+    output,
+  ].filter(Boolean).join('\n');
+}
+
 export function writePluginLoader({ configDir, packageRoot }) {
   const entry = resolve(packageRoot, 'dist', 'index.js');
   if (!existsSync(entry)) throw new Error(`Installed plugin entry missing: ${entry}`);
