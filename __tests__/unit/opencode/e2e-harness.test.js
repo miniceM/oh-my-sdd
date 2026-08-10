@@ -41,6 +41,14 @@ test('OpenCode E2E harness extracts npm pack JSON after lifecycle output', () =>
   assert.deepEqual(packed, [{ filename: 'plugin.tgz' }]);
 });
 
+test('CI workflows install OpenCode build dependencies without running root lifecycle scripts', () => {
+  for (const workflowName of ['ci.yml', 'opencode-e2e.yml']) {
+    const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', workflowName), 'utf8');
+    assert.match(workflow, /npm (?:install|ci) --ignore-scripts/);
+    assert.match(workflow, /npm ci --prefix opencode --ignore-scripts/);
+  }
+});
+
 test('OpenCode E2E harness loader re-exports only the globally installed tarball plugin', () => {
   const root = mkdtempSync(join(tmpdir(), 'oms-opencode-e2e-loader-'));
   const packageRoot = join(process.cwd(), 'opencode');

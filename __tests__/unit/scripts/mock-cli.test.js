@@ -7,7 +7,12 @@ import { join } from 'node:path';
 const root = process.cwd();
 
 test('IAM mock accepts OMS_MOCK_USER as the CI identity shorthand', () => {
-  const output = execFileSync(join(root, 'scripts', 'iam'), ['auth', 'status', '--json'], {
+  const script = join(root, 'scripts', process.platform === 'win32' ? 'iam.cmd' : 'iam');
+  const command = process.platform === 'win32' ? 'cmd.exe' : script;
+  const args = process.platform === 'win32'
+    ? ['/d', '/s', '/c', script, 'auth', 'status', '--json']
+    : ['auth', 'status', '--json'];
+  const output = execFileSync(command, args, {
     env: { ...process.env, OMS_MOCK_USER: 'ci' },
     encoding: 'utf8',
   });

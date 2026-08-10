@@ -28,7 +28,8 @@ jobs:
       - name: Put repository mocks first on PATH
         shell: bash
         run: echo "${{ github.workspace }}/scripts" >> "$GITHUB_PATH"
-      - run: npm ci
+      - run: npm ci --ignore-scripts
+      - run: npm ci --prefix opencode --ignore-scripts
       - run: npm run test:e2e:opencode
       - name: Upload OpenCode E2E artifacts
         if: failure()
