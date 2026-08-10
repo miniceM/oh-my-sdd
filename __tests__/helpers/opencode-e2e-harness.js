@@ -36,6 +36,7 @@ export function createE2eSandbox(repoRoot) {
     prefix: env.npm_config_prefix,
     cache: env.npm_config_cache,
     packDir: join(root, 'pack'),
+    toolchainDir: join(root, 'toolchain'),
     projectDir: join(root, 'project'),
     artifactsDir: join(repoRoot, '.e2e-artifacts', basename(root)),
     env,
@@ -43,7 +44,7 @@ export function createE2eSandbox(repoRoot) {
   };
   for (const directory of [
     sandbox.home, sandbox.prefix, sandbox.cache, sandbox.packDir,
-    sandbox.projectDir, sandbox.artifactsDir, env.OPENCODE_CONFIG_DIR,
+    sandbox.toolchainDir, sandbox.projectDir, sandbox.artifactsDir, env.OPENCODE_CONFIG_DIR,
   ]) mkdirSync(directory, { recursive: true });
   return sandbox;
 }

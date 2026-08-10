@@ -3,7 +3,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { rmSync, writeFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 
 import {
   createE2eSandbox,
@@ -50,11 +50,20 @@ function run(command, args, { timeoutMs = 30_000, ...options }) {
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     let timedOut = false;
     let forceKill;
+    const killTree = () => {
+      if (process.platform === 'win32' && child.pid) {
+        try {
+          execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+          return;
+        } catch { /* Fall through to Node's direct child termination. */ }
+      }
+      child.kill('SIGTERM');
+    };
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGTERM');
+      killTree();
       forceKill = setTimeout(() => {
-        if (child.exitCode === null) child.kill('SIGKILL');
+        if (child.exitCode === null) killTree();
       }, 1_000);
     }, timeoutMs);
     child.once('error', (error) => {
@@ -157,6 +166,13 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
   let passed = false;
   try {
     execNpm(['ci', '--prefix', 'opencode'], { cwd: process.cwd(), stdio: 'inherit' });
+    if (process.platform === 'win32') {
+      execNpm([
+        'install', '--prefix', sandbox.toolchainDir, '--ignore-scripts', '--no-package-lock', '--no-save',
+        '@vscode/ripgrep-win32-x64@1.18.0',
+      ], { cwd: sandbox.projectDir, env: sandbox.env, stdio: 'inherit' });
+      sandbox.env.PATH = `${join(sandbox.toolchainDir, 'node_modules', '@vscode', 'ripgrep-win32-x64', 'bin')}${delimiter}${sandbox.env.PATH}`;
+    }
     const packed = parseNpmPackJson(execNpm([
       'pack', '--json', '--pack-destination', sandbox.packDir,
     ], {
