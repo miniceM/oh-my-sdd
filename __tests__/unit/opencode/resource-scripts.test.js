@@ -70,6 +70,21 @@ test('AGENTS helper removes only its block and deletes an empty plugin file', ()
   }
 });
 
+test('AGENTS helper preserves whitespace-only user content outside its block', () => {
+  const root = fixture();
+  try {
+    const file = join(root, 'AGENTS.md');
+    upsertManagedAgentsBlock(file, '## Rule');
+    writeFileSync(file, ` \n\t${readFileSync(file, 'utf8')}`);
+
+    assert.equal(removeManagedAgentsBlock(file), true);
+    assert.equal(existsSync(file), true);
+    assert.equal(readFileSync(file, 'utf8'), ' \n\t');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('AGENTS helper resolves POSIX and Windows OpenCode config paths', () => {
   assert.equal(getAgentsPath('/home/alice', path.posix), '/home/alice/.config/opencode/AGENTS.md');
   assert.equal(

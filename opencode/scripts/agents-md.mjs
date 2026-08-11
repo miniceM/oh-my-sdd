@@ -35,7 +35,7 @@ export function removeManagedAgentsBlock(file) {
   const existing = readFileSync(file, 'utf8');
   const cleaned = existing.replace(MANAGED_BLOCK_RE, '');
   if (cleaned === existing) return false;
-  if (cleaned.trim().length === 0) rmSync(file, { force: true });
+  if (cleaned.length === 0) rmSync(file, { force: true });
   else writeFileSync(file, cleaned);
   return true;
 }
