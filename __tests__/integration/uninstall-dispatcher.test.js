@@ -64,7 +64,7 @@ test('targeted Claude uninstall is dispatched through the host registry', async 
 
 test('--tool claude uses the adapter for plugin, marketplace, legacy and wrapper cleanup', () => {
   const fakeHome = makeHome('oms-uninstall-claude-');
-  const fakeBin = path.join(fakeHome, 'bin');
+  const fakeCliDir = path.join(fakeHome, 'fake-cli');
   const commandLog = path.join(fakeHome, 'claude-commands.log');
   const claudeDir = path.join(fakeHome, '.claude');
   const legacyPluginDir = path.join(claudeDir, 'plugins', 'oh-my-sdd');
@@ -73,11 +73,11 @@ test('--tool claude uses the adapter for plugin, marketplace, legacy and wrapper
     ? path.join(fakeHome, 'bin')
     : path.join(fakeHome, '.local', 'bin');
 
-  fs.mkdirSync(fakeBin, { recursive: true });
+  fs.mkdirSync(fakeCliDir, { recursive: true });
   if (process.platform === 'win32') {
-    fs.writeFileSync(path.join(fakeBin, 'claude.cmd'), '@echo %*>>%FAKE_CLAUDE_LOG%\r\n@exit /b 0\r\n');
+    fs.writeFileSync(path.join(fakeCliDir, 'claude.cmd'), '@echo %*>>%FAKE_CLAUDE_LOG%\r\n@exit /b 0\r\n');
   } else {
-    const executable = path.join(fakeBin, 'claude');
+    const executable = path.join(fakeCliDir, 'claude');
     fs.writeFileSync(executable, '#!/bin/sh\nprintf "%s\\n" "$*" >> "$FAKE_CLAUDE_LOG"\n');
     fs.chmodSync(executable, 0o755);
   }
@@ -94,7 +94,7 @@ test('--tool claude uses the adapter for plugin, marketplace, legacy and wrapper
   fs.mkdirSync(wrapperDir, { recursive: true });
   fs.writeFileSync(path.join(wrapperDir, process.platform === 'win32' ? 'claude.bat' : 'claude'), 'wrapper');
 
-  const pathValue = `${fakeBin}${path.delimiter}${process.env.PATH ?? ''}`;
+  const pathValue = `${fakeCliDir}${path.delimiter}${process.env.PATH ?? ''}`;
   try {
     execFileSync('node', ['bin/oms-uninstall.js', '--tool', 'claude'], {
       cwd: worktreeRoot,
