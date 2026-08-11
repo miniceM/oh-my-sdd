@@ -34,11 +34,15 @@ digests in `~/.oh-my-sdd/opencode-npm-resources.json`:
 
 - OMS and delegated skills: `~/.config/opencode/skills/<skill>/SKILL.md`
 - OpenCode commands: `~/.config/opencode/commands/sdd-*.md`
+- Enterprise baseline: `~/.config/opencode/AGENTS.md` (one oh-my-sdd-managed block)
 - Cross-tool skill mirror: `~/.agents/skills/<skill>/SKILL.md`
 - Cross-tool command mirror: `~/.agents/command/sdd-*.md`
 
 Existing resources are backed up before replacement. A later uninstall restores
 those backups, while resources modified after installation are preserved.
+The baseline block is maintained separately so user-authored `AGENTS.md` content
+outside the sentinel remains untouched. Reinstalling updates the same block
+without duplication.
 
 ## Use the commands
 
@@ -76,7 +80,8 @@ oms-opencode-uninstall
 Use this command instead of plain `npm uninstall -g`. Modern npm does not run
 uninstall lifecycle scripts; the wrapper removes the global npm package and, only
 after that succeeds, removes or restores resources recorded in the ownership
-manifest. A failed npm uninstall therefore leaves the installed resources intact.
+manifest and removes the oh-my-sdd baseline block. A failed npm uninstall
+therefore leaves the installed resources intact.
 
 If npm removal succeeds but resource cleanup reports an error, reinstall the same
 package version and rerun the supported uninstaller; the ownership manifest keeps

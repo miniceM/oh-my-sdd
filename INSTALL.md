@@ -137,7 +137,7 @@ cat ~/.config/opencode/opencode.json | grep oh-my-sdd
 
 OpenCode 路径使用：
 - **TypeScript 适配器**：`opencode/src/*.ts` → `opencode/dist/*.js`
-- **experimental hook**：`experimental.chat.system.transform` 注入 baseline
+- **官方 Instructions**：安装器在 `~/.config/opencode/AGENTS.md` 的 oh-my-sdd sentinel 区块中维护 baseline；升级幂等，卸载只删除受管区块
 - **Fail-CLOSED 安全模型**：任何 hook 错误都阻断工具执行
 
 ---

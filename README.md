@@ -4,7 +4,7 @@
 
 **核心能力：**
 - 5 个 SDD 斜杠命令：`/sdd-spec` `/sdd-plan` `/sdd-task` `/sdd-apply` `/sdd-review`
-- 企业 Agent baseline 注入到主会话 system prompt（每种工具各自的注入机制）
+- 企业 Agent baseline 按各工具官方 Rules/Instructions 机制注入
 - 与企业统一身份认证（AIH / `iam` CLI）对接（Claude 路径需要；lingma 路径无需）
 - 与企业绩效管理平台（DOP）对接，上报会话/命令/代码量
 
@@ -54,12 +54,12 @@ oms-install --tool opencode # 注册插件到 OpenCode
 
 # 3. 启动 OpenCode
 #    plugin 自动加载到 ~/.config/opencode/plugins/oh-my-sdd/
-#    baseline 通过 experimental.chat.system.transform 注入
+#    baseline 通过 ~/.config/opencode/AGENTS.md 官方 Instructions 注入
 opencode
 ```
 
 ⚠️ **前置依赖**：OpenCode（`npm install -g opencode` 或从 https://opencode.ai 下载）
-⚠️ **baseline 注入**：依赖 `@opencode-ai/plugin` 1.15+ 的 `experimental.chat.system.transform` hook
+⚠️ **baseline 注入**：OpenCode 使用官方全局 `~/.config/opencode/AGENTS.md` Rules/Instructions 机制，不额外创建 system message
 ⚠️ **HARD_RULE 强制**：通过自维护 TypeScript 适配层，`permissionDecision: "deny"` 转译为 OpenCode 的 `throw new Error()`
 
 ### KiloCode
@@ -297,7 +297,7 @@ oh-my-sdd v0.2+ 支持在多种 AI 编程工具中加载。skills + hooks + HARD
 | 工具 | 状态 | 安装命令 | Skill 路径 | Hook 机制 |
 |------|------|---------|-----------|-----------|
 | **Claude Code** | ✅ 完整支持（默认） | `npm install -g @cli-tools/oh-my-sdd` | `~/.claude/skills/` | JSON hooks + wrapper |
-| **OpenCode** | ✅ 完整支持（v0.3+） | `oms-install --tool opencode` | `~/.config/opencode/plugins/oh-my-sdd/` | TypeScript adapter + experimental hook |
+| **OpenCode** | ✅ 完整支持（v0.3+） | `oms-install --tool opencode` | `~/.config/opencode/plugins/oh-my-sdd/`、`~/.config/opencode/AGENTS.md` | TypeScript adapter + official Instructions |
 | **通义灵码 Lingma** | ✅ 完整支持（基于文档解读） | `oms-install --tool lingma` | `~/.lingma/skills/` | JSON hooks（与 Claude Code 同构） |
 | **KiloCode** | ⚠️ 部分支持（无 hook 强制） | `oms-install --tool kilocode` | `~/.kilo/skills/` | 无 hook 机制，HARD_RULE 仅 advisory |
 | **Cursor** | 📋 v0.3 路线 | — | — | — |
