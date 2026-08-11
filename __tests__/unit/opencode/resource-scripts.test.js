@@ -4,6 +4,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -24,10 +25,55 @@ import {
   uninstallOwnedResources,
   writeOwnershipManifest,
 } from '../../../opencode/scripts/resource-ownership.mjs';
+import {
+  getAgentsPath,
+  removeManagedAgentsBlock,
+  upsertManagedAgentsBlock,
+} from '../../../opencode/scripts/agents-md.mjs';
 
 function fixture() {
   return mkdtempSync(join(tmpdir(), 'oms-resource-test-'));
 }
+
+test('AGENTS helper creates one managed block and preserves user content', () => {
+  const root = fixture();
+  try {
+    const file = join(root, '.config', 'opencode', 'AGENTS.md');
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, '## User rules\nkeep me\n');
+
+    upsertManagedAgentsBlock(file, '## HARD_RULE\nno secrets');
+    upsertManagedAgentsBlock(file, '## HARD_RULE\nupdated');
+
+    const content = readFileSync(file, 'utf8');
+    assert.equal(content.match(/OH-MY-SDD:BEGIN/g)?.length, 1);
+    assert.match(content, /keep me/);
+    assert.match(content, /updated/);
+    assert.doesNotMatch(content, /no secrets/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('AGENTS helper removes only its block and deletes an empty plugin file', () => {
+  const root = fixture();
+  try {
+    const file = join(root, 'AGENTS.md');
+    upsertManagedAgentsBlock(file, '## Rule');
+    assert.equal(removeManagedAgentsBlock(file), true);
+    assert.equal(existsSync(file), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('AGENTS helper resolves POSIX and Windows OpenCode config paths', () => {
+  assert.equal(getAgentsPath('/home/alice', path.posix), '/home/alice/.config/opencode/AGENTS.md');
+  assert.equal(
+    getAgentsPath('C:\\Users\\alice', path.win32),
+    'C:\\Users\\alice\\.config\\opencode\\AGENTS.md',
+  );
+});
 
 const DELEGATED_SKILLS = [
   'brainstorming',
