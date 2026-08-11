@@ -52,7 +52,23 @@ describe('ClaudeAdapter', () => {
     }), false);
     assert.deepEqual(invocations, [{
       command: 'C:\\Windows\\System32\\cmd.exe',
-      args: ['/d', '/s', '/c', 'claude.cmd', '--version'],
+      args: ['/d', '/s', '/c', 'claude', '--version'],
+      options: { stdio: 'ignore' },
+    }]);
+  });
+
+  it('detects a native Claude CLI through ComSpec on Windows', () => {
+    const invocations = [];
+    assert.equal(isClaudeCliAvailable({
+      execFileSyncFn(command, args, options) {
+        invocations.push({ command, args, options });
+      },
+      platform: 'win32',
+      comspec: 'C:\\Windows\\System32\\cmd.exe',
+    }), true);
+    assert.deepEqual(invocations, [{
+      command: 'C:\\Windows\\System32\\cmd.exe',
+      args: ['/d', '/s', '/c', 'claude', '--version'],
       options: { stdio: 'ignore' },
     }]);
   });
@@ -75,7 +91,7 @@ describe('ClaudeAdapter', () => {
     });
   });
 
-  it('runs claude.cmd through ComSpec on Windows', () => {
+  it('runs claude through ComSpec on Windows so native and cmd CLIs resolve', () => {
     assert.deepEqual(
       buildClaudeInvocation(
         ['plugin', 'marketplace', 'add', 'C:\\Program Files\\oh-my-sdd'],
@@ -87,7 +103,7 @@ describe('ClaudeAdapter', () => {
           '/d',
           '/s',
           '/c',
-          'claude.cmd',
+          'claude',
           'plugin',
           'marketplace',
           'add',
@@ -95,5 +111,52 @@ describe('ClaudeAdapter', () => {
         ],
       },
     );
+  });
+
+  it('returns successfully and skips Claude work when the CLI is unavailable', async () => {
+    const announcements = [];
+    const invoked = [];
+
+    const result = await ClaudeAdapter.install({
+      PACKAGE_ROOT: '/package/root',
+      announce(message) { announcements.push(message); },
+    }, {
+      isClaudeCliAvailable: () => false,
+      ensureStateDirFn: async () => { invoked.push('state'); },
+      registerMarketplace: async () => { invoked.push('marketplace'); },
+      installPlugin: async () => { invoked.push('plugin'); },
+      findClaudeOriginalFn: () => { invoked.push('find-original'); },
+      installWrapperFn: async () => { invoked.push('wrapper'); },
+    });
+
+    assert.equal(result, false);
+    assert.deepEqual(invoked, []);
+    assert.match(announcements.join('\n'), /跳过 Claude 专属安装步骤/);
+  });
+
+  it('runs marketplace, plugin, and wrapper setup when the CLI is available', async () => {
+    const announcements = [];
+    const invoked = [];
+    const originalClaude = '/usr/local/bin/claude';
+
+    await ClaudeAdapter.install({
+      PACKAGE_ROOT: '/package/root',
+      announce(message) { announcements.push(message); },
+    }, {
+      isClaudeCliAvailable: () => true,
+      ensureStateDirFn: async () => { invoked.push('state'); },
+      registerMarketplace: async (packageRoot) => { invoked.push(['marketplace', packageRoot]); },
+      installPlugin: async () => { invoked.push('plugin'); },
+      findClaudeOriginalFn: () => originalClaude,
+      installWrapperFn: async (packageRoot) => { invoked.push(['wrapper', packageRoot]); },
+    });
+
+    assert.deepEqual(invoked, [
+      'state',
+      ['marketplace', '/package/root'],
+      'plugin',
+      ['wrapper', '/package/root'],
+    ]);
+    assert.match(announcements.join('\n'), /oh-my-sdd \(Claude Code\) 安装完成/);
   });
 });

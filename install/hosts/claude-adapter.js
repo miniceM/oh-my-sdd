@@ -27,7 +27,7 @@ export function buildClaudeInvocation(
   if (platform === 'win32') {
     return {
       command: comspec || 'cmd.exe',
-      args: ['/d', '/s', '/c', 'claude.cmd', ...args],
+      args: ['/d', '/s', '/c', 'claude', ...args],
     };
   }
   return { command: 'claude', args };
@@ -73,28 +73,36 @@ export class ClaudeAdapter extends HostAdapter {
     }
   }
 
-  static async install(ctx) {
+  static async install(ctx, dependencies = {}) {
     const { PACKAGE_ROOT, announce } = ctx;
+    const {
+      isClaudeCliAvailable: isCliAvailable = () => this.isInstalled(),
+      ensureStateDirFn = ensureStateDir,
+      registerMarketplace = (packageRoot, announceFn) => this.#registerMarketplace(packageRoot, announceFn),
+      installPlugin = (announceFn) => this.#installPlugin(announceFn),
+      findClaudeOriginalFn = findClaudeOriginal,
+      installWrapperFn = installWrapper,
+    } = dependencies;
 
-    if (!this.isInstalled()) {
+    if (!isCliAvailable()) {
       announce('\n⚠️  未检测到可用的 Claude CLI，已跳过 Claude 专属安装步骤。');
       announce('    如需启用 Claude 集成，请安装 Claude Code 后重新运行 npm install。');
       return false;
     }
 
     announce('→ 初始化 ~/.oh-my-sdd/ 状态目录');
-    await ensureStateDir();
+    await ensureStateDirFn();
 
     announce('→ 注册 marketplace');
-    await this.#registerMarketplace(PACKAGE_ROOT, announce);
+    await registerMarketplace(PACKAGE_ROOT, announce);
 
     announce('→ 安装 plugin');
-    await this.#installPlugin(announce);
+    await installPlugin(announce);
 
-    const originalClaude = findClaudeOriginal();
+    const originalClaude = findClaudeOriginalFn();
     if (originalClaude) {
       announce('→ 安装 Claude CLI wrapper（企业规则自动注入）');
-      await installWrapper(PACKAGE_ROOT, announce);
+      await installWrapperFn(PACKAGE_ROOT, announce);
     } else {
       announce('⚠️  Claude CLI wrapper 未安装（未找到原 claude 二进制）');
       announce('    1) 安装 Claude Code: https://claude.com/download');
