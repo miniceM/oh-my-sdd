@@ -36,6 +36,7 @@ test('AGENTS helper creates one managed block and preserves user content', () =>
   const root = fixture();
   const file = join(root, '.config', 'opencode', 'AGENTS.md');
   const body = '## User rules\nkeep me\n';
+  mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, body, { flag: 'a' });
   upsertManagedAgentsBlock(file, '## HARD_RULE\nno secrets');
   upsertManagedAgentsBlock(file, '## HARD_RULE\nupdated');
