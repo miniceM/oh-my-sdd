@@ -55,20 +55,21 @@ test('executing the package entry point still invokes installation', () => {
       encoding: 'utf8',
     });
 
-    assert.equal(result.status, 1, 'missing host CLI should retain the documented exit code');
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /跳过 Claude 专属安装步骤/);
     assert.equal(existsSync(path.join(fakeHome, '.oh-my-sdd', 'config.json')), true);
   } finally {
     rmSync(fakeHome, { recursive: true, force: true });
   }
 });
 
-test('calling the public installer rejects instead of terminating its caller', () => {
+test('calling the public installer resolves when Claude CLI is unavailable', () => {
   const fakeHome = mkdtempSync(path.join(os.tmpdir(), 'oms-call-entry-'));
   try {
     const result = spawnSync(process.execPath, ['--input-type=module', '-e', [
       "const { main } = await import('./install.js');",
-      "try { await main({ tool: 'claude' }); }",
-      "catch (error) { process.stdout.write(error.code ?? 'caught'); }",
+      "await main({ tool: 'claude' });",
+      "process.stdout.write('resolved');",
     ].join(' ')], {
       cwd: projectRoot,
       env: {
@@ -81,7 +82,8 @@ test('calling the public installer rejects instead of terminating its caller', (
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'OMS_CLAUDE_NOT_FOUND');
+    assert.match(result.stderr, /跳过 Claude 专属安装步骤/);
+    assert.match(result.stdout, /resolved$/);
     assert.equal(existsSync(path.join(fakeHome, '.oh-my-sdd', 'config.json')), true);
   } finally {
     rmSync(fakeHome, { recursive: true, force: true });

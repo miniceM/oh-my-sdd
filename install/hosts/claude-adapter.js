@@ -13,7 +13,6 @@ import { readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { HostAdapter } from '../host-adapter.js';
-import { isCliInPath } from '../common/detect.js';
 import { installWrapper, findClaudeOriginal, uninstallWrapper } from '../../wrapper/wrapper.js';
 import { ensureStateDir } from '../../lib/state-dir.js';
 import { getPluginInstallDir, isIamInPath } from '../../lib/platform.js';
@@ -28,10 +27,28 @@ export function buildClaudeInvocation(
   if (platform === 'win32') {
     return {
       command: comspec || 'cmd.exe',
-      args: ['/d', '/s', '/c', 'claude.cmd', ...args],
+      args: ['/d', '/s', '/c', 'claude', ...args],
     };
   }
   return { command: 'claude', args };
+}
+
+/**
+ * Check that the Claude CLI can actually execute, not merely that a matching
+ * path entry exists. This avoids treating stale npm shim paths as Claude.
+ */
+export function isClaudeCliAvailable({
+  execFileSyncFn = execFileSync,
+  platform = process.platform,
+  comspec = process.env.ComSpec,
+} = {}) {
+  const { command, args } = buildClaudeInvocation(['--version'], { platform, comspec });
+  try {
+    execFileSyncFn(command, args, { stdio: 'ignore', timeout: 5000, windowsHide: true });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export class ClaudeAdapter extends HostAdapter {
@@ -39,7 +56,7 @@ export class ClaudeAdapter extends HostAdapter {
   static displayName = 'Claude Code';
 
   static isInstalled() {
-    return isCliInPath('claude');
+    return isClaudeCliAvailable();
   }
 
   static preflight(ctx) {
@@ -56,33 +73,36 @@ export class ClaudeAdapter extends HostAdapter {
     }
   }
 
-  static async install(ctx) {
+  static async install(ctx, dependencies = {}) {
     const { PACKAGE_ROOT, announce } = ctx;
+    const {
+      isClaudeCliAvailable: isCliAvailable = () => this.isInstalled(),
+      ensureStateDirFn = ensureStateDir,
+      registerMarketplace = (packageRoot, announceFn) => this.#registerMarketplace(packageRoot, announceFn),
+      installPlugin = (announceFn) => this.#installPlugin(announceFn),
+      findClaudeOriginalFn = findClaudeOriginal,
+      installWrapperFn = installWrapper,
+    } = dependencies;
 
-    if (!this.isInstalled()) {
-      announce('\n❌ 未检测到 claude CLI。请手动执行：');
-      announce(`  claude plugin marketplace add ${PACKAGE_ROOT}`);
-      announce(`  claude plugin install ${PLUGIN_NAME}@${MARKETPLACE_NAME}`);
-      // Create state dir before reporting failure — smoke-check depends on it.
-      await ensureStateDir();
-      const error = new Error('未检测到 claude CLI');
-      error.code = 'OMS_CLAUDE_NOT_FOUND';
-      throw error;
+    if (!isCliAvailable()) {
+      announce('\n⚠️  未检测到可用的 Claude CLI，已跳过 Claude 专属安装步骤。');
+      announce('    如需启用 Claude 集成，请安装 Claude Code 后重新运行 npm install。');
+      return false;
     }
 
     announce('→ 初始化 ~/.oh-my-sdd/ 状态目录');
-    await ensureStateDir();
+    await ensureStateDirFn();
 
     announce('→ 注册 marketplace');
-    await this.#registerMarketplace(PACKAGE_ROOT, announce);
+    await registerMarketplace(PACKAGE_ROOT, announce);
 
     announce('→ 安装 plugin');
-    await this.#installPlugin(announce);
+    await installPlugin(announce);
 
-    const originalClaude = findClaudeOriginal();
+    const originalClaude = findClaudeOriginalFn();
     if (originalClaude) {
       announce('→ 安装 Claude CLI wrapper（企业规则自动注入）');
-      await installWrapper(PACKAGE_ROOT, announce);
+      await installWrapperFn(PACKAGE_ROOT, announce);
     } else {
       announce('⚠️  Claude CLI wrapper 未安装（未找到原 claude 二进制）');
       announce('    1) 安装 Claude Code: https://claude.com/download');
