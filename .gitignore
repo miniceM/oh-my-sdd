@@ -3,8 +3,6 @@ node_modules/
 dist/
 coverage/
 *.tgz
-package-lock.json
-opencode/package-lock.json
 
 # Git **does not** support inline comments. Every `#` comment must be on its
 # own line (starting with `#`). Anything after a pattern on the same line is
