@@ -13,7 +13,10 @@ import {
   buildNpmInvocation,
   main as uninstallPackage,
 } from '../../../opencode/bin/oms-opencode-uninstall.mjs';
-import { unregisterOpenCodePlugin } from '../../../opencode/scripts/uninstall.mjs';
+import {
+  main as uninstallOpenCode,
+  unregisterOpenCodePlugin,
+} from '../../../opencode/scripts/uninstall.mjs';
 import {
   shouldCopy,
   syncCommandLayouts,
@@ -73,6 +76,54 @@ test('AGENTS helper resolves POSIX and Windows OpenCode config paths', () => {
     getAgentsPath('C:\\Users\\alice', path.win32),
     'C:\\Users\\alice\\.config\\opencode\\AGENTS.md',
   );
+});
+
+test('postinstall manages one global AGENTS baseline block across upgrades', () => {
+  const root = fixture();
+  try {
+    const home = join(root, 'home');
+    const agentsPath = getAgentsPath(home);
+    mkdirSync(dirname(agentsPath), { recursive: true });
+    writeFileSync(agentsPath, '# User instructions\nkeep me\n');
+    const env = { ...process.env, HOME: home, USERPROFILE: home };
+    const options = { cwd: join(process.cwd(), 'opencode'), env, encoding: 'utf8' };
+
+    execFileSync(process.execPath, ['scripts/postinstall.mjs'], options);
+    execFileSync(process.execPath, ['scripts/postinstall.mjs'], options);
+
+    const content = readFileSync(agentsPath, 'utf8');
+    assert.equal(content.match(/OH-MY-SDD:BEGIN/g)?.length, 1);
+    assert.match(content, /keep me/);
+    assert.match(content, /HARD_RULE/);
+    assert.doesNotMatch(content, /oms_version:/);
+    assert.doesNotMatch(content, /<!-- BEGIN sync-impact-report/);
+    assert.doesNotMatch(content, /END sync-impact-report -->/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('OpenCode uninstall removes only the managed AGENTS block', () => {
+  const root = fixture();
+  try {
+    const agentsPath = join(root, 'AGENTS.md');
+    upsertManagedAgentsBlock(agentsPath, '## Rule');
+    const original = readFileSync(agentsPath, 'utf8');
+    writeFileSync(agentsPath, `# User instructions\nkeep me\n${original}`);
+
+    const result = uninstallOpenCode({
+      agentsPath,
+      manifestPath: join(root, 'missing-resources.json'),
+      allowedRoots: [join(root, 'resources')],
+      warn: () => {},
+      log: () => {},
+    });
+
+    assert.equal(result.agentsRemoved, true);
+    assert.equal(readFileSync(agentsPath, 'utf8'), '# User instructions\nkeep me\n');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 const DELEGATED_SKILLS = [
