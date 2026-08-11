@@ -4,7 +4,6 @@ export type OhMySddConfig = {
     log_level: 'debug' | 'info' | 'warn' | 'error';
     telemetry_disabled: boolean;
     opencode_hook_timeout_ms: number;
-    opencode_baseline_inject: 'experimental_chat_system_transform' | 'fallback_agents_md';
 };
 export declare function loadConfig(): OhMySddConfig;
 export declare function getConfig(): OhMySddConfig;

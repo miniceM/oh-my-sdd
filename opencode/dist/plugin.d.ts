@@ -1,9 +1,3 @@
-export declare function handleSystemTransform(_input: {
-    sessionID?: string;
-    model: unknown;
-}, output: {
-    system?: string[];
-}): Promise<void>;
 export declare function handleToolExecuteBefore(input: {
     tool: string;
     sessionID?: string;

@@ -18,7 +18,7 @@ test('config: loadConfig returns defaults when no config.json exists', () => {
   assert.equal(cfg.aih_system_name, 'sdd');
   assert.equal(cfg.log_level, 'info');
   assert.equal(cfg.opencode_hook_timeout_ms, 5000);
-  assert.equal(cfg.opencode_baseline_inject, 'experimental_chat_system_transform');
+  assert.equal(cfg.opencode_baseline_inject, undefined);
 });
 
 test('config: loadConfig reads ~/.oh-my-sdd/config.json when present', () => {
@@ -41,5 +41,5 @@ test('config: getConfig returns same instance (singleton)', () => {
 test('config: opencode-specific defaults present', () => {
   const cfg = getConfig();
   assert.equal(cfg.opencode_hook_timeout_ms, 5000);
-  assert.equal(cfg.opencode_baseline_inject, 'experimental_chat_system_transform');
+  assert.equal(cfg.opencode_baseline_inject, undefined);
 });

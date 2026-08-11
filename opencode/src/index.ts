@@ -7,7 +7,6 @@
  */
 import type { Hooks, PluginInput, Plugin } from '@opencode-ai/plugin';
 import {
-  handleSystemTransform,
   handleToolExecuteBefore,
   handleToolExecuteAfter,
   handleCommandExecuteBefore,
@@ -18,7 +17,6 @@ import { log } from './logger.js';
 
 export function createPlugin(): Hooks {
   const hooks: Hooks = {
-    'experimental.chat.system.transform': handleSystemTransform,
     'tool.execute.before': handleToolExecuteBefore,
     'tool.execute.after': handleToolExecuteAfter,
     'command.execute.before': handleCommandExecuteBefore,
