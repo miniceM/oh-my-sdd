@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildClaudeInvocation,
   ClaudeAdapter,
+  isClaudeCliAvailable,
 } from '../../../../install/hosts/claude-adapter.js';
 import { HostAdapter } from '../../../../install/host-adapter.js';
 
@@ -22,6 +23,38 @@ describe('ClaudeAdapter', () => {
 
   it('isInstalled() returns boolean', () => {
     assert.equal(typeof ClaudeAdapter.isInstalled(), 'boolean');
+  });
+
+  it('detects a Claude CLI only when claude --version succeeds on POSIX', () => {
+    const invocations = [];
+    assert.equal(isClaudeCliAvailable({
+      execFileSyncFn(command, args, options) {
+        invocations.push({ command, args, options });
+      },
+      platform: 'linux',
+    }), true);
+    assert.deepEqual(invocations, [{
+      command: 'claude',
+      args: ['--version'],
+      options: { stdio: 'ignore' },
+    }]);
+  });
+
+  it('treats a failing claude --version invocation as unavailable on Windows', () => {
+    const invocations = [];
+    assert.equal(isClaudeCliAvailable({
+      execFileSyncFn(command, args, options) {
+        invocations.push({ command, args, options });
+        throw new Error('ENOENT');
+      },
+      platform: 'win32',
+      comspec: 'C:\\Windows\\System32\\cmd.exe',
+    }), false);
+    assert.deepEqual(invocations, [{
+      command: 'C:\\Windows\\System32\\cmd.exe',
+      args: ['/d', '/s', '/c', 'claude.cmd', '--version'],
+      options: { stdio: 'ignore' },
+    }]);
   });
 
   it('install() is an async function', () => {

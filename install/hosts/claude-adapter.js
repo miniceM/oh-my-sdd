@@ -13,7 +13,6 @@ import { readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { HostAdapter } from '../host-adapter.js';
-import { isCliInPath } from '../common/detect.js';
 import { installWrapper, findClaudeOriginal, uninstallWrapper } from '../../wrapper/wrapper.js';
 import { ensureStateDir } from '../../lib/state-dir.js';
 import { getPluginInstallDir, isIamInPath } from '../../lib/platform.js';
@@ -34,12 +33,30 @@ export function buildClaudeInvocation(
   return { command: 'claude', args };
 }
 
+/**
+ * Check that the Claude CLI can actually execute, not merely that a matching
+ * path entry exists. This avoids treating stale npm shim paths as Claude.
+ */
+export function isClaudeCliAvailable({
+  execFileSyncFn = execFileSync,
+  platform = process.platform,
+  comspec = process.env.ComSpec,
+} = {}) {
+  const { command, args } = buildClaudeInvocation(['--version'], { platform, comspec });
+  try {
+    execFileSyncFn(command, args, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export class ClaudeAdapter extends HostAdapter {
   static id = 'claude';
   static displayName = 'Claude Code';
 
   static isInstalled() {
-    return isCliInPath('claude');
+    return isClaudeCliAvailable();
   }
 
   static preflight(ctx) {
@@ -60,14 +77,9 @@ export class ClaudeAdapter extends HostAdapter {
     const { PACKAGE_ROOT, announce } = ctx;
 
     if (!this.isInstalled()) {
-      announce('\n❌ 未检测到 claude CLI。请手动执行：');
-      announce(`  claude plugin marketplace add ${PACKAGE_ROOT}`);
-      announce(`  claude plugin install ${PLUGIN_NAME}@${MARKETPLACE_NAME}`);
-      // Create state dir before reporting failure — smoke-check depends on it.
-      await ensureStateDir();
-      const error = new Error('未检测到 claude CLI');
-      error.code = 'OMS_CLAUDE_NOT_FOUND';
-      throw error;
+      announce('\n⚠️  未检测到可用的 Claude CLI，已跳过 Claude 专属安装步骤。');
+      announce('    如需启用 Claude 集成，请安装 Claude Code 后重新运行 npm install。');
+      return false;
     }
 
     announce('→ 初始化 ~/.oh-my-sdd/ 状态目录');
