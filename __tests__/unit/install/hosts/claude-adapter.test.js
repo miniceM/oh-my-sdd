@@ -36,7 +36,7 @@ describe('ClaudeAdapter', () => {
     assert.deepEqual(invocations, [{
       command: 'claude',
       args: ['--version'],
-      options: { stdio: 'ignore' },
+      options: { stdio: 'ignore', timeout: 5000, windowsHide: true },
     }]);
   });
 
@@ -53,7 +53,7 @@ describe('ClaudeAdapter', () => {
     assert.deepEqual(invocations, [{
       command: 'C:\\Windows\\System32\\cmd.exe',
       args: ['/d', '/s', '/c', 'claude', '--version'],
-      options: { stdio: 'ignore' },
+      options: { stdio: 'ignore', timeout: 5000, windowsHide: true },
     }]);
   });
 
@@ -69,8 +69,20 @@ describe('ClaudeAdapter', () => {
     assert.deepEqual(invocations, [{
       command: 'C:\\Windows\\System32\\cmd.exe',
       args: ['/d', '/s', '/c', 'claude', '--version'],
-      options: { stdio: 'ignore' },
+      options: { stdio: 'ignore', timeout: 5000, windowsHide: true },
     }]);
+  });
+
+  it('treats a timed out claude --version invocation as unavailable', () => {
+    const timeout = new Error('Command timed out');
+    timeout.code = 'ETIMEDOUT';
+
+    assert.equal(isClaudeCliAvailable({
+      execFileSyncFn() {
+        throw timeout;
+      },
+      platform: 'linux',
+    }), false);
   });
 
   it('install() is an async function', () => {

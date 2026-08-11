@@ -44,7 +44,7 @@ export function isClaudeCliAvailable({
 } = {}) {
   const { command, args } = buildClaudeInvocation(['--version'], { platform, comspec });
   try {
-    execFileSyncFn(command, args, { stdio: 'ignore' });
+    execFileSyncFn(command, args, { stdio: 'ignore', timeout: 5000, windowsHide: true });
     return true;
   } catch {
     return false;
