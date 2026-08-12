@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -808,6 +808,41 @@ test('resource sync waits for an existing destination lock before replacing it',
     const [code] = await once(child, 'exit');
     assert.equal(code, 0, `child exited with ${code}; stdout: ${childStdout}; stderr: ${childStderr}`);
     assert.equal(readFileSync(join(dst, 'new.txt'), 'utf8'), 'new');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource sync retries after a transient Windows lock metadata error', () => {
+  const root = fixture();
+  try {
+    const lock = join(root, 'target.oh-my-sdd-sync.lock');
+    mkdirSync(lock, { recursive: true });
+    writeFileSync(join(lock, 'owner.json'), JSON.stringify({
+      ownerPid: process.pid,
+      createdAt: Date.now(),
+      token: 'test-owner',
+    }));
+
+    let firstProbe = true;
+    let ran = false;
+    withSyncLock(lock, () => { ran = true; }, {
+      timeoutMs: 100,
+      pollMs: 1,
+      statSync: (path) => {
+        if (path === lock && firstProbe) {
+          firstProbe = false;
+          rmSync(lock, { recursive: true, force: true });
+          const error = new Error('transient Windows lock metadata error');
+          error.code = 'EPERM';
+          throw error;
+        }
+        return statSync(path);
+      },
+    });
+
+    assert.equal(ran, true);
+    assert.equal(existsSync(lock), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -126,22 +126,23 @@ function lockIsStale(lockPath, staleThresholdMs, now) {
   return !ownerIsAlive(owner?.ownerPid) || now() - createdAt >= staleThresholdMs;
 }
 
-function reclaimStaleLock(lockPath, staleThresholdMs, now, rename, remove) {
+function reclaimStaleLock(lockPath, staleThresholdMs, now, rename, remove, stat) {
   let observed;
   let observedOwner;
   try {
-    observed = statSync(lockPath);
+    observed = stat(lockPath);
     observedOwner = readLockOwner(lockPath);
     if (!lockIsStale(lockPath, staleThresholdMs, now)) return false;
   } catch (error) {
     if (error?.code === 'ENOENT') return true;
+    if (error?.code === 'EPERM') return false;
     throw error;
   }
 
   const takeover = `${lockPath}.takeover-${process.pid}-${randomUUID()}`;
   try {
     rename(lockPath, takeover);
-    const moved = statSync(takeover);
+    const moved = stat(takeover);
     const movedOwner = readLockOwner(takeover);
     if (
       observed.dev !== moved.dev
@@ -166,7 +167,7 @@ function reclaimStaleLock(lockPath, staleThresholdMs, now, rename, remove) {
  *
  * @param {string} lockPath directory used as the cross-process lock
  * @param {() => unknown} operation work to execute while the lock is held
- * @param {{ timeoutMs?: number, pollMs?: number, staleThresholdMs?: number, mkdirSync?: Function, renameSync?: Function, rmSync?: Function, now?: () => number }} [ops]
+ * @param {{ timeoutMs?: number, pollMs?: number, staleThresholdMs?: number, mkdirSync?: Function, renameSync?: Function, rmSync?: Function, statSync?: Function, now?: () => number }} [ops]
  * @returns {unknown} the operation result
  *
  * Stale-lock policy (deliberate trade-off): a lock whose owner PID is dead is
@@ -180,6 +181,7 @@ export function withSyncLock(lockPath, operation, ops = {}) {
   const makeDirectory = ops.mkdirSync ?? mkdirSync;
   const rename = ops.renameSync ?? renameSync;
   const remove = ops.rmSync ?? rmSync;
+  const stat = ops.statSync ?? statSync;
   const timeoutMs = ops.timeoutMs ?? 10_000;
   const pollMs = ops.pollMs ?? 25;
   const staleThresholdMs = ops.staleThresholdMs ?? DEFAULT_STALE_LOCK_MS;
@@ -200,7 +202,7 @@ export function withSyncLock(lockPath, operation, ops = {}) {
       break;
     } catch (error) {
       if (error?.code !== 'EEXIST') throw error;
-      if (reclaimStaleLock(lockPath, staleThresholdMs, now, rename, remove)) continue;
+      if (reclaimStaleLock(lockPath, staleThresholdMs, now, rename, remove, stat)) continue;
       if (now() - startedAt >= timeoutMs) {
         throw new Error(
           `[copy-resources] timed out after ${timeoutMs}ms waiting for target lock: ${lockPath}`,
