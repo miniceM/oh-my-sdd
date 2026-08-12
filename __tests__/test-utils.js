@@ -76,14 +76,6 @@ export function withTempDir(fn) {
  * Calls resetForTest() on all modules that export it.
  */
 export function resetAllModules() {
-  // Import modules that have resetForTest()
-  try {
-    const baseline = require('../../opencode/dist/baseline.js');
-    if (typeof baseline.resetForTest === 'function') {
-      baseline.resetForTest();
-    }
-  } catch { /* module not loaded */ }
-
   try {
     const logger = require('../../opencode/dist/logger.js');
     if (typeof logger.resetForTest === 'function') {

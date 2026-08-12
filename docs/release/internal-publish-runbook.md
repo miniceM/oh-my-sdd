@@ -344,7 +344,7 @@ npm view @cli-tools/oh-my-sdd-opencode@0.2.1 --registry=https://npm.enterprise.c
 
 ⚠️ **OpenCode 包特殊点**：
 - 用户安装后 `postinstall` 脚本自动复制 skills/commands 到 `~/.config/opencode/`
-- 依赖 `@opencode-ai/plugin` 1.15+ 的 `experimental.chat.system.transform` hook
+- `postinstall` 在 `~/.config/opencode/AGENTS.md` 维护一个 oh-my-sdd baseline 区块；重复安装幂等，卸载只删除该区块
 - 版本号独立管理（主包 0.1.0，OpenCode 包 0.2.1）
 
 ---

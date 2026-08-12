@@ -56,7 +56,6 @@ const {
   handleToolExecuteAfter,
   handleCommandExecuteBefore,
   handleEvent,
-  handleSystemTransform,
 } = await import('../../../opencode/dist/plugin.js');
 
 test('full-flow: safe file write passes through PreToolUse', async () => {
@@ -98,14 +97,6 @@ test('full-flow: session.created triggers session-start hook', async () => {
       properties: { info: { id: 's1', directory: '/work' } },
     },
   });
-});
-
-test('full-flow: baseline injection via system.transform', async () => {
-  const output = { system: ['You are an agent.'] };
-  await handleSystemTransform({ sessionID: 's1', model: {} }, output);
-  // Baseline was loaded — output.system should have more entries (or be empty if file missing)
-  // Either way: no throw, output.system is still an array
-  assert.ok(Array.isArray(output.system));
 });
 
 test('full-flow: Bash command reaches PreToolUse and blocks destructive commands', async () => {

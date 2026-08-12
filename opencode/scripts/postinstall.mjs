@@ -53,6 +53,8 @@ import {
   resourceDigest,
   writeOwnershipManifest,
 } from './resource-ownership.mjs';
+import { getAgentsPath, upsertManagedAgentsBlock } from './agents-md.mjs';
+import { getBodyForInjection } from '../lib/constitution.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = resolve(__dirname, '..');
@@ -61,6 +63,7 @@ const PLUGIN_ROOT = resolve(__dirname, '..');
 const HOME = homedir();
 const OPENCODE_SKILLS_DIR = join(HOME, '.config', 'opencode', 'skills');
 const OPENCODE_COMMANDS_DIR = join(HOME, '.config', 'opencode', 'commands');
+const OPENCODE_AGENTS_MD = getAgentsPath(HOME);
 const AGENTS_SKILLS_DIR = join(HOME, '.agents', 'skills');
 const AGENTS_COMMAND_DIR = join(HOME, '.agents', 'command');
 const OWNERSHIP_MANIFEST = join(HOME, '.oh-my-sdd', 'opencode-npm-resources.json');
@@ -436,6 +439,16 @@ export function main() {
     { ...delegatedOps, summary: delegatedAgents },
   );
   results.push(`agents-delegated-skills: ${n6}`);
+
+  try {
+    const baselinePath = join(PLUGIN_ROOT, 'content', 'enterprise-baseline.md');
+    const baseline = getBodyForInjection(readFileSync(baselinePath, 'utf8'));
+    upsertManagedAgentsBlock(OPENCODE_AGENTS_MD, baseline);
+    results.push('opencode-agents-md: updated');
+  } catch (error) {
+    results.push('opencode-agents-md: failed');
+    console.warn(`[postinstall] opencode AGENTS.md: ${error.message}`);
+  }
 
   const missing = findMissingDelegatedSkills();
   for (const name of missing) {

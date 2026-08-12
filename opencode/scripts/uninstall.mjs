@@ -5,9 +5,11 @@ import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 import { uninstallOwnedResources } from './resource-ownership.mjs';
+import { getAgentsPath, removeManagedAgentsBlock } from './agents-md.mjs';
 
 const HOME = homedir();
 const MANIFEST_PATH = join(HOME, '.oh-my-sdd', 'opencode-npm-resources.json');
+const OPENCODE_AGENTS_MD = getAgentsPath(HOME);
 const OPENCODE_JSON = join(HOME, '.config', 'opencode', 'opencode.json');
 const ALLOWED_ROOTS = [
   join(HOME, '.config', 'opencode', 'skills'),
@@ -71,15 +73,22 @@ export function unregisterOpenCodePlugin({
 export function main({
   manifestPath = MANIFEST_PATH,
   allowedRoots = ALLOWED_ROOTS,
+  agentsPath = OPENCODE_AGENTS_MD,
   warn = console.warn,
   log = console.log,
 } = {}) {
   const unregistered = unregisterOpenCodePlugin({ warn });
+  let agentsRemoved = false;
+  try {
+    agentsRemoved = removeManagedAgentsBlock(agentsPath);
+  } catch (error) {
+    warn(`[uninstall] AGENTS.md cleanup failed; preserving it: ${error.message}`);
+  }
   const result = uninstallOwnedResources({ manifestPath, allowedRoots, warn });
   log(
-    `[uninstall] oh-my-sdd unregistered: ${unregistered}, removed: ${result.removed}, restored: ${result.restored}, preserved: ${result.preserved}`,
+    `[uninstall] oh-my-sdd unregistered: ${unregistered}, agents block removed: ${agentsRemoved}, removed: ${result.removed}, restored: ${result.restored}, preserved: ${result.preserved}`,
   );
-  return { ...result, unregistered };
+  return { ...result, unregistered, agentsRemoved };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

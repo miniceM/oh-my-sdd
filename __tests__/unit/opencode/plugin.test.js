@@ -2,9 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createPlugin, OhMySddPlugin } from '../../../opencode/dist/index.js';
 
-test('plugin: createPlugin returns Hooks object with 5 handlers', () => {
+test('plugin: createPlugin keeps operational hooks without baseline system transform', () => {
   const hooks = createPlugin();
-  assert.equal(typeof hooks['experimental.chat.system.transform'], 'function');
+  assert.equal(hooks['experimental.chat.system.transform'], undefined);
   assert.equal(typeof hooks['tool.execute.before'], 'function');
   assert.equal(typeof hooks['tool.execute.after'], 'function');
   assert.equal(typeof hooks['command.execute.before'], 'function');

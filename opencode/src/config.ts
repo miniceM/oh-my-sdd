@@ -16,7 +16,6 @@ export type OhMySddConfig = {
   telemetry_disabled: boolean;
   // OpenCode-specific
   opencode_hook_timeout_ms: number;
-  opencode_baseline_inject: 'experimental_chat_system_transform' | 'fallback_agents_md';
 };
 
 const DEFAULTS: OhMySddConfig = {
@@ -25,7 +24,6 @@ const DEFAULTS: OhMySddConfig = {
   log_level: 'info',
   telemetry_disabled: false,
   opencode_hook_timeout_ms: 5000,
-  opencode_baseline_inject: 'experimental_chat_system_transform',
 };
 
 let _cached: OhMySddConfig | null = null;

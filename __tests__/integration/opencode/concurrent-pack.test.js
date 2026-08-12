@@ -126,7 +126,7 @@ test('concurrent package syncs are serialized and leave the worktree unchanged',
     for (const result of await Promise.all(runs)) {
       assert.equal(result.code, 0, result.stderr || result.stdout);
       const manifest = parsePackManifest(result.stdout);
-      const files = manifest[0].files.map(({ path }) => path);
+      const files = manifest[0].files.map(({ path }) => path.replaceAll('\\', '/'));
       for (const skill of PRIMARY_DELEGATES) {
         assert.ok(
           files.includes(`delegated-skills/${skill}/SKILL.md`),

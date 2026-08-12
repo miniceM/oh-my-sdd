@@ -14,7 +14,6 @@ const DEFAULTS = {
     log_level: 'info',
     telemetry_disabled: false,
     opencode_hook_timeout_ms: 5000,
-    opencode_baseline_inject: 'experimental_chat_system_transform',
 };
 let _cached = null;
 export function loadConfig() {
