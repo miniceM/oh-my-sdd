@@ -45,7 +45,7 @@ function printHelp() {
   kilocode     KiloCode AI 编程工具
 
 选项:
-  --tool <name>    指定目标 AI 工具。不传时按 which claude > which lingma 顺序自动检测
+  --tool <name>    指定目标 AI 工具。不传时按 Claude > Lingma > OpenCode > KiloCode 顺序自动检测
   -h, --help       显示此帮助并退出
   -V, --version    显示版本并退出
 

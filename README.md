@@ -12,16 +12,16 @@
 
 > 📖 **详细安装指南**：如需完整安装步骤和故障排除，请参考 [INSTALL.md](INSTALL.md)
 
-按你使用的工具选一条路径。`oms-install` 不传 `--tool` 时自动检测（`which claude > which lingma`）。
+按你使用的工具选一条路径。多工具并存时请显式传入 `--tool`；不传时，`oms-install` 按 Claude → Lingma → OpenCode → KiloCode 顺序检测，全部未检测到时回退到 Claude。
 
 ### OpenCode
 
 #### 方式一：npm 插件（推荐）
 
-OpenCode 会自动安装和更新插件，无需手动管理。
+OpenCode 会自动安装和更新 npm 插件；插件的 postinstall 会同步全局 skills、commands 和 `AGENTS.md`。
 
 ```bash
-# 在 ~/.config/opencode/opencode.json 中配置：
+# 在 ~/.config/opencode/opencode.json 中加入 npm 插件：
 {
   "plugin": ["@cli-tools/oh-my-sdd-opencode"]
 }
@@ -47,20 +47,24 @@ opencode
 git clone https://github.com/enterprise/oh-my-sdd.git
 cd oh-my-sdd
 
-# 2. 安装依赖 + 构建 + 注册插件
-npm install                 # 安装根包依赖（触发 install.js 注册 Claude/Lingma）
-npm run build:opencode      # 安装 + 编译 opencode 子包（@opencode-ai/plugin 等）
-oms-install --tool opencode # 注册插件到 OpenCode
+# 2. 安装根包并注册 OpenCode npm 插件
+npm install                 # 安装根包依赖
+oms-install --tool opencode # 写入 ~/.config/opencode/opencode.json
 
-# 3. 启动 OpenCode
-#    plugin 自动加载到 ~/.config/opencode/plugins/oh-my-sdd/
+# 3. 如需在本地构建/验证 OpenCode 子包
+cd opencode
+npm install                 # postinstall 同步全局资源
+npm run build
+
+# 4. 启动 OpenCode
+#    OpenCode 通过 npm 插件加载；资源位于 ~/.config/opencode/
 #    baseline 通过 ~/.config/opencode/AGENTS.md 官方 Instructions 注入
 opencode
 ```
 
 ⚠️ **前置依赖**：OpenCode（`npm install -g opencode` 或从 https://opencode.ai 下载）
 ⚠️ **baseline 注入**：OpenCode 使用官方全局 `~/.config/opencode/AGENTS.md` Rules/Instructions 机制，不额外创建 system message
-⚠️ **HARD_RULE 强制**：通过自维护 TypeScript 适配层，`permissionDecision: "deny"` 转译为 OpenCode 的 `throw new Error()`
+⚠️ **HARD_RULE 强制**：通过 TypeScript 适配层将 `permissionDecision: "deny"` 转译为 OpenCode 的 `throw new Error()`；资源同步失败本身采用 fail-open。
 
 ### KiloCode
 
@@ -76,7 +80,7 @@ oms-install --tool kilocode
 #    /sdd-spec <change-name>
 ```
 
-⚠️ **重要限制**：KiloCode 当前无 hook 机制（无 PreToolUse/PostToolUse）。HARD_RULE 强制仅为**建议性**（baseline 注入到 system prompt，无运行期阻断）。安全敏感场景建议使用 Claude Code 或 OpenCode。
+⚠️ **重要限制**：KiloCode 当前无 hook 机制（无 PreToolUse/PostToolUse）。HARD_RULE 强制仅为**建议性**（baseline 注入到 `~/.config/kilo/AGENTS.md`，无运行期阻断）。安全敏感场景建议使用 Claude Code 或 OpenCode。
 
 ### Claude Code（默认）
 
@@ -110,8 +114,9 @@ oms-install --tool lingma
 ```bash
 oms-install                       # 装 Claude（自动检测）
 oms-install --tool lingma          # 再装 lingma
+oms-install --tool opencode        # 再装 OpenCode
 oms-install --tool kilocode        # 再装 KiloCode
-# 三套独立，互不覆盖——skills 各自复制到工具专属目录
+# 四套独立，互不覆盖——skills 各自复制到工具专属目录
 ```
 
 > 💡 **关于 `--foreground-scripts`**：npm 默认静默 postinstall 输出（即使 stderr 也吞），加这个 flag 才能看到安装进度和"下一步"提示。**不加也能装成功**，只是看不到提示——安装失败时 npm 会自动显示所有输出。
@@ -297,13 +302,13 @@ oh-my-sdd v0.2+ 支持在多种 AI 编程工具中加载。skills + hooks + HARD
 | 工具 | 状态 | 安装命令 | Skill 路径 | Hook 机制 |
 |------|------|---------|-----------|-----------|
 | **Claude Code** | ✅ 完整支持（默认） | `npm install -g @cli-tools/oh-my-sdd` | `~/.claude/skills/` | JSON hooks + wrapper |
-| **OpenCode** | ✅ 完整支持（v0.3+） | `oms-install --tool opencode` | `~/.config/opencode/plugins/oh-my-sdd/`、`~/.config/opencode/AGENTS.md` | TypeScript adapter + official Instructions |
+| **OpenCode** | ✅ 完整支持（v0.3+） | `oms-install --tool opencode` | `~/.config/opencode/skills/`、`~/.config/opencode/commands/`、`~/.config/opencode/AGENTS.md` | TypeScript adapter + official Instructions |
 | **通义灵码 Lingma** | ✅ 完整支持（基于文档解读） | `oms-install --tool lingma` | `~/.lingma/skills/` | JSON hooks（与 Claude Code 同构） |
 | **KiloCode** | ⚠️ 部分支持（无 hook 强制） | `oms-install --tool kilocode` | `~/.kilo/skills/` | 无 hook 机制，HARD_RULE 仅 advisory |
 | **Cursor** | 📋 v0.3 路线 | — | — | — |
 | **Windsurf** | 📋 v0.3 路线 | — | — | — |
 
-**自动检测**：不传 `--tool` 时，install.js 按 `which claude > which lingma` 顺序检测。检测到哪个就装哪个。
+**自动检测**：不传 `--tool` 时，安装器按 Claude → Lingma → OpenCode → KiloCode 顺序调用各适配器的 `isInstalled()`；全部未检测到时回退到 Claude。多工具并存时请显式传 `--tool`。
 
 **多工具并存**：同一台机器可同时为多个工具装 oh-my-sdd。卸载时用 `--tool <name>` 精准卸载单一工具，不影响其他。
 
