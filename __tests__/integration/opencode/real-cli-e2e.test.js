@@ -155,6 +155,7 @@ function stream(response, delta, finishReason = null, usage) {
 
 async function startProvider(transcript, projectDir) {
   const seenCases = new Set();
+  let overflowIssued = false;
   const server = createServer((request, response) => {
     if (request.method === 'GET' && request.url?.endsWith('/models')) {
       transcript.push({ method: request.method, url: request.url, marker: null, body: '' });
@@ -168,6 +169,10 @@ async function startProvider(transcript, projectDir) {
       const marker = body.match(/E2E_CASE=([a-z-]+)/)?.[1];
       const messages = requestMessages(body);
       const kind = classifyProviderRequest(messages);
+      const shouldOverflow = kind === 'normal'
+        && !overflowIssued
+        && body.includes('Verify the managed enterprise instructions.');
+      if (shouldOverflow) overflowIssued = true;
       transcript.push({ method: request.method, url: request.url, marker, kind, messages, body });
       if (hasMisplacedSystemMessage(messages)) {
         response.writeHead(400, { 'content-type': 'application/json' });
@@ -200,9 +205,9 @@ async function startProvider(transcript, projectDir) {
       } else {
         stream(response, { role: 'assistant', content: 'E2E command completed' });
         stream(response, {}, 'stop', {
-          prompt_tokens: kind === 'normal' ? 15_000 : 100,
+          prompt_tokens: shouldOverflow ? 15_000 : 100,
           completion_tokens: 10,
-          total_tokens: kind === 'normal' ? 15_010 : 110,
+          total_tokens: shouldOverflow ? 15_010 : 110,
         });
       }
       response.end('data: [DONE]\n\n');
