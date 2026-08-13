@@ -58,6 +58,52 @@ test('AGENTS helper creates one managed block and preserves user content', () =>
   }
 });
 
+test('AGENTS helper keeps the original file when atomic temp write fails', () => {
+  const root = fixture();
+  try {
+    const file = join(root, 'AGENTS.md');
+    const original = '# User rules\nkeep me\n';
+    writeFileSync(file, original);
+
+    assert.throws(() => upsertManagedAgentsBlock(file, '## Rule', {
+      fs: {
+        writeFileSync() {
+          throw new Error('simulated disk full');
+        },
+      },
+    }), /simulated disk full/);
+
+    assert.equal(readFileSync(file, 'utf8'), original);
+    assert.deepEqual(readdirSync(root).sort(), ['AGENTS.md']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('AGENTS helper keeps content and mode when atomic rename fails', () => {
+  const root = fixture();
+  try {
+    const file = join(root, 'AGENTS.md');
+    const original = '# User rules\nkeep me\n';
+    writeFileSync(file, original, { mode: 0o640 });
+    const originalMode = statSync(file).mode & 0o777;
+
+    assert.throws(() => upsertManagedAgentsBlock(file, '## Rule', {
+      fs: {
+        renameSync() {
+          throw new Error('simulated rename failure');
+        },
+      },
+    }), /simulated rename failure/);
+
+    assert.equal(readFileSync(file, 'utf8'), original);
+    assert.equal(statSync(file).mode & 0o777, originalMode);
+    assert.deepEqual(readdirSync(root).sort(), ['AGENTS.md']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('AGENTS helper removes only its block and deletes an empty plugin file', () => {
   const root = fixture();
   try {
