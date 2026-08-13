@@ -16,8 +16,14 @@ export const AGENTS_END = '<!-- OH-MY-SDD:END -->';
 
 const MANAGED_BLOCK_RE = /<!-- OH-MY-SDD:BEGIN \(do not edit between these markers\) -->\r?\n?[\s\S]*?<!-- OH-MY-SDD:END -->\r?\n?/g;
 
-export function getAgentsPath(home = homedir(), pathImpl = { join }) {
-  return pathImpl.join(home, '.config', 'opencode', 'AGENTS.md');
+export function getOpenCodeConfigDir(home = homedir(), pathImpl = { join }, env = process.env) {
+  if (env.OPENCODE_CONFIG_DIR) return env.OPENCODE_CONFIG_DIR;
+  if (env.XDG_CONFIG_HOME) return pathImpl.join(env.XDG_CONFIG_HOME, 'opencode');
+  return pathImpl.join(home, '.config', 'opencode');
+}
+
+export function getAgentsPath(home = homedir(), pathImpl = { join }, env = process.env) {
+  return pathImpl.join(getOpenCodeConfigDir(home, pathImpl, env), 'AGENTS.md');
 }
 
 function managedBlock(body) {

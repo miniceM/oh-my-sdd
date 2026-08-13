@@ -139,6 +139,45 @@ test('AGENTS helper resolves POSIX and Windows OpenCode config paths', () => {
   );
 });
 
+test('AGENTS helper follows the effective OpenCode config directory', () => {
+  assert.equal(
+    getAgentsPath('/home/alice', path.posix, {
+      OPENCODE_CONFIG_DIR: '/tmp/custom-opencode',
+      XDG_CONFIG_HOME: '/tmp/ignored-xdg',
+    }),
+    '/tmp/custom-opencode/AGENTS.md',
+  );
+  assert.equal(
+    getAgentsPath('/home/alice', path.posix, { XDG_CONFIG_HOME: '/tmp/xdg' }),
+    '/tmp/xdg/opencode/AGENTS.md',
+  );
+});
+
+test('postinstall writes AGENTS.md beside the effective OpenCode config', () => {
+  const root = fixture();
+  try {
+    const home = join(root, 'home');
+    const configDir = join(root, 'xdg-config', 'opencode');
+    const env = {
+      ...process.env,
+      HOME: home,
+      USERPROFILE: home,
+      XDG_CONFIG_HOME: join(root, 'xdg-config'),
+      OPENCODE_CONFIG_DIR: configDir,
+    };
+    execFileSync(process.execPath, ['scripts/postinstall.mjs'], {
+      cwd: join(process.cwd(), 'opencode'),
+      env,
+      encoding: 'utf8',
+    });
+
+    assert.match(readFileSync(join(configDir, 'AGENTS.md'), 'utf8'), /HARD_RULE/);
+    assert.equal(existsSync(join(home, '.config', 'opencode', 'AGENTS.md')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('postinstall manages one global AGENTS baseline block across upgrades', () => {
   const root = fixture();
   try {
