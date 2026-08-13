@@ -30,6 +30,7 @@ jobs:
         run: echo "${{ github.workspace }}/scripts" >> "$GITHUB_PATH"
       - run: npm ci --ignore-scripts
       - run: npm ci --prefix opencode --ignore-scripts
+      - run: node --test __tests__/unit/opencode/resource-scripts.test.js
       - run: npm run test:e2e:opencode
       - name: Upload OpenCode E2E artifacts
         if: failure()

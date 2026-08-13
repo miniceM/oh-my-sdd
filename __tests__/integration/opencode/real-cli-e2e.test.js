@@ -302,12 +302,8 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
     writeFileSync(join(sandbox.artifactsDir, 'conversation.log'), `${conversation.stdout}\n${conversation.stderr}`);
     fail('conversation', conversation, sandbox);
 
-    const compactionInput = Array.from(
-      { length: 1_500 },
-      (_, index) => `E2E_HISTORY_${index}=preserve this deterministic context`,
-    ).join('\n');
     const compact = await run(executable, [
-      'run', '--continue', '--print-logs', '--format', 'json', compactionInput,
+      'run', '--continue', '--print-logs', '--format', 'json', 'Continue after the deterministic high-token turn.',
     ], { env: sandbox.env, cwd: sandbox.projectDir, timeoutMs: commandTimeoutMs });
     writeFileSync(join(sandbox.artifactsDir, 'compaction.log'), `${compact.stdout}\n${compact.stderr}`);
     fail('compaction', compact, sandbox);

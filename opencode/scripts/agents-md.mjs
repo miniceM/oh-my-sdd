@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -31,6 +32,7 @@ function managedBlock(body) {
 }
 
 const DEFAULT_FS = {
+  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -51,6 +53,7 @@ function replaceFileAtomically(file, content, fsOverrides = {}) {
       encoding: 'utf8',
       ...(mode === undefined ? {} : { mode }),
     });
+    if (mode !== undefined) fs.chmodSync(temporary, mode);
     fs.renameSync(temporary, file);
     replaced = true;
   } finally {

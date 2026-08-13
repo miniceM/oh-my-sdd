@@ -104,6 +104,24 @@ test('AGENTS helper keeps content and mode when atomic rename fails', () => {
   }
 });
 
+test('AGENTS helper preserves mode after a successful atomic replace under restrictive umask', () => {
+  const root = fixture();
+  const previousUmask = process.umask();
+  try {
+    const file = join(root, 'AGENTS.md');
+    writeFileSync(file, '# User rules\n', { mode: 0o644 });
+    assert.equal(statSync(file).mode & 0o777, 0o644);
+    process.umask(0o077);
+
+    upsertManagedAgentsBlock(file, '## Rule');
+
+    assert.equal(statSync(file).mode & 0o777, 0o644);
+  } finally {
+    process.umask(previousUmask);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('AGENTS helper removes only its block and deletes an empty plugin file', () => {
   const root = fixture();
   try {
@@ -173,6 +191,43 @@ test('postinstall writes AGENTS.md beside the effective OpenCode config', () => 
 
     assert.match(readFileSync(join(configDir, 'AGENTS.md'), 'utf8'), /HARD_RULE/);
     assert.equal(existsSync(join(home, '.config', 'opencode', 'AGENTS.md')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('OpenCode uninstall resolves config and allowed roots from the effective config directory', async () => {
+  const { getUninstallPaths } = await import('../../../opencode/scripts/uninstall.mjs');
+  const custom = getUninstallPaths('/home/alice', path.posix, {
+    OPENCODE_CONFIG_DIR: '/tmp/custom-opencode',
+  });
+
+  assert.equal(custom.configPath, '/tmp/custom-opencode/opencode.json');
+  assert.ok(custom.allowedRoots.includes('/tmp/custom-opencode/skills'));
+  assert.ok(custom.allowedRoots.includes('/tmp/custom-opencode/commands'));
+  assert.ok(custom.allowedRoots.includes('/home/alice/.config/opencode/skills'));
+});
+
+test('OpenCode uninstall unregisters a plugin from an injected effective config path', () => {
+  const root = fixture();
+  try {
+    const configPath = join(root, 'custom-opencode', 'opencode.json');
+    mkdirSync(dirname(configPath), { recursive: true });
+    writeFileSync(configPath, JSON.stringify({
+      plugin: ['other-plugin', '@cli-tools/oh-my-sdd-opencode'],
+    }));
+
+    const result = uninstallOpenCode({
+      configPath,
+      agentsPath: join(root, 'missing-AGENTS.md'),
+      manifestPath: join(root, 'missing-resources.json'),
+      allowedRoots: [join(root, 'custom-opencode')],
+      warn: () => {},
+      log: () => {},
+    });
+
+    assert.equal(result.unregistered, 1);
+    assert.deepEqual(JSON.parse(readFileSync(configPath, 'utf8')).plugin, ['other-plugin']);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
