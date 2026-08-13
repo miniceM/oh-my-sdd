@@ -150,9 +150,9 @@ test('AGENTS helper preserves whitespace-only user content outside its block', (
 });
 
 test('AGENTS helper resolves POSIX and Windows OpenCode config paths', () => {
-  assert.equal(getAgentsPath('/home/alice', path.posix), '/home/alice/.config/opencode/AGENTS.md');
+  assert.equal(getAgentsPath('/home/alice', path.posix, {}), '/home/alice/.config/opencode/AGENTS.md');
   assert.equal(
-    getAgentsPath('C:\\Users\\alice', path.win32),
+    getAgentsPath('C:\\Users\\alice', path.win32, {}),
     'C:\\Users\\alice\\.config\\opencode\\AGENTS.md',
   );
 });

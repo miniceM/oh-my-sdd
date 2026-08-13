@@ -89,6 +89,7 @@ test('OpenCode E2E workflow uploads hidden failure artifacts', () => {
 
 test('OpenCode E2E workflow runs the AGENTS lifecycle tests on every platform', () => {
   const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', 'opencode-e2e.yml'), 'utf8');
+  assert.match(workflow, /npm run sync:resources --prefix opencode/);
   assert.match(workflow, /node --test __tests__\/unit\/opencode\/resource-scripts\.test\.js/);
 });
 
