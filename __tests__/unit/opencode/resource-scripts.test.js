@@ -104,7 +104,9 @@ test('AGENTS helper keeps content and mode when atomic rename fails', () => {
   }
 });
 
-test('AGENTS helper preserves mode after a successful atomic replace under restrictive umask', () => {
+test('AGENTS helper preserves mode after a successful atomic replace under restrictive umask', {
+  skip: process.platform === 'win32' ? 'POSIX permission bits are not portable to Windows' : false,
+}, () => {
   const root = fixture();
   const previousUmask = process.umask();
   try {
@@ -714,9 +716,12 @@ test('postinstall delegated-skill exports document pinned source and read-only a
 test('postinstall installs delegated skills into a clean OpenCode HOME with actionable diagnostics', () => {
   const home = fixture();
   try {
+    const env = { ...process.env, HOME: home, USERPROFILE: home };
+    delete env.OPENCODE_CONFIG_DIR;
+    delete env.XDG_CONFIG_HOME;
     const output = execFileSync('node', ['scripts/postinstall.mjs'], {
       cwd: join(process.cwd(), 'opencode'),
-      env: { ...process.env, HOME: home, USERPROFILE: home },
+      env,
       encoding: 'utf8',
     });
 
