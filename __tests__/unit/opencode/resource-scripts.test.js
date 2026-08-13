@@ -164,6 +164,43 @@ test('postinstall manages one global AGENTS baseline block across upgrades', () 
   }
 });
 
+test('Windows CRLF AGENTS lifecycle preserves user bytes across install upgrade and uninstall', () => {
+  const root = fixture();
+  try {
+    const home = join(root, 'home');
+    const agentsPath = getAgentsPath(home);
+    const userContent = '# User instructions\r\nkeep me\r\n';
+    mkdirSync(dirname(agentsPath), { recursive: true });
+    writeFileSync(agentsPath, userContent);
+    const env = { ...process.env, HOME: home, USERPROFILE: home };
+    const options = { cwd: join(process.cwd(), 'opencode'), env, encoding: 'utf8' };
+
+    execFileSync(process.execPath, ['scripts/postinstall.mjs'], options);
+    execFileSync(process.execPath, ['scripts/postinstall.mjs'], options);
+
+    const installed = readFileSync(agentsPath, 'utf8');
+    assert.ok(installed.startsWith(userContent));
+    assert.equal(installed.match(/OH-MY-SDD:BEGIN/g)?.length, 1);
+
+    const result = uninstallOpenCode({
+      agentsPath,
+      manifestPath: join(root, 'missing-resources.json'),
+      allowedRoots: [join(root, 'resources')],
+      warn: () => {},
+      log: () => {},
+    });
+    assert.equal(result.agentsRemoved, true);
+    assert.equal(readFileSync(agentsPath, 'utf8'), userContent);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('OpenCode adapter documents Windows support without a stale unsupported warning', () => {
+  const source = readFileSync(join(process.cwd(), 'install', 'hosts', 'opencode-adapter.js'), 'utf8');
+  assert.doesNotMatch(source, /Windows 不支持/);
+});
+
 test('OpenCode uninstall removes only the managed AGENTS block', () => {
   const root = fixture();
   try {

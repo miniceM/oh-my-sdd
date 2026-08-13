@@ -3,8 +3,6 @@
 // Production installs register the npm package in opencode.json. OpenCode
 // resolves and updates the package; local plugin paths are retained only for
 // backwards-compatible uninstall cleanup.
-//
-// Windows 不支持：OpenCode 主要跑在 macOS/Linux。
 
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { HostAdapter } from '../host-adapter.js';
