@@ -3,16 +3,30 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 
 import { runSddPlanHarness } from '../../helpers/opencode-command-harness.js';
 import { resolveNpmCli } from '../../helpers/resolve-npm-cli.js';
+import {
+  firstNpmPackEntry,
+  parseNpmPackJson,
+} from '../../helpers/opencode-e2e-harness.js';
 
 const worktreeRoot = process.cwd();
 const npmExecPath = resolveNpmCli();
 
 function runNpm(args, options) {
   return execFileSync(process.execPath, [npmExecPath, ...args], options);
+}
+
+function runNpmWithOutput(args, options) {
+  const result = spawnSync(process.execPath, [npmExecPath, ...args], {
+    ...options,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  assert.equal(result.status, 0, `npm command failed:\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  return result;
 }
 
 function withInstalledResources(run) {
@@ -42,17 +56,19 @@ function withInstalledResources(run) {
   };
   try {
     assert.equal(fs.existsSync(path.join(shims, 'claude')), false, 'isolated PATH must not expose claude');
-    const packed = JSON.parse(runNpm([
+    const packResult = runNpmWithOutput([
       'pack', '--ignore-scripts', '--json', '--pack-destination', pack,
     ], {
       cwd: path.join(worktreeRoot, 'opencode'),
       env,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
-    }));
+    });
+    const packed = parseNpmPackJson(packResult.stdout, packResult.stderr);
+    const packEntry = firstNpmPackEntry(packed, packResult);
     runNpm([
       'install', '--global', '--legacy-peer-deps', '--foreground-scripts',
-      path.join(pack, packed[0].filename),
+      path.join(pack, packEntry.filename),
     ], {
       env,
       encoding: 'utf8',

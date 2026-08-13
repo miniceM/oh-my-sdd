@@ -23,3 +23,9 @@ test('smoke-check runs for pull requests with an isolated HOME and the current u
   assert.match(smoke, /HOME=\$TESTHOME USERPROFILE=\$TESTHOME node install\/uninstall\.js/);
   assert.doesNotMatch(smoke, /node uninstall\.js/);
 });
+
+test('Windows CI explicitly runs the no-Bash mock CLI contract', () => {
+  const testJob = workflow.slice(workflow.indexOf('  test:'), workflow.indexOf('  coverage:'));
+  assert.match(testJob, /if:\s*runner\.os\s*==\s*'Windows'/);
+  assert.match(testJob, /node --test __tests__\/unit\/scripts\/mock-cli\.test\.js/);
+});

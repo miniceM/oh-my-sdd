@@ -8,6 +8,7 @@ import {
   buildE2eEnv,
   createE2eSandbox,
   formatE2eFailure,
+  firstNpmPackEntry,
   parseNpmPackJson,
   publishedCommands,
   publishedSkills,
@@ -70,8 +71,25 @@ test('OpenCode E2E harness formats hook failures with environment and artifact c
 });
 
 test('OpenCode E2E harness extracts npm pack JSON after lifecycle output', () => {
-  const packed = parseNpmPackJson('[copy-resources] synced\n[{"filename":"plugin.tgz"}]\n');
+  const packed = parseNpmPackJson(
+    '[copy-resources] synced\n[{"filename":"plugin.tgz"}]\nnotice: pack complete\n',
+    'npm lifecycle diagnostics\n',
+  );
   assert.deepEqual(packed, [{ filename: 'plugin.tgz' }]);
+});
+
+test('OpenCode E2E harness reports stdout and stderr when npm pack JSON is missing', () => {
+  assert.throws(
+    () => parseNpmPackJson('[copy-resources] synced\nnot-json\n', 'npm pack failed\n'),
+    /stdout:[\s\S]*not-json[\s\S]*stderr:[\s\S]*npm pack failed/,
+  );
+});
+
+test('OpenCode E2E harness reports stdout and stderr when filename is missing', () => {
+  assert.throws(
+    () => firstNpmPackEntry([{}], { stdout: 'manifest stdout', stderr: 'manifest stderr' }),
+    /filename[\s\S]*manifest stdout[\s\S]*manifest stderr/,
+  );
 });
 
 test('CI workflows install OpenCode build dependencies without running root lifecycle scripts', () => {

@@ -32,20 +32,25 @@ export function getRulesPath() {
 // ============================================
 // 查找原 Claude binary
 // ============================================
-export function findClaudeOriginal() {
-  const wrapperDir = getWrapperBinDir();
-  const homeDir = getHomeDir();
+export function findClaudeOriginal({
+  platform = process.platform,
+  homeDir = getHomeDir(),
+  existsSyncFn = existsSync,
+  execFileSyncFn = execFileSync,
+} = {}) {
+  const windows = isWindows(platform);
+  const wrapperDir = getWrapperBinDir({ platform, homeDir });
 
   // 优先使用备份 symlink（即使在 wrapper 目录也有效）
-  const backupName = isWindows() ? 'claude-original.exe' : 'claude-original';
+  const backupName = windows ? 'claude-original.exe' : 'claude-original';
   const backupPath = path.join(wrapperDir, backupName);
-  if (existsSync(backupPath)) {
+  if (existsSyncFn(backupPath)) {
     // 备份 symlink 或不同文件名，可以使用
     return backupPath;
   }
 
   // 常见安装位置（按优先级）
-  const locations = isWindows()
+  const locations = windows
     ? [
         path.join(homeDir, 'AppData', 'Local', 'Claude', 'claude.exe'),
         path.join(homeDir, '.claude', 'bin', 'claude.exe'),
@@ -60,27 +65,34 @@ export function findClaudeOriginal() {
       ];
 
   for (const loc of locations) {
-    if (existsSync(loc)) {
+    if (existsSyncFn(loc)) {
       const locDir = path.dirname(loc);
-      if (locDir !== wrapperDir) {
+      if (normalizePathForComparison(locDir, windows) !== normalizePathForComparison(wrapperDir, windows)) {
         return loc;
       }
     }
   }
 
   // 从 PATH 查找（排除 wrapper 目录）
-  const cmd = isWindows() ? 'where' : 'which';
+  const cmd = windows ? 'where' : 'which';
   try {
-    const result = execFileSync(cmd, ['claude'], { encoding: 'utf8' }).trim();
-    const resultDir = path.dirname(result);
-    if (resultDir !== wrapperDir) {
-      return result;
+    const result = execFileSyncFn(cmd, ['claude'], { encoding: 'utf8' });
+    for (const candidate of String(result).split(/\r?\n/).map((line) => line.trim()).filter(Boolean)) {
+      const resultDir = path.dirname(candidate);
+      if (normalizePathForComparison(resultDir, windows) !== normalizePathForComparison(wrapperDir, windows)) {
+        return candidate;
+      }
     }
   } catch {
     // PATH 中未找到
   }
 
   return null;
+}
+
+function normalizePathForComparison(value, windows) {
+  const normalized = path.normalize(value).replaceAll('\\', '/').replace(/\/$/, '');
+  return windows ? normalized.toLowerCase() : normalized;
 }
 
 // ============================================

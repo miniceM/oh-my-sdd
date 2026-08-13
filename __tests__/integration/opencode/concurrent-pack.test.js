@@ -16,6 +16,10 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 
 import { resolveNpmCli } from '../../helpers/resolve-npm-cli.js';
+import {
+  firstNpmPackEntry,
+  parseNpmPackJson,
+} from '../../helpers/opencode-e2e-harness.js';
 
 const SOURCE_ROOT = process.cwd();
 const PRIMARY_DELEGATES = [
@@ -25,12 +29,6 @@ const PRIMARY_DELEGATES = [
   'subagent-driven-development',
   'requesting-code-review',
 ];
-function parsePackManifest(output) {
-  const json = output.match(/(^|\n)(\[\s*\{[\s\S]*\}\s*\])\s*$/)?.[2];
-  assert.ok(json, `npm pack did not emit a JSON manifest:\n${output}`);
-  return JSON.parse(json);
-}
-
 function createRepositoryFixture(root) {
   const repository = join(root, 'repository');
   for (const name of ['skills', 'content', 'hooks', 'lib', 'opencode']) {
@@ -117,7 +115,6 @@ test('concurrent package syncs are serialized and leave the worktree unchanged',
         'pack',
         '--dry-run',
         '--json',
-        '--silent',
         '--cache', cache,
         '--pack-destination', destination,
       ], { cwd: opencodeDir });
@@ -125,8 +122,9 @@ test('concurrent package syncs are serialized and leave the worktree unchanged',
 
     for (const result of await Promise.all(runs)) {
       assert.equal(result.code, 0, result.stderr || result.stdout);
-      const manifest = parsePackManifest(result.stdout);
-      const files = manifest[0].files.map(({ path }) => path.replaceAll('\\', '/'));
+      const manifest = parseNpmPackJson(result.stdout, result.stderr);
+      const packEntry = firstNpmPackEntry(manifest, result);
+      const files = packEntry.files.map(({ path }) => path.replaceAll('\\', '/'));
       for (const skill of PRIMARY_DELEGATES) {
         assert.ok(
           files.includes(`delegated-skills/${skill}/SKILL.md`),

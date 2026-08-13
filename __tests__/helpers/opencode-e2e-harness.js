@@ -49,10 +49,59 @@ export function createE2eSandbox(repoRoot) {
   return sandbox;
 }
 
-export function parseNpmPackJson(output) {
-  const match = output.match(/(\[\s*\{[\s\S]*\])\s*$/);
-  if (!match) throw new Error(`npm pack did not emit a JSON manifest: ${output}`);
-  return JSON.parse(match[1]);
+export function parseNpmPackJson(output, stderr = '') {
+  const candidates = [];
+  for (let start = output.indexOf('['); start >= 0; start = output.indexOf('[', start + 1)) {
+    const end = findJsonArrayEnd(output, start);
+    if (end < 0) continue;
+    try {
+      const value = JSON.parse(output.slice(start, end + 1));
+      if (Array.isArray(value) && value.some((entry) => entry?.filename)) candidates.push(value);
+    } catch {
+      // A lifecycle log may contain '['; continue searching for the manifest.
+    }
+  }
+  const manifest = candidates.at(-1);
+  if (manifest?.length > 0) return manifest;
+  throw new Error([
+    'npm pack did not emit a non-empty JSON manifest',
+    `stdout:\n${output}`,
+    `stderr:\n${stderr}`,
+  ].join('\n'));
+}
+
+export function firstNpmPackEntry(manifest, { stdout = '', stderr = '' } = {}) {
+  const entry = manifest?.[0];
+  if (entry?.filename) return entry;
+  throw new Error([
+    'npm pack manifest did not contain an entry with filename',
+    `stdout:\n${stdout}`,
+    `stderr:\n${stderr}`,
+  ].join('\n'));
+}
+
+function findJsonArrayEnd(input, start) {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < input.length; index += 1) {
+    const character = input[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+    } else if (character === '[') {
+      depth += 1;
+    } else if (character === ']') {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
 }
 
 export function publishedCommands(packageRoot) {

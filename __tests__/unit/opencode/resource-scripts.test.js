@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -37,6 +37,18 @@ import {
 function fixture() {
   return mkdtempSync(join(tmpdir(), 'oms-resource-test-'));
 }
+
+test('resource sync writes normal diagnostics to stderr', () => {
+  const child = spawnSync(process.execPath, [
+    '--input-type=module',
+    '--eval',
+    `import { main } from ${JSON.stringify(pathToFileURL(join(process.cwd(), 'opencode', 'scripts', 'copy-resources.mjs')).href)}; main();`,
+  ], { encoding: 'utf8' });
+
+  assert.equal(child.status, 0, child.stderr || child.stdout);
+  assert.doesNotMatch(child.stdout, /\[copy-resources\]/);
+  assert.match(child.stderr, /\[copy-resources\] all resources synced/);
+});
 
 test('AGENTS helper creates one managed block and preserves user content', () => {
   const root = fixture();

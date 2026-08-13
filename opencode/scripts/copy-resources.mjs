@@ -305,7 +305,7 @@ export function main() {
 
     try {
       syncResourceTree(src, dst);
-      console.log(`[copy-resources] OK  ${fromRel} -> ${toRel}`);
+      console.error(`[copy-resources] OK  ${fromRel} -> ${toRel}`);
     } catch (err) {
       console.error(`[copy-resources] FAIL ${fromRel} -> ${toRel}: ${err.message}`);
       failed = true;
@@ -314,7 +314,7 @@ export function main() {
 
   try {
     syncCommandLayouts();
-    console.log('[copy-resources] OK  .opencode/commands -> .agents/command');
+    console.error('[copy-resources] OK  .opencode/commands -> .agents/command');
   } catch (err) {
     console.error(`[copy-resources] FAIL .opencode/commands -> .agents/command: ${err.message}`);
     failed = true;
@@ -324,7 +324,7 @@ export function main() {
     throw new Error('[copy-resources] one or more syncs failed');
   }
 
-  console.log('[copy-resources] all resources synced');
+  console.error('[copy-resources] all resources synced');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
