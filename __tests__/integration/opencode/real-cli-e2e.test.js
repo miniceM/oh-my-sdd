@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -7,6 +7,7 @@ import { delimiter, join } from 'node:path';
 
 import {
   createE2eSandbox,
+  firstNpmPackEntry,
   formatE2eFailure,
   parseNpmPackJson,
   publishedCommands,
@@ -42,6 +43,17 @@ function npmInvocation(args) {
 function execNpm(args, options) {
   const invocation = npmInvocation(args);
   return execFileSync(invocation.command, invocation.args, options);
+}
+
+function execNpmWithOutput(args, options) {
+  const invocation = npmInvocation(args);
+  const result = spawnSync(invocation.command, invocation.args, {
+    ...options,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  assert.equal(result.status, 0, `npm command failed:\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  return result;
 }
 
 function run(command, args, { timeoutMs = 30_000, ...options }) {
@@ -174,12 +186,14 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
       ], { cwd: sandbox.projectDir, env: sandbox.env, stdio: 'inherit' });
       sandbox.env.PATH = `${join(sandbox.toolchainDir, 'node_modules', '@vscode', 'ripgrep-win32-x64', 'bin')}${delimiter}${sandbox.env.PATH}`;
     }
-    const packed = parseNpmPackJson(execNpm([
+    const packResult = execNpmWithOutput([
       'pack', '--json', '--pack-destination', sandbox.packDir,
     ], {
       cwd: join(process.cwd(), 'opencode'), env: sandbox.env, encoding: 'utf8',
-    }));
-    const tarball = join(sandbox.packDir, packed[0].filename);
+    });
+    const packed = parseNpmPackJson(packResult.stdout, packResult.stderr);
+    const packEntry = firstNpmPackEntry(packed, packResult);
+    const tarball = join(sandbox.packDir, packEntry.filename);
     writeFileSync(join(sandbox.artifactsDir, 'tarball-manifest.json'), JSON.stringify(packed, null, 2));
 
     const install = await runNpm([
