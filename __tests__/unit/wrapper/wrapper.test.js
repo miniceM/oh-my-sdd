@@ -79,6 +79,40 @@ test('findClaudeOriginal returns string or null', () => {
   // 可以返回备份 symlink（即使在 wrapper 目录）或其他位置的 Claude
 });
 
+test('findClaudeOriginal selects the first non-wrapper Windows PATH candidate', () => {
+  const homeDir = path.join('test-home', 'user');
+  const wrapperDir = path.join(homeDir, 'bin');
+  const wrapperClaude = path.join(wrapperDir, 'claude.exe');
+  const firstClaude = path.join('Program Files', 'Claude', 'claude.exe');
+  const secondClaude = path.join('AppData', 'Local', 'Claude', 'claude.exe');
+
+  assert.equal(
+    wrapper.findClaudeOriginal({
+      platform: 'win32',
+      homeDir,
+      existsSyncFn: () => false,
+      execFileSyncFn: () => `${wrapperClaude}\r\n\r\n${firstClaude}\r\n${secondClaude}\r\n`,
+    }),
+    firstClaude,
+  );
+});
+
+test('findClaudeOriginal returns null when Windows where output has no valid candidates', () => {
+  const homeDir = path.join('test-home', 'user');
+  const wrapperDir = path.join(homeDir, 'bin');
+  const wrapperClaude = path.join(wrapperDir, 'claude.exe');
+
+  assert.equal(
+    wrapper.findClaudeOriginal({
+      platform: 'win32',
+      homeDir,
+      existsSyncFn: () => false,
+      execFileSyncFn: () => `\r\n${wrapperClaude}\r\n`,
+    }),
+    null,
+  );
+});
+
 // ---------- 安装状态检查 ----------
 
 test('isWrapperInstalled returns boolean', () => {

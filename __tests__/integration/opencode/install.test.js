@@ -3,12 +3,16 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   resourceDigest,
   writeOwnershipManifest,
 } from '../../../opencode/scripts/resource-ownership.mjs';
-import { parseNpmPackJson } from '../../helpers/opencode-e2e-harness.js';
+import {
+  firstNpmPackEntry,
+  parseNpmPackJson,
+} from '../../helpers/opencode-e2e-harness.js';
+import { resolveNpmCli } from '../../helpers/resolve-npm-cli.js';
 
 const worktreeRoot = process.cwd();
 
@@ -17,6 +21,16 @@ function runNpm(args, options) {
     return execFileSync(process.execPath, [process.env.npm_execpath, ...args], options);
   }
   return execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, options);
+}
+
+function runNpmWithOutput(args, options) {
+  const result = spawnSync(
+    process.execPath,
+    [resolveNpmCli(), ...args],
+    { ...options, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  assert.equal(result.status, 0, `npm command failed:\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  return result;
 }
 
 test('install + uninstall: oms-install/uninstall --tool opencode round-trip', () => {
@@ -124,7 +138,7 @@ test('packed OpenCode package installs from a clean tarball and its wrapper full
   delete env.XDG_CONFIG_HOME;
 
   try {
-    const packed = parseNpmPackJson(runNpm([
+    const packResult = runNpmWithOutput([
       'pack',
       '--json',
       '--pack-destination',
@@ -134,9 +148,11 @@ test('packed OpenCode package installs from a clean tarball and its wrapper full
       env,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
-    }));
-    const tarball = path.join(packDir, packed[0].filename);
-    const tarballFiles = new Set(packed[0].files.map((file) => file.path));
+    });
+    const packed = parseNpmPackJson(packResult.stdout, packResult.stderr);
+    const packEntry = firstNpmPackEntry(packed, packResult);
+    const tarball = path.join(packDir, packEntry.filename);
+    const tarballFiles = new Set(packEntry.files.map((file) => file.path));
     for (const requiredRuntimeFile of ['lib/rules.js', 'lib/iam-cli.js', 'lib/dop-client.js']) {
       assert.ok(
         tarballFiles.has(requiredRuntimeFile),
