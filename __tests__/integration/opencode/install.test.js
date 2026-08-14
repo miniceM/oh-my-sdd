@@ -120,6 +120,8 @@ test('packed OpenCode package installs from a clean tarball and its wrapper full
     npm_config_prefix: prefix,
     npm_config_cache: cache,
   };
+  delete env.OPENCODE_CONFIG_DIR;
+  delete env.XDG_CONFIG_HOME;
 
   try {
     const packed = parseNpmPackJson(runNpm([

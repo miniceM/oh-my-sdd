@@ -5,20 +5,36 @@ import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 import { uninstallOwnedResources } from './resource-ownership.mjs';
-import { getAgentsPath, removeManagedAgentsBlock } from './agents-md.mjs';
+import {
+  getAgentsPath,
+  getOpenCodeConfigDir,
+  removeManagedAgentsBlock,
+} from './agents-md.mjs';
 
 const HOME = homedir();
 const MANIFEST_PATH = join(HOME, '.oh-my-sdd', 'opencode-npm-resources.json');
 const OPENCODE_AGENTS_MD = getAgentsPath(HOME);
-const OPENCODE_JSON = join(HOME, '.config', 'opencode', 'opencode.json');
-const ALLOWED_ROOTS = [
-  join(HOME, '.config', 'opencode', 'skills'),
-  join(HOME, '.config', 'opencode', 'commands'),
-  // Legacy path retained so manifests created by versions <= 0.2.0 remain removable.
-  join(HOME, '.config', 'opencode', 'command'),
-  join(HOME, '.agents', 'skills'),
-  join(HOME, '.agents', 'command'),
-];
+
+export function getUninstallPaths(home = homedir(), pathImpl = { join }, env = process.env) {
+  const activeConfig = getOpenCodeConfigDir(home, pathImpl, env);
+  const legacyConfig = pathImpl.join(home, '.config', 'opencode');
+  const configRoots = [...new Set([activeConfig, legacyConfig])];
+  return {
+    agentsPath: pathImpl.join(activeConfig, 'AGENTS.md'),
+    configPath: pathImpl.join(activeConfig, 'opencode.json'),
+    allowedRoots: [
+      ...configRoots.flatMap((root) => [
+        pathImpl.join(root, 'skills'),
+        pathImpl.join(root, 'commands'),
+        pathImpl.join(root, 'command'),
+      ]),
+      pathImpl.join(home, '.agents', 'skills'),
+      pathImpl.join(home, '.agents', 'command'),
+    ],
+  };
+}
+
+const DEFAULT_PATHS = getUninstallPaths(HOME);
 
 const PLUGIN_ENTRIES = new Set([
   '@cli-tools/oh-my-sdd-opencode',
@@ -36,7 +52,7 @@ const PLUGIN_ENTRIES = new Set([
  * @returns {number} Number of plugin entries removed.
  */
 export function unregisterOpenCodePlugin({
-  configPath = OPENCODE_JSON,
+  configPath = DEFAULT_PATHS.configPath,
   exists = existsSync,
   read = readFileSync,
   write = writeFileSync,
@@ -72,12 +88,13 @@ export function unregisterOpenCodePlugin({
  */
 export function main({
   manifestPath = MANIFEST_PATH,
-  allowedRoots = ALLOWED_ROOTS,
+  allowedRoots = DEFAULT_PATHS.allowedRoots,
   agentsPath = OPENCODE_AGENTS_MD,
+  configPath = DEFAULT_PATHS.configPath,
   warn = console.warn,
   log = console.log,
 } = {}) {
-  const unregistered = unregisterOpenCodePlugin({ warn });
+  const unregistered = unregisterOpenCodePlugin({ configPath, warn });
   let agentsRemoved = false;
   try {
     agentsRemoved = removeManagedAgentsBlock(agentsPath);

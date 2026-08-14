@@ -87,6 +87,12 @@ test('OpenCode E2E workflow uploads hidden failure artifacts', () => {
   assert.match(workflow, /include-hidden-files:\s*true/);
 });
 
+test('OpenCode E2E workflow runs the AGENTS lifecycle tests on every platform', () => {
+  const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', 'opencode-e2e.yml'), 'utf8');
+  assert.match(workflow, /npm run sync:resources --prefix opencode/);
+  assert.match(workflow, /node --test __tests__\/unit\/opencode\/resource-scripts\.test\.js/);
+});
+
 test('OpenCode E2E harness loader re-exports only the globally installed tarball plugin', () => {
   const root = mkdtempSync(join(tmpdir(), 'oms-opencode-e2e-loader-'));
   const configDir = join(root, 'xdg-config', 'opencode');

@@ -53,7 +53,11 @@ import {
   resourceDigest,
   writeOwnershipManifest,
 } from './resource-ownership.mjs';
-import { getAgentsPath, upsertManagedAgentsBlock } from './agents-md.mjs';
+import {
+  getAgentsPath,
+  getOpenCodeConfigDir,
+  upsertManagedAgentsBlock,
+} from './agents-md.mjs';
 import { getBodyForInjection } from '../lib/constitution.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -61,8 +65,9 @@ const PLUGIN_ROOT = resolve(__dirname, '..');
 
 // Home-dir targets (OpenCode's global discovery paths).
 const HOME = homedir();
-const OPENCODE_SKILLS_DIR = join(HOME, '.config', 'opencode', 'skills');
-const OPENCODE_COMMANDS_DIR = join(HOME, '.config', 'opencode', 'commands');
+const OPENCODE_CONFIG_DIR = getOpenCodeConfigDir(HOME);
+const OPENCODE_SKILLS_DIR = join(OPENCODE_CONFIG_DIR, 'skills');
+const OPENCODE_COMMANDS_DIR = join(OPENCODE_CONFIG_DIR, 'commands');
 const OPENCODE_AGENTS_MD = getAgentsPath(HOME);
 const AGENTS_SKILLS_DIR = join(HOME, '.agents', 'skills');
 const AGENTS_COMMAND_DIR = join(HOME, '.agents', 'command');

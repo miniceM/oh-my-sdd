@@ -58,6 +58,72 @@ test('AGENTS helper creates one managed block and preserves user content', () =>
   }
 });
 
+test('AGENTS helper keeps the original file when atomic temp write fails', () => {
+  const root = fixture();
+  try {
+    const file = join(root, 'AGENTS.md');
+    const original = '# User rules\nkeep me\n';
+    writeFileSync(file, original);
+
+    assert.throws(() => upsertManagedAgentsBlock(file, '## Rule', {
+      fs: {
+        writeFileSync() {
+          throw new Error('simulated disk full');
+        },
+      },
+    }), /simulated disk full/);
+
+    assert.equal(readFileSync(file, 'utf8'), original);
+    assert.deepEqual(readdirSync(root).sort(), ['AGENTS.md']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('AGENTS helper keeps content and mode when atomic rename fails', () => {
+  const root = fixture();
+  try {
+    const file = join(root, 'AGENTS.md');
+    const original = '# User rules\nkeep me\n';
+    writeFileSync(file, original, { mode: 0o640 });
+    const originalMode = statSync(file).mode & 0o777;
+
+    assert.throws(() => upsertManagedAgentsBlock(file, '## Rule', {
+      fs: {
+        renameSync() {
+          throw new Error('simulated rename failure');
+        },
+      },
+    }), /simulated rename failure/);
+
+    assert.equal(readFileSync(file, 'utf8'), original);
+    assert.equal(statSync(file).mode & 0o777, originalMode);
+    assert.deepEqual(readdirSync(root).sort(), ['AGENTS.md']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('AGENTS helper preserves mode after a successful atomic replace under restrictive umask', {
+  skip: process.platform === 'win32' ? 'POSIX permission bits are not portable to Windows' : false,
+}, () => {
+  const root = fixture();
+  const previousUmask = process.umask();
+  try {
+    const file = join(root, 'AGENTS.md');
+    writeFileSync(file, '# User rules\n', { mode: 0o644 });
+    assert.equal(statSync(file).mode & 0o777, 0o644);
+    process.umask(0o077);
+
+    upsertManagedAgentsBlock(file, '## Rule');
+
+    assert.equal(statSync(file).mode & 0o777, 0o644);
+  } finally {
+    process.umask(previousUmask);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('AGENTS helper removes only its block and deletes an empty plugin file', () => {
   const root = fixture();
   try {
@@ -86,11 +152,87 @@ test('AGENTS helper preserves whitespace-only user content outside its block', (
 });
 
 test('AGENTS helper resolves POSIX and Windows OpenCode config paths', () => {
-  assert.equal(getAgentsPath('/home/alice', path.posix), '/home/alice/.config/opencode/AGENTS.md');
+  assert.equal(getAgentsPath('/home/alice', path.posix, {}), '/home/alice/.config/opencode/AGENTS.md');
   assert.equal(
-    getAgentsPath('C:\\Users\\alice', path.win32),
+    getAgentsPath('C:\\Users\\alice', path.win32, {}),
     'C:\\Users\\alice\\.config\\opencode\\AGENTS.md',
   );
+});
+
+test('AGENTS helper follows the effective OpenCode config directory', () => {
+  assert.equal(
+    getAgentsPath('/home/alice', path.posix, {
+      OPENCODE_CONFIG_DIR: '/tmp/custom-opencode',
+      XDG_CONFIG_HOME: '/tmp/ignored-xdg',
+    }),
+    '/tmp/custom-opencode/AGENTS.md',
+  );
+  assert.equal(
+    getAgentsPath('/home/alice', path.posix, { XDG_CONFIG_HOME: '/tmp/xdg' }),
+    '/tmp/xdg/opencode/AGENTS.md',
+  );
+});
+
+test('postinstall writes AGENTS.md beside the effective OpenCode config', () => {
+  const root = fixture();
+  try {
+    const home = join(root, 'home');
+    const configDir = join(root, 'xdg-config', 'opencode');
+    const env = {
+      ...process.env,
+      HOME: home,
+      USERPROFILE: home,
+      XDG_CONFIG_HOME: join(root, 'xdg-config'),
+      OPENCODE_CONFIG_DIR: configDir,
+    };
+    execFileSync(process.execPath, ['scripts/postinstall.mjs'], {
+      cwd: join(process.cwd(), 'opencode'),
+      env,
+      encoding: 'utf8',
+    });
+
+    assert.match(readFileSync(join(configDir, 'AGENTS.md'), 'utf8'), /HARD_RULE/);
+    assert.equal(existsSync(join(home, '.config', 'opencode', 'AGENTS.md')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('OpenCode uninstall resolves config and allowed roots from the effective config directory', async () => {
+  const { getUninstallPaths } = await import('../../../opencode/scripts/uninstall.mjs');
+  const custom = getUninstallPaths('/home/alice', path.posix, {
+    OPENCODE_CONFIG_DIR: '/tmp/custom-opencode',
+  });
+
+  assert.equal(custom.configPath, '/tmp/custom-opencode/opencode.json');
+  assert.ok(custom.allowedRoots.includes('/tmp/custom-opencode/skills'));
+  assert.ok(custom.allowedRoots.includes('/tmp/custom-opencode/commands'));
+  assert.ok(custom.allowedRoots.includes('/home/alice/.config/opencode/skills'));
+});
+
+test('OpenCode uninstall unregisters a plugin from an injected effective config path', () => {
+  const root = fixture();
+  try {
+    const configPath = join(root, 'custom-opencode', 'opencode.json');
+    mkdirSync(dirname(configPath), { recursive: true });
+    writeFileSync(configPath, JSON.stringify({
+      plugin: ['other-plugin', '@cli-tools/oh-my-sdd-opencode'],
+    }));
+
+    const result = uninstallOpenCode({
+      configPath,
+      agentsPath: join(root, 'missing-AGENTS.md'),
+      manifestPath: join(root, 'missing-resources.json'),
+      allowedRoots: [join(root, 'custom-opencode')],
+      warn: () => {},
+      log: () => {},
+    });
+
+    assert.equal(result.unregistered, 1);
+    assert.deepEqual(JSON.parse(readFileSync(configPath, 'utf8')).plugin, ['other-plugin']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('postinstall manages one global AGENTS baseline block across upgrades', () => {
@@ -116,6 +258,43 @@ test('postinstall manages one global AGENTS baseline block across upgrades', () 
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('Windows CRLF AGENTS lifecycle preserves user bytes across install upgrade and uninstall', () => {
+  const root = fixture();
+  try {
+    const home = join(root, 'home');
+    const agentsPath = getAgentsPath(home);
+    const userContent = '# User instructions\r\nkeep me\r\n';
+    mkdirSync(dirname(agentsPath), { recursive: true });
+    writeFileSync(agentsPath, userContent);
+    const env = { ...process.env, HOME: home, USERPROFILE: home };
+    const options = { cwd: join(process.cwd(), 'opencode'), env, encoding: 'utf8' };
+
+    execFileSync(process.execPath, ['scripts/postinstall.mjs'], options);
+    execFileSync(process.execPath, ['scripts/postinstall.mjs'], options);
+
+    const installed = readFileSync(agentsPath, 'utf8');
+    assert.ok(installed.startsWith(userContent));
+    assert.equal(installed.match(/OH-MY-SDD:BEGIN/g)?.length, 1);
+
+    const result = uninstallOpenCode({
+      agentsPath,
+      manifestPath: join(root, 'missing-resources.json'),
+      allowedRoots: [join(root, 'resources')],
+      warn: () => {},
+      log: () => {},
+    });
+    assert.equal(result.agentsRemoved, true);
+    assert.equal(readFileSync(agentsPath, 'utf8'), userContent);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('OpenCode adapter documents Windows support without a stale unsupported warning', () => {
+  const source = readFileSync(join(process.cwd(), 'install', 'hosts', 'opencode-adapter.js'), 'utf8');
+  assert.doesNotMatch(source, /Windows 不支持/);
 });
 
 test('OpenCode uninstall removes only the managed AGENTS block', () => {
@@ -537,9 +716,12 @@ test('postinstall delegated-skill exports document pinned source and read-only a
 test('postinstall installs delegated skills into a clean OpenCode HOME with actionable diagnostics', () => {
   const home = fixture();
   try {
+    const env = { ...process.env, HOME: home, USERPROFILE: home };
+    delete env.OPENCODE_CONFIG_DIR;
+    delete env.XDG_CONFIG_HOME;
     const output = execFileSync('node', ['scripts/postinstall.mjs'], {
       cwd: join(process.cwd(), 'opencode'),
-      env: { ...process.env, HOME: home, USERPROFILE: home },
+      env,
       encoding: 'utf8',
     });
 

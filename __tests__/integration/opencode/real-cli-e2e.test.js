@@ -21,6 +21,51 @@ const version = process.env.OPENCODE_VERSION;
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const commandTimeoutMs = process.platform === 'win32' ? 120_000 : 30_000;
 const cliInstallTimeoutMs = 120_000;
+const managedAgentsMarker = '<!-- OH-MY-SDD:BEGIN (do not edit between these markers) -->';
+
+export function requestMessages(body) {
+  try {
+    const parsed = JSON.parse(body);
+    return Array.isArray(parsed.messages) ? parsed.messages : [];
+  } catch {
+    return [];
+  }
+}
+
+function messageText(message) {
+  if (typeof message?.content === 'string') return message.content;
+  if (!Array.isArray(message?.content)) return '';
+  return message.content.map((part) => typeof part?.text === 'string' ? part.text : '').join('\n');
+}
+
+export function classifyProviderRequest(messages) {
+  const text = messages.map(messageText).join('\n');
+  if (text.includes('Generate a title for this conversation:')) return 'title';
+  if (text.includes('Create a new anchored summary from the conversation history.')
+    || text.includes('Update the anchored summary below using the conversation history above.')) {
+    return 'compaction';
+  }
+  return 'normal';
+}
+
+export function hasMisplacedSystemMessage(messages) {
+  return messages.some((message, index) => index > 0 && message?.role === 'system');
+}
+
+test('provider transcript classifies internal requests and rejects misplaced system messages', () => {
+  const normal = [{ role: 'system', content: managedAgentsMarker }, { role: 'user', content: 'hello' }];
+  const title = [{ role: 'user', content: 'Generate a title for this conversation:\nhello' }];
+  const compaction = [{ role: 'user', content: 'Create a new anchored summary from the conversation history.' }];
+
+  assert.equal(classifyProviderRequest(normal), 'normal');
+  assert.equal(classifyProviderRequest(title), 'title');
+  assert.equal(classifyProviderRequest(compaction), 'compaction');
+  assert.equal(hasMisplacedSystemMessage(normal), false);
+  assert.equal(hasMisplacedSystemMessage([...normal, { role: 'system', content: 'late' }]), true);
+  assert.deepEqual(requestMessages('{"messages":[{"role":"user","content":"hello"}]}'), [
+    { role: 'user', content: 'hello' },
+  ]);
+});
 
 function quoteForCmd(value) {
   return `"${String(value).replaceAll('"', '""')}"`;
@@ -99,16 +144,18 @@ function fail(phase, result, sandbox) {
   assert.equal(result.code, 0, detail);
 }
 
-function stream(response, delta, finishReason = null) {
+function stream(response, delta, finishReason = null, usage) {
   response.write(`data: ${JSON.stringify({
     id: 'e2e',
     object: 'chat.completion.chunk',
     choices: [{ index: 0, delta, finish_reason: finishReason }],
+    ...(usage ? { usage } : {}),
   })}\n\n`);
 }
 
 async function startProvider(transcript, projectDir) {
   const seenCases = new Set();
+  let overflowIssued = false;
   const server = createServer((request, response) => {
     if (request.method === 'GET' && request.url?.endsWith('/models')) {
       transcript.push({ method: request.method, url: request.url, marker: null, body: '' });
@@ -120,7 +167,20 @@ async function startProvider(transcript, projectDir) {
     request.on('data', (chunk) => { body += chunk; });
     request.on('end', () => {
       const marker = body.match(/E2E_CASE=([a-z-]+)/)?.[1];
-      transcript.push({ method: request.method, url: request.url, marker, body });
+      const messages = requestMessages(body);
+      const kind = classifyProviderRequest(messages);
+      const shouldOverflow = kind === 'normal'
+        && !overflowIssued
+        && body.includes('Verify the managed enterprise instructions.');
+      if (shouldOverflow) overflowIssued = true;
+      transcript.push({ method: request.method, url: request.url, marker, kind, messages, body });
+      if (hasMisplacedSystemMessage(messages)) {
+        response.writeHead(400, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({
+          error: { message: 'system message must be at the beginning', type: 'invalid_request_error' },
+        }));
+        return;
+      }
       response.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' });
       const scriptedTools = {
         safe: ['write', { filePath: join(projectDir, 'safe.txt'), content: 'safe content' }],
@@ -144,7 +204,11 @@ async function startProvider(transcript, projectDir) {
         }, 'tool_calls');
       } else {
         stream(response, { role: 'assistant', content: 'E2E command completed' });
-        stream(response, {}, 'stop');
+        stream(response, {}, 'stop', {
+          prompt_tokens: shouldOverflow ? 15_000 : 100,
+          completion_tokens: 10,
+          total_tokens: shouldOverflow ? 15_010 : 110,
+        });
       }
       response.end('data: [DONE]\n\n');
     });
@@ -196,7 +260,7 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
       'sdd-apply', 'sdd-doc', 'sdd-plan', 'sdd-review', 'sdd-spec', 'sdd-task',
     ]);
     for (const skill of publishedSkills(packageRoot)) {
-      const installedSkill = join(sandbox.home, '.config', 'opencode', 'skills', skill, 'SKILL.md');
+      const installedSkill = join(sandbox.env.OPENCODE_CONFIG_DIR, 'skills', skill, 'SKILL.md');
       const detail = formatE2eFailure({
         phase: `skill-${skill}`,
         opencode: `${packageName}@${version}`,
@@ -221,7 +285,12 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
           npm: '@ai-sdk/openai-compatible',
           name: 'E2E local provider',
           options: { apiKey: 'e2e-not-a-secret', baseURL: provider.baseURL },
-          models: { 'gpt-4o-mini': { name: 'gpt-4o-mini' } },
+          models: {
+            'gpt-4o-mini': {
+              name: 'gpt-4o-mini',
+              limit: { context: 16_000, output: 1_000 },
+            },
+          },
         },
       },
       model: 'e2e/gpt-4o-mini',
@@ -232,6 +301,18 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
     const executable = process.platform === 'win32'
       ? join(sandbox.prefix, 'opencode.cmd')
       : join(sandbox.prefix, 'bin', 'opencode');
+    const conversation = await run(executable, [
+      'run', '--print-logs', '--format', 'json', 'Verify the managed enterprise instructions.',
+    ], { env: sandbox.env, cwd: sandbox.projectDir, timeoutMs: commandTimeoutMs });
+    writeFileSync(join(sandbox.artifactsDir, 'conversation.log'), `${conversation.stdout}\n${conversation.stderr}`);
+    fail('conversation', conversation, sandbox);
+
+    const compact = await run(executable, [
+      'run', '--continue', '--print-logs', '--format', 'json', 'Continue after the deterministic high-token turn.',
+    ], { env: sandbox.env, cwd: sandbox.projectDir, timeoutMs: commandTimeoutMs });
+    writeFileSync(join(sandbox.artifactsDir, 'compaction.log'), `${compact.stdout}\n${compact.stderr}`);
+    fail('compaction', compact, sandbox);
+
     for (const command of publishedCommands(packageRoot)) {
       const result = await run(executable, [
         'run', '--print-logs', '--format', 'json', '--command', command, 'E2E command discovery',
@@ -272,6 +353,53 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
       opencode: `${packageName}@${version}`,
       artifactsDir: sandbox.artifactsDir,
       output: `expected at least 12 requests, actual=${transcript.length}`,
+    }));
+    const llmRequests = transcript.filter((entry) => Array.isArray(entry.messages) && entry.messages.length > 0);
+    const normalRequests = llmRequests.filter((entry) => entry.kind === 'normal');
+    const conversationRequests = normalRequests.filter((entry) => entry.body.includes('Verify the managed enterprise instructions.'));
+    const titleRequests = llmRequests.filter((entry) => entry.kind === 'title');
+    const compactionRequests = llmRequests.filter((entry) => entry.kind === 'compaction');
+    assert.ok(normalRequests.length > 0, formatE2eFailure({
+      phase: 'normal-request-transcript',
+      opencode: `${packageName}@${version}`,
+      artifactsDir: sandbox.artifactsDir,
+      output: `request kinds=${llmRequests.map((entry) => entry.kind).join(',')}`,
+    }));
+    assert.ok(conversationRequests.length > 0, formatE2eFailure({
+      phase: 'conversation-request-transcript',
+      opencode: `${packageName}@${version}`,
+      artifactsDir: sandbox.artifactsDir,
+      output: 'the explicit normal conversation request was not observed',
+    }));
+    assert.ok(conversationRequests.every((entry) => entry.body.includes(managedAgentsMarker)), formatE2eFailure({
+      phase: 'normal-request-agents',
+      opencode: `${packageName}@${version}`,
+      artifactsDir: sandbox.artifactsDir,
+      output: 'the explicit normal conversation request must include the managed AGENTS baseline marker',
+    }));
+    assert.ok(titleRequests.length > 0, formatE2eFailure({
+      phase: 'title-request-transcript',
+      opencode: `${packageName}@${version}`,
+      artifactsDir: sandbox.artifactsDir,
+      output: `request kinds=${llmRequests.map((entry) => entry.kind).join(',')}`,
+    }));
+    assert.ok(titleRequests.every((entry) => !entry.body.includes(managedAgentsMarker)), formatE2eFailure({
+      phase: 'title-request-agents-isolation',
+      opencode: `${packageName}@${version}`,
+      artifactsDir: sandbox.artifactsDir,
+      output: 'title requests must not include the managed AGENTS baseline marker',
+    }));
+    assert.ok(compactionRequests.length > 0, formatE2eFailure({
+      phase: 'compaction-request-transcript',
+      opencode: `${packageName}@${version}`,
+      artifactsDir: sandbox.artifactsDir,
+      output: `request kinds=${llmRequests.map((entry) => entry.kind).join(',')}`,
+    }));
+    assert.ok(compactionRequests.every((entry) => !entry.body.includes(managedAgentsMarker)), formatE2eFailure({
+      phase: 'compaction-request-agents-isolation',
+      opencode: `${packageName}@${version}`,
+      artifactsDir: sandbox.artifactsDir,
+      output: 'compaction requests must not include the managed AGENTS baseline marker',
     }));
     writeFileSync(join(sandbox.artifactsDir, 'provider-transcript.json'), JSON.stringify(transcript, null, 2));
     passed = true;
