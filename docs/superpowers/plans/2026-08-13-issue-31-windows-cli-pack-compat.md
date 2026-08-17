@@ -127,4 +127,3 @@
 - [ ] **步骤 4：审查与交付**
 
 检查 `git diff --stat`、敏感文件和暂存内容，请求代码审查；使用 Conventional Commit 关联 `#31`，推送 `fix/issue-31-windows-cli-pack-compat` 并创建目标为 `main` 的 draft PR。
-
