@@ -42,11 +42,10 @@ test('Windows mock shims execute through cmd.exe without Bash', {
 
   for (const { name, args, expected } of cases) {
     const shim = join(root, 'scripts', `${name}.cmd`);
-    const command = `""${shim}" ${args.join(' ')}"`;
-    const result = spawnSync(commandProcessor, ['/d', '/s', '/c', command], {
+    const result = spawnSync(shim, args, {
       env: environment,
       encoding: 'utf8',
-      shell: false,
+      shell: commandProcessor,
     });
     assert.equal(result.status, 0, `${name}.cmd failed: ${result.stderr}`);
     assert.match(result.stdout, expected);
