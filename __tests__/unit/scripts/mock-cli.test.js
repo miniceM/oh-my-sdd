@@ -37,7 +37,7 @@ test('Windows mock shims execute through cmd.exe without Bash', {
   };
   const cases = [
     { name: 'iam', args: ['auth', 'status', '--json'], expected: /"username":"ci"/ },
-    { name: 'dop', args: ['change', 'list', '--json'], expected: /"changes":\[/ },
+    { name: 'dop', args: ['change', 'list', '--json'], expected: /"changes":\s*\[/ },
   ];
 
   for (const { name, args, expected } of cases) {
