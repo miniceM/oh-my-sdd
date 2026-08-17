@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 const root = process.cwd();
 
@@ -23,6 +23,33 @@ test('Windows mock shims invoke Node without Bash or WSL', () => {
     assert.doesNotMatch(source, /bash|wsl|git/i);
     assert.match(source, /node\s+"%~dp0mock-cli\.mjs"/i);
     assert.ok(source.toLowerCase().includes(` ${name} %*`), `${name}.cmd must forward arguments`);
+  }
+});
+
+test('Windows mock shims execute through cmd.exe without Bash', {
+  skip: process.platform !== 'win32' ? 'requires Windows cmd.exe' : false,
+}, () => {
+  const commandProcessor = process.env.ComSpec ?? 'cmd.exe';
+  const environment = {
+    ...process.env,
+    OMS_MOCK_USER: 'ci',
+    PATH: dirname(process.execPath),
+  };
+  const cases = [
+    { name: 'iam', args: ['auth', 'status', '--json'], expected: /"username":"ci"/ },
+    { name: 'dop', args: ['change', 'list', '--json'], expected: /"changes":\[/ },
+  ];
+
+  for (const { name, args, expected } of cases) {
+    const shim = join(root, 'scripts', `${name}.cmd`);
+    const command = `""${shim}" ${args.join(' ')}"`;
+    const result = spawnSync(commandProcessor, ['/d', '/s', '/c', command], {
+      env: environment,
+      encoding: 'utf8',
+      shell: false,
+    });
+    assert.equal(result.status, 0, `${name}.cmd failed: ${result.stderr}`);
+    assert.match(result.stdout, expected);
   }
 });
 
