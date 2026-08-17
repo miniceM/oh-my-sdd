@@ -18,4 +18,3 @@
 ## 测试策略
 
 先为多候选路径、混入 lifecycle 输出、stderr 分流、无 Bash shim 和 sdd-plan manifest 缺失编写失败测试；实现最小修复后运行聚焦测试、完整 `npm test`、baseline lint、`git diff --check`。Windows-specific contract 通过 Node 模拟 Windows 输入，不要求 macOS 主机伪装平台。
-
