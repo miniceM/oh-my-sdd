@@ -112,6 +112,14 @@ test('OpenCode E2E workflow runs the AGENTS lifecycle tests on every platform', 
   assert.match(workflow, /node --test __tests__\/unit\/opencode\/resource-scripts\.test\.js/);
 });
 
+test('OpenCode E2E workflow prepends repository mocks on Windows without Bash', () => {
+  const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', 'opencode-e2e.yml'), 'utf8');
+  assert.match(workflow, /if: runner\.os == 'Windows'/);
+  assert.match(workflow, /shell: pwsh/);
+  assert.match(workflow, /Add-Content -Path \$env:GITHUB_PATH/);
+  assert.doesNotMatch(workflow, /name: Put repository mocks first on PATH\n\s+shell: bash/);
+});
+
 test('OpenCode E2E workflow owns dependency installation instead of the test body', () => {
   const source = readFileSync(join(process.cwd(), '__tests__', 'integration', 'opencode', 'real-cli-e2e.test.js'), 'utf8');
   assert.doesNotMatch(source, /execNpm\(\['ci', '--prefix', 'opencode'/);
