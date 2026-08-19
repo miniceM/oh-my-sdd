@@ -68,6 +68,7 @@ function withInstalledResources(run) {
     const packEntry = firstNpmPackEntry(packed, packResult);
     runNpm([
       'install', '--global', '--legacy-peer-deps', '--foreground-scripts',
+      '--dangerously-allow-all-scripts',
       path.join(pack, packEntry.filename),
     ], {
       env,

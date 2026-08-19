@@ -49,16 +49,66 @@ export function createE2eSandbox(repoRoot) {
   return sandbox;
 }
 
+export function normalizeManifest(value) {
+  if (!value || typeof value !== 'object') return null;
+  if (Array.isArray(value)) {
+    if (value.some((entry) => entry?.filename)) return value;
+    return null;
+  }
+  if (value.filename) return [value];
+  const collected = [];
+  for (const item of Object.values(value)) {
+    if (Array.isArray(item)) {
+      for (const entry of item) {
+        if (entry?.filename) collected.push(entry);
+      }
+    } else if (item && typeof item === 'object' && item.filename) {
+      collected.push(item);
+    }
+  }
+  return collected.length > 0 ? collected : null;
+}
+
+export function findJsonEnd(input, start) {
+  const openChar = input[start];
+  const closeChar = openChar === '[' ? ']' : (openChar === '{' ? '}' : null);
+  if (!closeChar) return -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < input.length; index += 1) {
+    const character = input[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+    } else if (character === openChar) {
+      depth += 1;
+    } else if (character === closeChar) {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
 export function parseNpmPackJson(output, stderr = '') {
   const candidates = [];
-  for (let start = output.indexOf('['); start >= 0; start = output.indexOf('[', start + 1)) {
-    const end = findJsonArrayEnd(output, start);
+  for (let start = 0; start < output.length; start += 1) {
+    const char = output[start];
+    if (char !== '[' && char !== '{') continue;
+    const end = findJsonEnd(output, start);
     if (end < 0) continue;
     try {
       const value = JSON.parse(output.slice(start, end + 1));
-      if (Array.isArray(value) && value.some((entry) => entry?.filename)) candidates.push(value);
+      const normalized = normalizeManifest(value);
+      if (normalized && normalized.length > 0) candidates.push(normalized);
     } catch {
-      // A lifecycle log may contain '['; continue searching for the manifest.
+      // A lifecycle log or stdout line may contain '[' or '{'; continue searching.
     }
   }
   const manifest = candidates.at(-1);
@@ -78,30 +128,6 @@ export function firstNpmPackEntry(manifest, { stdout = '', stderr = '' } = {}) {
     `stdout:\n${stdout}`,
     `stderr:\n${stderr}`,
   ].join('\n'));
-}
-
-function findJsonArrayEnd(input, start) {
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let index = start; index < input.length; index += 1) {
-    const character = input[index];
-    if (inString) {
-      if (escaped) escaped = false;
-      else if (character === '\\') escaped = true;
-      else if (character === '"') inString = false;
-      continue;
-    }
-    if (character === '"') {
-      inString = true;
-    } else if (character === '[') {
-      depth += 1;
-    } else if (character === ']') {
-      depth -= 1;
-      if (depth === 0) return index;
-    }
-  }
-  return -1;
 }
 
 export function publishedCommands(packageRoot) {

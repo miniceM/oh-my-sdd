@@ -81,7 +81,9 @@ test('clean OpenCode source can pack and install without opencode node_modules',
     );
 
     const installResult = runNpm([
-      'install', '--global', '--legacy-peer-deps', '--foreground-scripts', tarball,
+      'install', '--global', '--legacy-peer-deps', '--foreground-scripts',
+      '--dangerously-allow-all-scripts',
+      tarball,
     ], { cwd: root, env });
     assert.equal(
       installResult.status,
