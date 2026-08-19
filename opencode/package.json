@@ -31,7 +31,7 @@
     "typecheck": "tsc --noEmit",
     "sync:resources": "node scripts/copy-resources.mjs",
     "postinstall": "node scripts/postinstall.mjs",
-    "prepack": "npm run sync:resources && npm run build",
+    "prepack": "npm run sync:resources",
     "prepublishOnly": "npm run sync:resources && npm run build"
   },
   "keywords": [
