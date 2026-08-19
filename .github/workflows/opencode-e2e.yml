@@ -25,11 +25,16 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      - name: Put repository mocks first on PATH
-        shell: bash
+      - name: Put repository mocks first on PATH (POSIX)
+        if: runner.os != 'Windows'
         run: echo "${{ github.workspace }}/scripts" >> "$GITHUB_PATH"
+      - name: Put repository mocks first on PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $env:GITHUB_WORKSPACE 'scripts')
       - run: npm ci --ignore-scripts
       - run: npm ci --prefix opencode --ignore-scripts
+      - run: npm run --prefix opencode build
       - run: npm run sync:resources --prefix opencode
       - run: node --test __tests__/unit/opencode/resource-scripts.test.js
       - run: npm run test:e2e:opencode

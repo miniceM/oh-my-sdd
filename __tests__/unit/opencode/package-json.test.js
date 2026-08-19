@@ -97,6 +97,13 @@ test('package.json has correct module type', async () => {
   assert.equal(pkg.type, 'module', 'type should be "module" for ES modules');
 });
 
+test('package lifecycle separates pack sync from publish build', () => {
+  const pkg = JSON.parse(readFileSync(PACKAGE_JSON_PATH, 'utf-8'));
+  assert.equal(pkg.scripts.build, 'tsc');
+  assert.equal(pkg.scripts.prepack, 'npm run sync:resources');
+  assert.equal(pkg.scripts.prepublishOnly, 'npm run sync:resources && npm run build');
+});
+
 test('package.json has keywords for discoverability', async () => {
   if (!existsSync(PACKAGE_JSON_PATH)) {
     assert.skip('package.json does not exist yet');
