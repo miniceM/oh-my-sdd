@@ -20,8 +20,9 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: node --version
-      - run: npm install --ignore-scripts
+      - run: npm ci --ignore-scripts
       - run: npm ci --prefix opencode --ignore-scripts
+      - run: npm run --prefix opencode build
       - run: npm test
       - name: Verify Windows mocks without Bash
         if: runner.os == 'Windows'
@@ -35,8 +36,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install --ignore-scripts
+      - run: npm ci --ignore-scripts
       - run: npm ci --prefix opencode --ignore-scripts
+      - run: npm run --prefix opencode build
       - run: npm run test:coverage
 
   smoke-check:

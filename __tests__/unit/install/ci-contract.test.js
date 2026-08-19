@@ -15,6 +15,15 @@ test('CI runs the Node 18/20/22 matrix and enforces coverage in a stable dedicat
   assert.match(coverageJob, /npm run test:coverage/);
 });
 
+test('CI builds OpenCode explicitly after installing its locked dependencies', () => {
+  const testJob = workflow.slice(workflow.indexOf('  test:'), workflow.indexOf('  coverage:'));
+  const coverageJob = workflow.slice(workflow.indexOf('  coverage:'), workflow.indexOf('  smoke-check:'));
+  assert.match(testJob, /npm ci --ignore-scripts/);
+  assert.match(testJob, /npm run --prefix opencode build/);
+  assert.match(coverageJob, /npm ci --ignore-scripts/);
+  assert.match(coverageJob, /npm run --prefix opencode build/);
+});
+
 test('smoke-check runs for pull requests with an isolated HOME and the current uninstall entry', () => {
   const smoke = workflow.slice(workflow.indexOf('smoke-check:'));
 

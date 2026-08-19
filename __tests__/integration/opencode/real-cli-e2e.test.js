@@ -242,7 +242,6 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
   let provider;
   let passed = false;
   try {
-    execNpm(['ci', '--prefix', 'opencode'], { cwd: process.cwd(), stdio: 'inherit' });
     if (process.platform === 'win32') {
       execNpm([
         'install', '--prefix', sandbox.toolchainDir, '--ignore-scripts', '--no-package-lock', '--no-save',

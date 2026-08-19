@@ -107,8 +107,14 @@ test('OpenCode E2E workflow uploads hidden failure artifacts', () => {
 
 test('OpenCode E2E workflow runs the AGENTS lifecycle tests on every platform', () => {
   const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', 'opencode-e2e.yml'), 'utf8');
+  assert.match(workflow, /npm run --prefix opencode build/);
   assert.match(workflow, /npm run sync:resources --prefix opencode/);
   assert.match(workflow, /node --test __tests__\/unit\/opencode\/resource-scripts\.test\.js/);
+});
+
+test('OpenCode E2E workflow owns dependency installation instead of the test body', () => {
+  const source = readFileSync(join(process.cwd(), '__tests__', 'integration', 'opencode', 'real-cli-e2e.test.js'), 'utf8');
+  assert.doesNotMatch(source, /execNpm\(\['ci', '--prefix', 'opencode'/);
 });
 
 test('OpenCode E2E harness loader re-exports only the globally installed tarball plugin', () => {
