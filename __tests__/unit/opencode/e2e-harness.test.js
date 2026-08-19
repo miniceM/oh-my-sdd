@@ -9,6 +9,8 @@ import {
   createE2eSandbox,
   formatE2eFailure,
   firstNpmPackEntry,
+  findJsonEnd,
+  normalizeManifest,
   parseNpmPackJson,
   publishedCommands,
   publishedSkills,
@@ -76,6 +78,22 @@ test('OpenCode E2E harness extracts npm pack JSON after lifecycle output', () =>
     'npm lifecycle diagnostics\n',
   );
   assert.deepEqual(packed, [{ filename: 'plugin.tgz' }]);
+});
+
+test('OpenCode E2E harness normalizes npm 12 object manifest with package name key', () => {
+  const packed = parseNpmPackJson(
+    '[copy-resources] { "status": "ok" }\n{"@cli-tools/oh-my-sdd-opencode":{"filename":"plugin-0.2.1.tgz","files":[]}}\nnotice: pack complete\n',
+    'npm lifecycle diagnostics\n',
+  );
+  assert.deepEqual(packed, [{ filename: 'plugin-0.2.1.tgz', files: [] }]);
+});
+
+test('OpenCode E2E harness normalizes top-level object manifest', () => {
+  const packed = parseNpmPackJson(
+    '{"filename":"plugin-0.2.1.tgz","files":[]}\n',
+    '',
+  );
+  assert.deepEqual(packed, [{ filename: 'plugin-0.2.1.tgz', files: [] }]);
 });
 
 test('OpenCode E2E harness reports stdout and stderr when npm pack JSON is missing', () => {

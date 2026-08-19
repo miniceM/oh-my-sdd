@@ -260,7 +260,9 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
     writeFileSync(join(sandbox.artifactsDir, 'tarball-manifest.json'), JSON.stringify(packed, null, 2));
 
     const install = await runNpm([
-      'install', '--global', '--foreground-scripts', '--legacy-peer-deps', tarball,
+      'install', '--global', '--foreground-scripts', '--legacy-peer-deps',
+      '--dangerously-allow-all-scripts',
+      tarball,
     ], { env: sandbox.env, cwd: sandbox.projectDir });
     writeFileSync(join(sandbox.artifactsDir, 'plugin-install.log'), `${install.stdout}\n${install.stderr}`);
     fail('install-plugin-tarball', install, sandbox);

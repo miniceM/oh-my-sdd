@@ -17,10 +17,7 @@ import { resolveNpmCli } from '../../helpers/resolve-npm-cli.js';
 const worktreeRoot = process.cwd();
 
 function runNpm(args, options) {
-  if (process.env.npm_execpath) {
-    return execFileSync(process.execPath, [process.env.npm_execpath, ...args], options);
-  }
-  return execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, options);
+  return execFileSync(process.execPath, [resolveNpmCli(), ...args], options);
 }
 
 function runNpmWithOutput(args, options) {
@@ -165,6 +162,7 @@ test('packed OpenCode package installs from a clean tarball and its wrapper full
       '--global',
       '--legacy-peer-deps',
       '--foreground-scripts',
+      '--dangerously-allow-all-scripts',
       tarball,
     ], {
       env,
