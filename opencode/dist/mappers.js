@@ -92,6 +92,7 @@ export function mapPreToolUse(input) {
         tool_name: toolName,
         tool_input: toolInput,
         session_id: sanitizeSessionId(input.sessionID),
+        cwd: process.cwd(),
     };
 }
 export function mapPostToolUse(input) {

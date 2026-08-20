@@ -118,7 +118,7 @@ export function mapPreToolUse(input: {
   tool: string;
   input?: Record<string, unknown>;
   sessionID?: string;
-}): { tool_name: string; tool_input: Record<string, unknown>; session_id: string } | null {
+}): { tool_name: string; tool_input: Record<string, unknown>; session_id: string; cwd: string } | null {
   const toolName = TOOL_MAP[input.tool];
   if (!toolName || !TRACKED_TOOLS.has(toolName)) return null;
   const toolInput = normalizeArgs(input.input ?? {});
@@ -126,6 +126,7 @@ export function mapPreToolUse(input: {
     tool_name: toolName,
     tool_input: toolInput,
     session_id: sanitizeSessionId(input.sessionID),
+    cwd: process.cwd(),
   };
 }
 
