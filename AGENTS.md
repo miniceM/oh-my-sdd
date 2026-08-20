@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Claude Code plugin providing enterprise SDD (Spec-Driven Development) workflow. Not a standalone app — it's a plugin that hooks into Claude Code's session lifecycle and tool use.
+Enterprise SDD (Spec-Driven Development) plugin & control plane supporting 4 AI tools (Claude Code, Lingma, OpenCode, KiloCode). Not a standalone app — it hooks into host session lifecycles, instructions, and tool safety gates.
 
 ## Quick Commands
 
@@ -31,7 +31,9 @@ skills/             → 17 SKILL.md files (SDD commands + enterprise skills)
 hooks/              → Session lifecycle hooks (SessionStart, PreToolUse, etc.)
 lib/                → Shared utilities (config, iam-cli, dop-client, rules)
 content/            → Markdown injected into system prompt (baseline, welcome)
-bin/                → CLI tools (oms-install, oms-login, oms-uninstall)
+bin/                → CLI tools (oms, oms-install, oms-uninstall, oms-login, oms-update, oms-git-hooks, oms-wrapper-verify)
+install/            → Host registry, 4 host adapters, and control plane (health, plan, ownership, repair, executor)
+opencode/           → OpenCode npm plugin package (@cli-tools/oh-my-sdd-opencode)
 scripts/            → Dev utilities (reinstall, launch, diag, lint)
 __tests__/unit/     → Unit tests (platform, config, iam-cli, etc.)
 __tests__/integration/ → Integration tests (hooks, SDD workflow)

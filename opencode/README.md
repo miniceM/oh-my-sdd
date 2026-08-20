@@ -57,9 +57,17 @@ Restart OpenCode after installation, then invoke an SDD command with its argumen
 
 The package also provides `/sdd-task` and `/sdd-doc`.
 
-## Diagnose installation
+## Diagnose installation and status
 
-Run the postinstall script again when checking discovery paths:
+Use the unified control-plane CLI to inspect protection evidence and diagnose drift:
+
+```bash
+oms status --tool opencode      # Check OpenCode detection and protection level (enforced)
+oms doctor --tool opencode      # Diagnose missing dependencies, drift, or config issues
+oms repair --tool opencode --apply # Self-heal OMS-owned resources safely
+```
+
+Alternatively, re-run the postinstall script to inspect resource discovery paths directly:
 
 ```bash
 npm install -g --foreground-scripts .

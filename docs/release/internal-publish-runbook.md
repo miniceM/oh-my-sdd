@@ -184,7 +184,7 @@ package/hooks/git/*.js (4 个 git hook 脚本)
 package/hooks/git/lib/*.js (3 个 git hook 库)
 package/skills/{sdd-spec,sdd-plan,sdd-task,sdd-apply,sdd-review,sdd-constitution,sdd-doc}/SKILL.md (7 个 sdd skill)
 package/skills/{api-design,business-modeling,db-conventions,doc-writer,security-check,testing-strategy,fe-*}/SKILL.md (10 个企业 skill)
-package/wrappers/claude.{sh,ps1,bat}
+package/wrapper/claude.{sh,ps1,bat}
 package/opencode/dist/*.js + *.d.ts + *.js.map + *.d.ts.map (OpenCode 编译产物)
 ```
 
@@ -511,7 +511,7 @@ npm unpublish @cli-tools/oh-my-sdd@0.1.0 --registry=https://npm.enterprise.com/
 让用户跑：
 ```bash
 # 诊断
-oms-doctor 2>&1 || node $(npm root -g)/@cli-tools/oh-my-sdd/bin/oms-install.js
+oms doctor 2>&1 || node $(npm root -g)/@cli-tools/oh-my-sdd/bin/oms-install.js
 
 # 卸载重装
 npm uninstall -g @cli-tools/oh-my-sdd
