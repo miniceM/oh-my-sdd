@@ -6,7 +6,7 @@ import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { main } from '../install/main.js';
-import { renderJson, renderText } from '../install/control-plane/render.js';
+import { renderJson, renderText, renderResultJson, renderResultText } from '../install/control-plane/render.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SUPPORTED_TOOLS = ['claude', 'lingma', 'opencode', 'kilocode'];
@@ -104,6 +104,8 @@ async function runOmsInstall(argv, {
   mainFn = main,
   renderJsonFn = renderJson,
   renderTextFn = renderText,
+  renderResultJsonFn = renderResultJson,
+  renderResultTextFn = renderResultText,
   confirmFn = confirmInstall,
   stdout = process.stdout,
   stderr = process.stderr,
@@ -129,14 +131,21 @@ async function runOmsInstall(argv, {
   }
 
   const plan = await mainFn({ tool: args.tool, dryRun: true });
-  if (args.json) stdout.write(renderJsonFn(plan));
-  else stderr.write(renderTextFn(plan));
+  if (args.dryRun) {
+    if (args.json) stdout.write(renderJsonFn(plan));
+    else stderr.write(renderTextFn(plan));
+    return 0;
+  }
 
   if (plan?.selection_required) {
-    if (!args.json) writeSelectionRequired(plan, { stderr });
+    if (args.json) stdout.write(renderJsonFn(plan));
+    else writeSelectionRequired(plan, { stderr });
     return 2;
   }
-  if (args.dryRun) return 0;
+
+  if (!args.json) {
+    stderr.write(renderTextFn(plan));
+  }
 
   let confirmed = args.yes;
   if (!confirmed) {
@@ -147,7 +156,16 @@ async function runOmsInstall(argv, {
     return 1;
   }
 
-  await mainFn({ tool: args.tool, plan });
+  const result = await mainFn({ tool: args.tool, plan });
+  if (args.json) {
+    stdout.write((renderResultJsonFn || renderJsonFn)(result));
+  } else if (result?.type === "installation-result") {
+    stderr.write((renderResultTextFn || renderTextFn)(result));
+  }
+
+  if (result?.status === "partial-failure" || result?.status === "failed") {
+    return 1;
+  }
   return 0;
 }
 

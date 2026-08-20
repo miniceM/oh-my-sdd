@@ -160,7 +160,19 @@ function createInstaller({
 
     await ensureStateDirFn();
     prepared.adapter.preflight(prepared.ctx);
-    return prepared.adapter.install({ ...prepared.ctx, plan: prepared.plan });
+    const installOutcome = await prepared.adapter.install({ ...prepared.ctx, plan: prepared.plan });
+    if (installOutcome && typeof installOutcome === "object" && installOutcome.type === "installation-result") {
+      return installOutcome;
+    }
+    return {
+      type: "installation-result",
+      schema_version: prepared.plan.schema_version || 1,
+      status: installOutcome === false ? "failed" : "succeeded",
+      plan: prepared.plan,
+      summary: {
+        status: installOutcome === false ? "failed" : "succeeded",
+      },
+    };
   };
 }
 
