@@ -35,7 +35,7 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
   const env = { ...process.env, HOME: tmpHome, USERPROFILE: tmpHome };
 
   // Step 1: install (use CLI wrapper which parses --tool)
-  execFileSync('node', ['bin/oms-install.js', '--tool', 'opencode'], {
+  execFileSync('node', ['bin/oms-install.js', '--tool', 'opencode', '-y'], {
     cwd: worktreeRoot,
     env,
     stdio: 'pipe',

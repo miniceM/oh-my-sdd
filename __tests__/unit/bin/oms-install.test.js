@@ -120,3 +120,24 @@ test('interactive install applies the exact plan that was confirmed', async () =
   assert.equal(calls[0].dryRun, true);
   assert.strictEqual(calls[1].plan, plan);
 });
+
+test('install with -y flag applies the plan without interactive confirmation', async () => {
+  const calls = [];
+  const stderr = { write() {} };
+  const plan = { ...PLAN, hosts: [...PLAN.hosts] };
+
+  const exitCode = await runOmsInstall(['--tool', 'kilocode', '-y'], {
+    mainFn: async (options) => {
+      calls.push(options);
+      return plan;
+    },
+    confirmFn: async () => {
+      throw new Error('confirmFn should not be called when -y is provided');
+    },
+    stderr,
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(calls[0].dryRun, true);
+  assert.strictEqual(calls[1].plan, plan);
+});

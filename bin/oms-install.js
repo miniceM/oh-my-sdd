@@ -30,6 +30,7 @@ function printHelp(stdout = process.stdout) {
   oms-install --tool <name>                指定工具安装
   oms-install --dry-run                    仅展示安装计划，不写入文件
   oms-install --json                       以 JSON 输出安装计划
+  oms-install --yes | -y                   跳过确认直接执行安装计划
   oms-install --help | -h                  显示帮助
   oms-install --version | -V               显示版本
 
@@ -43,6 +44,7 @@ function printHelp(stdout = process.stdout) {
   --tool <name>    指定目标 AI 工具。不传时自动检测；检测到多个工具时必须显式选择
   --dry-run        仅构造并展示安装计划，不执行写入
   --json           将安装计划作为 JSON 写入 stdout
+  -y, --yes        跳过确认直接执行安装计划
   -h, --help       显示此帮助并退出
   -V, --version    显示版本并退出
 
@@ -75,6 +77,7 @@ function parseArgs(argv) {
     tool,
     dryRun: argv.includes('--dry-run'),
     json: argv.includes('--json'),
+    yes: argv.includes('-y') || argv.includes('--yes'),
   };
 }
 
@@ -135,7 +138,10 @@ async function runOmsInstall(argv, {
   }
   if (args.dryRun) return 0;
 
-  const confirmed = await confirmFn({ input: process.stdin, output: stderr });
+  let confirmed = args.yes;
+  if (!confirmed) {
+    confirmed = await confirmFn({ input: process.stdin, output: stderr });
+  }
   if (!confirmed) {
     stderr.write('安装已取消，未写入任何文件。\n');
     return 1;

@@ -33,7 +33,7 @@ test('--tool claude installs marketplace, plugin, wrapper, and baseline in an is
   }
 
   try {
-    execFileSync(process.execPath, ['bin/oms-install.js', '--tool', 'claude'], {
+    execFileSync(process.execPath, ['bin/oms-install.js', '--tool', 'claude', '-y'], {
       cwd: worktreeRoot,
       env: {
         ...process.env,
