@@ -72,6 +72,7 @@ export function normalizeHost(host = {}, Adapter = {}) {
     display_name: typeof facts.display_name === 'string' && facts.display_name
       ? facts.display_name
       : (adapter.displayName ?? adapter.id ?? 'unknown'),
+    detected: facts.detected === true,
     dependencies,
     capabilities: objectOrEmpty(facts.capabilities),
     resources: arrayOrEmpty(facts.resources),

@@ -24,7 +24,40 @@ class KiloStyleAdapter {
   }
 }
 
+class DetectedAdapter {
+  static id = 'detected-host';
+
+  static describe() {
+    return { detected: true };
+  }
+}
+
+class UndetectedAdapter {
+  static id = 'undetected-host';
+
+  static describe() {
+    return { detected: false };
+  }
+}
+
 describe('buildInstallationPlan', () => {
+  it('retains explicit host detection facts and normalizes malformed values to false', () => {
+    class MalformedDetectionAdapter {
+      static id = 'malformed-host';
+
+      static describe() {
+        return { detected: 'yes' };
+      }
+    }
+
+    const plan = buildInstallationPlan({
+      adapters: [DetectedAdapter, UndetectedAdapter, MalformedDetectionAdapter],
+      ctx: {},
+    });
+
+    assert.deepEqual(plan.hosts.map((host) => host.detected), [true, false, false]);
+  });
+
   it('builds a versioned normalized host plan without altering advisory capabilities', () => {
     const plan = buildInstallationPlan({ adapters: [KiloStyleAdapter], ctx: {} });
 
@@ -32,6 +65,7 @@ describe('buildInstallationPlan', () => {
     assert.deepEqual(plan.hosts, [{
       id: 'kilocode',
       display_name: 'Kilo Code',
+      detected: false,
       dependencies: [{ name: 'kilo', available: true }],
       capabilities: {
         write_prevention: {
@@ -61,6 +95,7 @@ describe('buildInstallationPlan', () => {
     assert.deepEqual(plan.hosts[0], {
       id: 'broken',
       display_name: 'Broken Host',
+      detected: false,
       dependencies: [],
       capabilities: {},
       resources: [],
@@ -114,6 +149,7 @@ describe('buildInstallationPlan', () => {
     assert.deepEqual(plan.hosts[0], {
       id: 'unknown',
       display_name: 'unknown',
+      detected: false,
       dependencies: [],
       capabilities: {},
       resources: [],
