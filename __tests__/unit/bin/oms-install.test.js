@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runOmsInstall } from '../../../bin/oms-install.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -52,7 +52,7 @@ async function runOmsInstallProcess(args, { plan = PLAN, input } = {}) {
   ].join('\n');
   await writeFile(loaderPath, [
     'export async function resolve(specifier, context, nextResolve) {',
-    "  if (specifier === '../install/main.js' && context.parentURL.endsWith('/bin/oms-install.js')) {",
+    "  if (specifier === '../install/main.js' && context.parentURL && (context.parentURL.endsWith('/bin/oms-install.js') || context.parentURL.endsWith('/bin/oms-install.js/') || context.parentURL.includes('bin/oms-install.js'))) {",
     `    return { url: 'data:text/javascript;base64,${Buffer.from(mockedMain).toString('base64')}', shortCircuit: true };`,
     '  }',
     '  return nextResolve(specifier, context);',
@@ -60,7 +60,7 @@ async function runOmsInstallProcess(args, { plan = PLAN, input } = {}) {
   ].join('\n'));
 
   try {
-    const result = await runProcess(process.execPath, ['--experimental-loader', loaderPath, CLI, ...args], {
+    const result = await runProcess(process.execPath, ['--experimental-loader', pathToFileURL(loaderPath).href, CLI, ...args], {
       env: {
         OMS_INSTALL_TEST_RECORD: recordPath,
         OMS_INSTALL_TEST_PLAN: JSON.stringify(plan),
