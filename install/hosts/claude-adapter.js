@@ -91,13 +91,14 @@ export class ClaudeAdapter extends HostAdapter {
       dependencies: [
         {
           name: 'node', required: true, available: true, state: 'available',
-          version: process.version, source: 'current Node.js process',
+          version: { state: 'available', value: process.version }, source: 'current Node.js process',
         },
         { name: 'claude', required: true, ...cli, version: { state: 'unknown', reason: 'The availability probe does not retain a CLI version.' } },
-        { name: 'iam', required: false, ...iam },
+        { name: 'iam', required: false, ...iam, version: { state: 'unknown', reason: 'The PATH probe does not retain a CLI version.' } },
         {
           name: 'openspec', required: false, available: false, state: 'unknown',
           reason: 'OpenSpec is checked during preflight, not during read-only plan inspection.',
+          version: { state: 'unknown', reason: 'OpenSpec is not probed during read-only plan inspection.' },
         },
       ],
       capabilities: {
@@ -109,8 +110,9 @@ export class ClaudeAdapter extends HostAdapter {
         },
         write_prevention: {
           supported: true,
-          level: 'enforced',
-          evidence: 'PreToolUse hook blocks protected writes before they reach the filesystem.',
+          level: cli.available ? 'planned' : (cli.state === 'unknown' ? 'unknown' : 'not_installed'),
+          evidence: 'Claude supports a PreToolUse hook that can block protected writes before they reach the filesystem.',
+          reason: 'Write prevention is not enforced until the plugin is installed, loaded by Claude, and verified at runtime.',
           verification: 'Verify the installed plugin loads hooks/pre-tool-use.js and Claude reports the hook as active.',
         },
       },

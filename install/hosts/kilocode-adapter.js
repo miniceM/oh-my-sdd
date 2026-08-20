@@ -80,10 +80,10 @@ export class KiloCodeAdapter extends HostAdapter {
       dependencies: [
         {
           name: 'node', required: true, available: true, state: 'available',
-          version: process.version, source: 'current Node.js process',
+          version: { state: 'available', value: process.version }, source: 'current Node.js process',
         },
         { name: 'kilo', required: false, ...cli, version: { state: 'unknown', reason: 'PATH discovery does not retain a CLI version.' } },
-        { name: 'kilo-config', required: false, ...config },
+        { name: 'kilo-config', required: false, ...config, version: { state: 'unknown', reason: 'Configuration directory presence has no version evidence.' } },
       ],
       capabilities: {
         host_runtime: {

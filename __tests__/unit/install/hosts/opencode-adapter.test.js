@@ -37,6 +37,13 @@ describe('OpenCodeAdapter', () => {
     assert.match(host.capabilities.write_prevention.evidence, /runtime/i);
   });
 
+  it('uses version objects for every dependency fact', () => {
+    const host = OpenCodeAdapter.describe({ PACKAGE_ROOT: '/package/root' });
+    assert.equal(host.dependencies.every((dependency) => (
+      dependency.version && typeof dependency.version === 'object' && !Array.isArray(dependency.version)
+    )), true);
+  });
+
   it('install() is an async function', () => {
     assert.equal(OpenCodeAdapter.install.constructor.name, 'AsyncFunction');
   });

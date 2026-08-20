@@ -69,6 +69,13 @@ describe('LingmaAdapter', () => {
     });
   });
 
+  it('uses version objects for every dependency fact', () => {
+    const host = LingmaAdapter.describe({ PACKAGE_ROOT });
+    assert.equal(host.dependencies.every((dependency) => (
+      dependency.version && typeof dependency.version === 'object' && !Array.isArray(dependency.version)
+    )), true);
+  });
+
   it('install() is an async function', () => {
     assert.equal(LingmaAdapter.install.constructor.name, 'AsyncFunction');
   });
