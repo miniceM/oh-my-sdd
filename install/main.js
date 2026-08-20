@@ -92,6 +92,16 @@ function prepareInstallation(options, dependencies) {
   } = dependencies;
   const ctx = { PACKAGE_ROOT: packageRoot, announce: announceFn };
   const hasExplicitTool = options.tool !== undefined && options.tool !== null;
+
+  if (options.plan !== undefined) {
+    const plannedTool = hasExplicitTool ? options.tool : options.plan?.hosts?.[0]?.id;
+    return {
+      adapter: plannedTool ? getAdapterFn(plannedTool) : null,
+      plan: options.plan,
+      ctx,
+    };
+  }
+
   const adapters = hasExplicitTool
     ? [getAdapterFn(options.tool)]
     : installedAdapters(getAdapterFn, listToolsFn);
@@ -157,7 +167,7 @@ function createInstaller({
 /**
  * Install oh-my-sdd for an explicitly selected or auto-detected host.
  *
- * @param {{ tool?: string | null, dryRun?: boolean }} options installer options
+ * @param {{ tool?: string | null, dryRun?: boolean, plan?: object }} options installer options
  * @returns {Promise<unknown>} the selected adapter's installation result or plan
  */
 const main = createInstaller();

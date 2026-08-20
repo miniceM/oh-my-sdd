@@ -141,7 +141,7 @@ async function runOmsInstall(argv, {
     return 1;
   }
 
-  await mainFn({ tool: args.tool });
+  await mainFn({ tool: args.tool, plan });
   return 0;
 }
 

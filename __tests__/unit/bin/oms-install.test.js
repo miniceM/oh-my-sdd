@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { runOmsInstall } from '../../../bin/oms-install.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const CLI = path.join(ROOT, 'bin', 'oms-install.js');
@@ -38,7 +39,7 @@ function runProcess(command, args, { env, input } = {}) {
   });
 }
 
-async function runOmsInstall(args, { plan = PLAN, input } = {}) {
+async function runOmsInstallProcess(args, { plan = PLAN, input } = {}) {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'oms-install-test-'));
   const recordPath = path.join(tempDir, 'calls.jsonl');
   const loaderPath = path.join(tempDir, 'loader.mjs');
@@ -76,7 +77,7 @@ async function runOmsInstall(args, { plan = PLAN, input } = {}) {
 }
 
 test('oms-install --dry-run --json prints one JSON plan and never applies', async () => {
-  const result = await runOmsInstall(['--tool', 'kilocode', '--dry-run', '--json']);
+  const result = await runOmsInstallProcess(['--tool', 'kilocode', '--dry-run', '--json']);
 
   assert.equal(result.code, 0);
   assert.deepEqual(JSON.parse(result.stdout), { type: 'installation-plan', plan: PLAN });
@@ -85,7 +86,7 @@ test('oms-install --dry-run --json prints one JSON plan and never applies', asyn
 
 test('multiple detected hosts require an explicit selection before apply', async () => {
   const selectionPlan = { ...PLAN, selection_required: true, selection_options: ['claude', 'kilocode'] };
-  const result = await runOmsInstall([], { plan: selectionPlan });
+  const result = await runOmsInstallProcess([], { plan: selectionPlan });
 
   assert.equal(result.code, 2);
   assert.match(result.stderr, /claude.*kilocode.*--tool/s);
@@ -93,10 +94,29 @@ test('multiple detected hosts require an explicit selection before apply', async
 });
 
 test('interactive install renders its plan and stops when confirmation is rejected', async () => {
-  const result = await runOmsInstall(['--tool', 'kilocode'], { input: 'n\n' });
+  const result = await runOmsInstallProcess(['--tool', 'kilocode'], { input: 'n\n' });
 
   assert.equal(result.code, 1);
   assert.match(result.stderr, /Installation plan/);
   assert.match(result.stderr, /取消/);
   assert.deepEqual(result.calls, [{ tool: 'kilocode', dryRun: true }]);
+});
+
+test('interactive install applies the exact plan that was confirmed', async () => {
+  const calls = [];
+  const stderr = { write() {} };
+  const plan = { ...PLAN, hosts: [...PLAN.hosts] };
+
+  const exitCode = await runOmsInstall(['--tool', 'kilocode'], {
+    mainFn: async (options) => {
+      calls.push(options);
+      return plan;
+    },
+    confirmFn: async () => true,
+    stderr,
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(calls[0].dryRun, true);
+  assert.strictEqual(calls[1].plan, plan);
 });

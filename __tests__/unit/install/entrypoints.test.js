@@ -42,6 +42,24 @@ test('dry run returns a plan without invoking adapter install', async () => {
   assert.equal(installCalls.length, 0);
 });
 
+test('provided installation plan is applied without rebuilding it', async () => {
+  const installCalls = [];
+  const confirmedPlan = { schema_version: 1, hosts: [{ id: 'fake' }] };
+  const FakeAdapter = hostAdapter('fake', {
+    install: (ctx) => installCalls.push(ctx),
+  });
+  const install = createInstaller({
+    checkNodeVersionFn: () => true,
+    ensureStateDirFn: async () => {},
+    getAdapterFn: () => FakeAdapter,
+    buildInstallationPlanFn: () => assert.fail('provided plan must not be rebuilt'),
+  });
+
+  await install({ tool: 'fake', plan: confirmedPlan });
+
+  assert.strictEqual(installCalls[0].plan, confirmedPlan);
+});
+
 test('multiple detected hosts require an explicit selection without installing', async () => {
   const installCalls = [];
   const adapters = new Map([
