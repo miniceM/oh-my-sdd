@@ -97,6 +97,7 @@ test('mappers: mapPreToolUse tracked tool returns mapped payload', () => {
     tool_name: 'Write',
     tool_input: { file_path: '/x', content: 'hi' },
     session_id: 's1',
+    cwd: process.cwd(),
   });
 });
 
@@ -110,6 +111,7 @@ test('mappers: mapPreToolUse bash maps to the shared Bash hard-rule gate', () =>
     tool_name: 'Bash',
     tool_input: { command: 'rm -rf /' },
     session_id: 's1',
+    cwd: process.cwd(),
   });
 });
 
