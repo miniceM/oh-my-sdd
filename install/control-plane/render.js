@@ -3,6 +3,14 @@ export function renderJson(plan) {
   return `${JSON.stringify({ type: 'installation-plan', plan })}\n`;
 }
 
+function arrayOrEmpty(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function objectOrEmpty(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
 function formatProtection(capabilities) {
   const prevention = capabilities?.write_prevention;
   if (!prevention || typeof prevention !== 'object') return 'unknown';
@@ -25,16 +33,18 @@ function formatRisk(risk) {
 
 /** Render the same installation-plan facts as concise human-readable text. */
 export function renderText(plan) {
-  const lines = [`Installation plan (schema v${plan?.schema_version ?? 'unknown'})`];
+  const safePlan = objectOrEmpty(plan);
+  const lines = [`Installation plan (schema v${safePlan.schema_version ?? 'unknown'})`];
 
-  for (const host of plan?.hosts ?? []) {
+  for (const candidate of arrayOrEmpty(safePlan.hosts)) {
+    const host = objectOrEmpty(candidate);
     lines.push('', `${host.display_name ?? host.id ?? 'Unknown host'} (${host.id ?? 'unknown'})`);
     lines.push(`  Protection: ${formatProtection(host.capabilities)}`);
     lines.push('  Resources:');
-    for (const resource of host.resources ?? []) lines.push(`  - ${formatResource(resource)}`);
+    for (const resource of arrayOrEmpty(host.resources)) lines.push(`  - ${formatResource(resource)}`);
     lines.push('  Risks:');
-    for (const risk of host.risks ?? []) lines.push(`  - ${formatRisk(risk)}`);
-    const recommendation = host.recommendation ?? {};
+    for (const risk of arrayOrEmpty(host.risks)) lines.push(`  - ${formatRisk(risk)}`);
+    const recommendation = objectOrEmpty(host.recommendation);
     lines.push(`  Next action: ${recommendation.action ?? 'inspect'}${recommendation.reason ? ` — ${recommendation.reason}` : ''}`);
   }
 

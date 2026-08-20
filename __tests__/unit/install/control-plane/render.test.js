@@ -35,4 +35,11 @@ describe('control-plane renderers', () => {
     assert.match(output, /Hook enforcement is unavailable/);
     assert.match(output, /install/);
   });
+
+  it('does not throw for malformed host, resource, or risk collections', () => {
+    assert.doesNotThrow(() => renderText({ hosts: {} }));
+    assert.doesNotThrow(() => renderText({
+      hosts: [null, { resources: {}, risks: {} }],
+    }));
+  });
 });

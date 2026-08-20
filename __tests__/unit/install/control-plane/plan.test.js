@@ -71,4 +71,66 @@ describe('buildInstallationPlan', () => {
       },
     });
   });
+
+  it('recommends repairing required unavailable dependencies before installation', () => {
+    class MissingDependenciesAdapter {
+      static id = 'claude';
+      static displayName = 'Claude Code';
+      static describe() {
+        return {
+          dependencies: [
+            { name: 'node', required: true, available: false },
+            { name: 'openspec', required: true, available: false },
+            { name: 'iam', required: true, available: false },
+          ],
+        };
+      }
+    }
+
+    const plan = buildInstallationPlan({ adapters: [MissingDependenciesAdapter], ctx: {} });
+
+    assert.deepEqual(plan.hosts[0].recommendation, {
+      action: 'repair',
+      reason: 'Install or update required dependencies before installing: node, openspec, iam.',
+    });
+  });
+
+  it('normalizes a missing adapter as an inspection error instead of throwing', () => {
+    const plan = buildInstallationPlan({ adapters: [null], ctx: {} });
+
+    assert.deepEqual(plan.hosts[0], {
+      id: 'unknown',
+      display_name: 'unknown',
+      dependencies: [],
+      capabilities: {},
+      resources: [],
+      risks: [{
+        category: 'inspection',
+        level: 'error',
+        message: 'Adapter does not provide describe().',
+      }],
+      recommendation: {
+        action: 'inspect',
+        reason: 'Resolve the host inspection error before installing.',
+      },
+    });
+  });
+
+  for (const [description, value] of [
+    ['null', null],
+    ['a primitive', 'not host facts'],
+    ['a Promise', Promise.resolve({ id: 'eventually' })],
+  ]) {
+    it(`turns a describe() result of ${description} into an inspection error`, () => {
+      class InvalidDescriptionAdapter {
+        static describe() { return value; }
+      }
+
+      const plan = buildInstallationPlan({ adapters: [InvalidDescriptionAdapter], ctx: {} });
+
+      assert.equal(plan.hosts[0].risks[0].category, 'inspection');
+      assert.equal(plan.hosts[0].risks[0].level, 'error');
+      assert.equal(plan.hosts[0].recommendation.action, 'inspect');
+    });
+  }
 });

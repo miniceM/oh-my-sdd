@@ -8,11 +8,27 @@ function objectOrEmpty(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
-function defaultRecommendation(risks) {
+function missingRequiredDependencies(dependencies) {
+  return dependencies
+    .filter((dependency) => dependency?.required === true && dependency.available === false)
+    .map((dependency) => typeof dependency.name === 'string' && dependency.name
+      ? dependency.name
+      : 'unnamed dependency');
+}
+
+function defaultRecommendation(risks, dependencies) {
   if (risks.some((risk) => risk?.level === 'error')) {
     return {
       action: 'inspect',
       reason: 'Resolve the host inspection error before installing.',
+    };
+  }
+
+  const missing = missingRequiredDependencies(dependencies);
+  if (missing.length > 0) {
+    return {
+      action: 'repair',
+      reason: `Install or update required dependencies before installing: ${missing.join(', ')}.`,
     };
   }
 
@@ -22,12 +38,14 @@ function defaultRecommendation(risks) {
   };
 }
 
-function normalizeRecommendation(value, risks) {
+function normalizeRecommendation(value, risks, dependencies) {
+  const fallback = defaultRecommendation(risks, dependencies);
+  if (fallback.action !== 'install') return fallback;
+
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return defaultRecommendation(risks);
+    return fallback;
   }
 
-  const fallback = defaultRecommendation(risks);
   return {
     action: typeof value.action === 'string' && value.action ? value.action : fallback.action,
     reason: typeof value.reason === 'string' && value.reason ? value.reason : fallback.reason,
@@ -41,18 +59,20 @@ function normalizeRecommendation(value, risks) {
  */
 export function normalizeHost(host = {}, Adapter = {}) {
   const facts = objectOrEmpty(host);
+  const adapter = objectOrEmpty(Adapter);
   const risks = arrayOrEmpty(facts.risks);
+  const dependencies = arrayOrEmpty(facts.dependencies);
 
   return {
-    id: typeof facts.id === 'string' && facts.id ? facts.id : (Adapter.id ?? 'unknown'),
+    id: typeof facts.id === 'string' && facts.id ? facts.id : (adapter.id ?? 'unknown'),
     display_name: typeof facts.display_name === 'string' && facts.display_name
       ? facts.display_name
-      : (Adapter.displayName ?? Adapter.id ?? 'Unknown host'),
-    dependencies: arrayOrEmpty(facts.dependencies),
+      : (adapter.displayName ?? adapter.id ?? 'unknown'),
+    dependencies,
     capabilities: objectOrEmpty(facts.capabilities),
     resources: arrayOrEmpty(facts.resources),
     risks,
-    recommendation: normalizeRecommendation(facts.recommendation, risks),
+    recommendation: normalizeRecommendation(facts.recommendation, risks, dependencies),
   };
 }
 
@@ -61,7 +81,14 @@ function describeAdapter(Adapter, ctx) {
     if (typeof Adapter?.describe !== 'function') {
       throw new Error('Adapter does not provide describe().');
     }
-    return normalizeHost(Adapter.describe(ctx), Adapter);
+    const facts = Adapter.describe(ctx);
+    if (!facts || typeof facts !== 'object' || Array.isArray(facts)) {
+      throw new Error('Adapter describe() must return host facts as an object.');
+    }
+    if (typeof facts.then === 'function') {
+      throw new Error('Adapter describe() must return host facts synchronously.');
+    }
+    return normalizeHost(facts, Adapter);
   } catch (error) {
     return normalizeHost({
       id: Adapter?.id,
