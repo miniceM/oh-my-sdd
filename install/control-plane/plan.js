@@ -8,6 +8,10 @@ function objectOrEmpty(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
+function adapterOrEmpty(value) {
+  return value && (typeof value === 'object' || typeof value === 'function') ? value : {};
+}
+
 function missingRequiredDependencies(dependencies) {
   return dependencies
     .filter((dependency) => dependency?.required === true && dependency.available === false)
@@ -59,7 +63,7 @@ function normalizeRecommendation(value, risks, dependencies) {
  */
 export function normalizeHost(host = {}, Adapter = {}) {
   const facts = objectOrEmpty(host);
-  const adapter = objectOrEmpty(Adapter);
+  const adapter = adapterOrEmpty(Adapter);
   const risks = arrayOrEmpty(facts.risks);
   const dependencies = arrayOrEmpty(facts.dependencies);
 

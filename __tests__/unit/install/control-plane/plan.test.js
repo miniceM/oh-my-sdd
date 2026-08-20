@@ -95,6 +95,19 @@ describe('buildInstallationPlan', () => {
     });
   });
 
+  it('uses static adapter metadata when describe facts omit host identity', () => {
+    class MetadataOnlyAdapter {
+      static id = 'claude';
+      static displayName = 'Claude Code';
+      static describe() { return { dependencies: [] }; }
+    }
+
+    const plan = buildInstallationPlan({ adapters: [MetadataOnlyAdapter], ctx: {} });
+
+    assert.equal(plan.hosts[0].id, 'claude');
+    assert.equal(plan.hosts[0].display_name, 'Claude Code');
+  });
+
   it('normalizes a missing adapter as an inspection error instead of throwing', () => {
     const plan = buildInstallationPlan({ adapters: [null], ctx: {} });
 
