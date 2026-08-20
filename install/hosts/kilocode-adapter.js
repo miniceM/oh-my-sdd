@@ -128,6 +128,25 @@ export class KiloCodeAdapter extends HostAdapter {
     }
   }
 
+  static async inspectRuntime(ctx = {}) {
+    const hasAgents = existsSync(KILO_AGENTS_MD);
+    return {
+      written: {
+        state: hasAgents ? "verified" : "missing",
+        evidence: hasAgents ? "AGENTS.md exists at " + KILO_AGENTS_MD : "AGENTS.md missing",
+      },
+      registered: {
+        state: "unsupported",
+        reason: "KiloCode does not have a plugin/hook registration mechanism",
+      },
+      loaded: { state: "unknown", reason: "IDE reload evidence unavailable" },
+      enforced: {
+        state: "unsupported",
+        reason: "KiloCode lacks write-prevention hooks; protection is advisory-only",
+      },
+    };
+  }
+
   static async install(ctx) {
     const { PACKAGE_ROOT, announce } = ctx;
 

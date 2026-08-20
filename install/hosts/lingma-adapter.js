@@ -145,6 +145,23 @@ export class LingmaAdapter extends HostAdapter {
     }
   }
 
+  static async inspectRuntime(ctx = {}) {
+    const hasRule = existsSync(LINGMA_RULE_FILE);
+    const hasSettings = existsSync(LINGMA_SETTINGS);
+    return {
+      written: {
+        state: hasRule ? "verified" : "missing",
+        evidence: hasRule ? "Rule file exists at " + LINGMA_RULE_FILE : "Rule file missing",
+      },
+      registered: {
+        state: hasSettings ? "verified" : "missing",
+        evidence: hasSettings ? "Settings file exists at " + LINGMA_SETTINGS : "Settings file missing",
+      },
+      loaded: { state: "unknown", reason: "Documented integration; IDE load evidence unavailable" },
+      enforced: { state: "unknown", reason: "Runtime hook execution unverified" },
+    };
+  }
+
   static async install(ctx) {
     const { PACKAGE_ROOT, announce } = ctx;
 

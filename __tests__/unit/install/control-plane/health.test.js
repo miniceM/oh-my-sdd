@@ -68,3 +68,31 @@ test("doctor reports findings with evidence, code, and repairable flag", async (
   assert.ok(missingFinding);
   assert.equal(missingFinding.repairable, true);
 });
+
+import { ClaudeAdapter } from "../../../../install/hosts/claude-adapter.js";
+import { OpenCodeAdapter } from "../../../../install/hosts/opencode-adapter.js";
+import { LingmaAdapter } from "../../../../install/hosts/lingma-adapter.js";
+import { KiloCodeAdapter } from "../../../../install/hosts/kilocode-adapter.js";
+
+test("status produces status report for all four adapters", async () => {
+  const result = await status({
+    adapters: [ClaudeAdapter, OpenCodeAdapter, LingmaAdapter, KiloCodeAdapter],
+    ctx: {},
+  });
+
+  assert.equal(result.type, "status-report");
+  assert.equal(result.hosts.length, 4);
+  const kilocodeReport = result.hosts.find(h => h.id === "kilocode");
+  assert.equal(kilocodeReport.protection.level, "advisory");
+});
+
+test("doctor produces doctor report with findings for all four adapters", async () => {
+  const result = await doctor({
+    adapters: [ClaudeAdapter, OpenCodeAdapter, LingmaAdapter, KiloCodeAdapter],
+    ctx: {},
+  });
+
+  assert.equal(result.type, "doctor-report");
+  assert.equal(result.hosts.length, 4);
+  assert.ok(Array.isArray(result.findings));
+});
