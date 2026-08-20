@@ -20,6 +20,24 @@ import { getPluginInstallDir, isIamInPath } from '../../lib/platform.js';
 const MARKETPLACE_NAME = 'oh-my-sdd';
 const PLUGIN_NAME = 'oh-my-sdd';
 
+function inspectAvailability(check, source) {
+  try {
+    const available = Boolean(check());
+    return {
+      available,
+      state: available ? 'available' : 'missing',
+      source,
+    };
+  } catch (error) {
+    return {
+      available: false,
+      state: 'unknown',
+      source,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export function buildClaudeInvocation(
   args,
   { platform = process.platform, comspec = process.env.ComSpec } = {},
@@ -57,6 +75,69 @@ export class ClaudeAdapter extends HostAdapter {
 
   static isInstalled() {
     return isClaudeCliAvailable();
+  }
+
+  static describe(ctx = {}) {
+    const cli = inspectAvailability(
+      () => this.isInstalled(),
+      'claude --version availability probe',
+    );
+    const iam = inspectAvailability(isIamInPath, 'iam PATH probe');
+
+    return {
+      id: this.id,
+      display_name: this.displayName,
+      detected: cli.available,
+      dependencies: [
+        {
+          name: 'node', required: true, available: true, state: 'available',
+          version: process.version, source: 'current Node.js process',
+        },
+        { name: 'claude', required: true, ...cli, version: { state: 'unknown', reason: 'The availability probe does not retain a CLI version.' } },
+        { name: 'iam', required: false, ...iam },
+        {
+          name: 'openspec', required: false, available: false, state: 'unknown',
+          reason: 'OpenSpec is checked during preflight, not during read-only plan inspection.',
+        },
+      ],
+      capabilities: {
+        host_runtime: {
+          supported: cli.available,
+          level: cli.state === 'unknown' ? 'unknown' : 'detected',
+          evidence: cli.source,
+          version: { state: 'unknown', reason: 'The availability probe does not retain a CLI version.' },
+        },
+        write_prevention: {
+          supported: true,
+          level: 'enforced',
+          evidence: 'PreToolUse hook blocks protected writes before they reach the filesystem.',
+          verification: 'Verify the installed plugin loads hooks/pre-tool-use.js and Claude reports the hook as active.',
+        },
+      },
+      resources: [
+        {
+          type: 'marketplace', id: MARKETPLACE_NAME, action: 'register', owned: true,
+          source: ctx.PACKAGE_ROOT ?? 'unknown package root',
+        },
+        {
+          type: 'plugin', id: `${PLUGIN_NAME}@${MARKETPLACE_NAME}`, action: 'install', owned: true,
+          path: getPluginInstallDir(),
+        },
+        { type: 'wrapper', action: 'install', owned: true, source: 'Claude CLI wrapper' },
+      ],
+      risks: [
+        {
+          category: 'verification', level: 'warning',
+          message: 'Plugin installation alone does not verify that the PreToolUse hook is loaded and enforcing writes.',
+        },
+      ],
+      recommendation: {
+        action: cli.state === 'unknown' ? 'inspect' : 'install',
+        reason: cli.state === 'unknown'
+          ? 'Resolve Claude CLI inspection before installing Claude-specific resources.'
+          : 'Register the marketplace, install the plugin, then verify PreToolUse loading.',
+      },
+    };
   }
 
   static preflight(ctx) {

@@ -25,6 +25,18 @@ describe('ClaudeAdapter', () => {
     assert.equal(typeof ClaudeAdapter.isInstalled(), 'boolean');
   });
 
+  it('describes PreToolUse write prevention with verification requirements', () => {
+    const host = ClaudeAdapter.describe({ PACKAGE_ROOT: '/package/root' });
+
+    assert.deepEqual(host.capabilities.write_prevention, {
+      supported: true,
+      level: 'enforced',
+      evidence: 'PreToolUse hook blocks protected writes before they reach the filesystem.',
+      verification: 'Verify the installed plugin loads hooks/pre-tool-use.js and Claude reports the hook as active.',
+    });
+    assert.equal(host.resources.some((resource) => resource.type === 'plugin'), true);
+  });
+
   it('detects a Claude CLI only when claude --version succeeds on POSIX', () => {
     const invocations = [];
     assert.equal(isClaudeCliAvailable({

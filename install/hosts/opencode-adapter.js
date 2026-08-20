@@ -15,7 +15,22 @@ import {
   OPENCODE_PLUGIN_DIR,
   OPENCODE_CONFIG_DIR,
   OPENCODE_AGENTS_MD,
+  OPENCODE_JSON,
+  OPENCODE_COMMANDS_DIR,
+  OPENCODE_PLUGIN_ENTRY,
 } from '../../lib/paths.js';
+
+function inspectAvailability(check, source) {
+  try {
+    const available = Boolean(check());
+    return { available, state: available ? 'available' : 'missing', source };
+  } catch (error) {
+    return {
+      available: false, state: 'unknown', source,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
 
 export class OpenCodeAdapter extends HostAdapter {
   static id = 'opencode';
@@ -25,6 +40,65 @@ export class OpenCodeAdapter extends HostAdapter {
     if (isCliInPath('opencode')) return true;
     // fallback: 检测 ~/.config/opencode/ 目录
     return isDirPresent(OPENCODE_CONFIG_DIR);
+  }
+
+  static describe() {
+    const cli = inspectAvailability(() => isCliInPath('opencode'), 'opencode CLI PATH probe');
+    const config = inspectAvailability(
+      () => isDirPresent(OPENCODE_CONFIG_DIR),
+      `configuration directory probe: ${OPENCODE_CONFIG_DIR}`,
+    );
+    const detected = cli.available || config.available;
+    const detectionState = detected ? 'available'
+      : (cli.state === 'unknown' || config.state === 'unknown' ? 'unknown' : 'missing');
+
+    return {
+      id: this.id,
+      display_name: this.displayName,
+      detected,
+      dependencies: [
+        {
+          name: 'node', required: true, available: true, state: 'available',
+          version: process.version, source: 'current Node.js process',
+        },
+        { name: 'opencode', required: false, ...cli, version: { state: 'unknown', reason: 'PATH discovery does not retain a CLI version.' } },
+        { name: 'opencode-config', required: false, ...config },
+      ],
+      capabilities: {
+        host_runtime: {
+          supported: detected,
+          level: detectionState === 'unknown' ? 'unknown' : 'detected',
+          evidence: detected ? (cli.available ? cli.source : config.source) : 'OpenCode CLI and configuration directory were not detected.',
+          version: { state: 'unknown', reason: 'The adapter only performs availability probes.' },
+        },
+        write_prevention: {
+          supported: false,
+          level: 'unknown',
+          evidence: 'Plugin registration writes configuration only; runtime loading and write prevention require host-runtime evidence.',
+        },
+      },
+      resources: [
+        { type: 'config', path: OPENCODE_JSON, action: 'patch', owned: true },
+        {
+          type: 'npm-plugin', id: OPENCODE_PLUGIN_ENTRY, path: OPENCODE_JSON,
+          action: 'register-plugin', enforcement: 'registered', owned: true,
+        },
+        { type: 'plugin-resources', path: OPENCODE_PLUGIN_DIR, action: 'synchronize', owned: true },
+        { type: 'commands', path: OPENCODE_COMMANDS_DIR, action: 'synchronize', owned: true },
+        { type: 'agents', path: OPENCODE_AGENTS_MD, action: 'update', owned: true },
+        { type: 'runtime', path: OPENCODE_CONFIG_DIR, action: 'await-host-load', owned: false },
+      ],
+      risks: [
+        {
+          category: 'runtime', level: 'warning',
+          message: 'Registering the npm plugin does not prove that OpenCode has downloaded, loaded, or enforced it; wait for the host runtime to load it.',
+        },
+      ],
+      recommendation: {
+        action: detectionState === 'unknown' ? 'inspect' : 'install',
+        reason: 'Register the npm plugin and synchronize resources, then start OpenCode and verify runtime loading separately.',
+      },
+    };
   }
 
   static preflight(ctx) {

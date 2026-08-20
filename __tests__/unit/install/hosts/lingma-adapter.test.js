@@ -54,6 +54,21 @@ describe('LingmaAdapter', () => {
     assert.equal(typeof LingmaAdapter.isInstalled(), 'boolean');
   });
 
+  it('keeps documented integration separate from unknown runtime evidence', () => {
+    const host = LingmaAdapter.describe({ PACKAGE_ROOT });
+
+    assert.deepEqual(host.capabilities.documentation_adaptation, {
+      supported: true,
+      level: 'written',
+      evidence: 'Lingma rules, skills, and settings hook resources are documented installation targets.',
+    });
+    assert.deepEqual(host.capabilities.runtime_e2e, {
+      supported: false,
+      level: 'unknown',
+      evidence: 'No Lingma runtime or end-to-end hook-loading probe is available during planning.',
+    });
+  });
+
   it('install() is an async function', () => {
     assert.equal(LingmaAdapter.install.constructor.name, 'AsyncFunction');
   });
