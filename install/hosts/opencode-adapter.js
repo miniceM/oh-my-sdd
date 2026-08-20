@@ -108,6 +108,30 @@ export class OpenCodeAdapter extends HostAdapter {
     }
   }
 
+  static async inspectRuntime(ctx = {}) {
+    const hasConfig = existsSync(OPENCODE_JSON);
+    let isRegistered = false;
+    if (hasConfig) {
+      try {
+        const config = JSON.parse(readFileSync(OPENCODE_JSON, "utf8"));
+        const plugins = Array.isArray(config.plugin) ? config.plugin : [];
+        isRegistered = plugins.includes(OPENCODE_PLUGIN_ENTRY);
+      } catch {}
+    }
+    return {
+      written: {
+        state: hasConfig ? "verified" : "missing",
+        evidence: hasConfig ? "Config exists at " + OPENCODE_JSON : "Config file missing",
+      },
+      registered: {
+        state: isRegistered ? "verified" : "missing",
+        evidence: isRegistered ? "Plugin " + OPENCODE_PLUGIN_ENTRY + " registered in config" : "Plugin entry missing from config",
+      },
+      loaded: { state: "unknown", reason: "OpenCode host launch evidence unavailable" },
+      enforced: { state: "unknown", reason: "Write prevention evidence requires active runtime" },
+    };
+  }
+
   static async install(ctx) {
     const { announce } = ctx;
 

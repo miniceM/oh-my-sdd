@@ -156,6 +156,24 @@ export class ClaudeAdapter extends HostAdapter {
     }
   }
 
+  static async inspectRuntime(ctx = {}) {
+    const isInstalled = this.isInstalled();
+    const pluginDir = getPluginInstallDir();
+    const hasPlugin = existsSync(pluginDir);
+    return {
+      written: {
+        state: hasPlugin ? "verified" : (isInstalled ? "missing" : "unverified"),
+        evidence: hasPlugin ? "Plugin directory exists at " + pluginDir : "Plugin directory not found",
+      },
+      registered: {
+        state: isInstalled ? "verified" : "missing",
+        evidence: isInstalled ? "Claude CLI available" : "Claude CLI not available",
+      },
+      loaded: { state: "unknown", reason: "Runtime plugin loading evidence requires running session" },
+      enforced: { state: "unknown", reason: "Runtime PreToolUse enforcement evidence requires active session" },
+    };
+  }
+
   static async install(ctx, dependencies = {}) {
     const { PACKAGE_ROOT, announce } = ctx;
     const {
