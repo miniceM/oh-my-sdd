@@ -170,7 +170,12 @@ async function runOmsInstall(argv, {
 }
 
 function isDirectExecution(moduleUrl, entryArg) {
-  return Boolean(entryArg) && path.resolve(fileURLToPath(moduleUrl)) === path.resolve(entryArg);
+  if (!entryArg) return false;
+  const modulePath = path.resolve(fileURLToPath(moduleUrl));
+  const entryPath = path.resolve(entryArg);
+  return process.platform === "win32"
+    ? modulePath.toLowerCase() === entryPath.toLowerCase()
+    : modulePath === entryPath;
 }
 
 if (isDirectExecution(import.meta.url, process.argv[1])) {
