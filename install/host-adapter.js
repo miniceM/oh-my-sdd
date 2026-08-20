@@ -24,6 +24,37 @@ export class HostAdapter {
   static isInstalled() { return false; }
 
   /**
+   * Describe this host's installation-plan facts without changing the host.
+   * Adapters with installation requirements override this method.
+   * @param {{PACKAGE_ROOT: string, announce?: (msg: string) => void}} ctx
+   * @returns {{
+   *   id: string,
+   *   display_name: string,
+   *   detected: boolean,
+   *   dependencies: Array,
+   *   capabilities: Array,
+   *   resources: Array,
+   *   risks: Array,
+   *   recommendation: {action: string, reason: string}
+   * }}
+   */
+  static describe(ctx) {
+    return {
+      id: this.id,
+      display_name: this.displayName,
+      detected: this.isInstalled(),
+      dependencies: [],
+      capabilities: [],
+      resources: [],
+      risks: [],
+      recommendation: {
+        action: 'skip',
+        reason: 'adapter has no plan facts',
+      },
+    };
+  }
+
+  /**
    * Pre-flight checks (CLI deps, IDE presence, etc.).
    * Non-blocking: print warnings to ctx.announce, do not throw.
    * @param {{PACKAGE_ROOT: string, announce: (msg: string) => void}} ctx
