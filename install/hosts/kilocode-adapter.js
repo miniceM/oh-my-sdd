@@ -36,6 +36,18 @@ const KILO_CONFIG_DIR = join(HOME, '.config', 'kilo');
 const KILO_AGENTS_MD = join(KILO_CONFIG_DIR, 'AGENTS.md');
 const KILO_SKILLS_BACKUP_DIR = join(HOME, '.oh-my-sdd', 'backups', 'kilocode', 'skills');
 
+function inspectAvailability(check, source) {
+  try {
+    const available = Boolean(check());
+    return { available, state: available ? 'available' : 'missing', source };
+  } catch (error) {
+    return {
+      available: false, state: 'unknown', source,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export class KiloCodeAdapter extends HostAdapter {
   static id = 'kilocode';
   static displayName = 'Kilo Code';
@@ -49,6 +61,60 @@ export class KiloCodeAdapter extends HostAdapter {
   static isInstalled() {
     if (isCliInPath('kilo')) return true;
     return isDirPresent(KILO_DIR) || isDirPresent(KILO_CONFIG_DIR);
+  }
+
+  static describe(ctx = {}) {
+    const cli = inspectAvailability(() => isCliInPath('kilo'), 'kilo CLI PATH probe');
+    const config = inspectAvailability(
+      () => isDirPresent(KILO_DIR) || isDirPresent(KILO_CONFIG_DIR),
+      `configuration directory probes: ${KILO_DIR}, ${KILO_CONFIG_DIR}`,
+    );
+    const detected = cli.available || config.available;
+    const detectionState = detected ? 'available'
+      : (cli.state === 'unknown' || config.state === 'unknown' ? 'unknown' : 'missing');
+
+    return {
+      id: this.id,
+      display_name: this.displayName,
+      detected,
+      dependencies: [
+        {
+          name: 'node', required: true, available: true, state: 'available',
+          version: { state: 'available', value: process.version }, source: 'current Node.js process',
+        },
+        { name: 'kilo', required: false, ...cli, version: { state: 'unknown', reason: 'PATH discovery does not retain a CLI version.' } },
+        { name: 'kilo-config', required: false, ...config, version: { state: 'unknown', reason: 'Configuration directory presence has no version evidence.' } },
+      ],
+      capabilities: {
+        host_runtime: {
+          supported: detected,
+          level: detectionState === 'unknown' ? 'unknown' : 'detected',
+          evidence: detected ? (cli.available ? cli.source : config.source) : 'Kilo CLI and configuration directories were not detected.',
+          version: { state: 'unknown', reason: 'The adapter only performs availability probes.' },
+        },
+        write_prevention: {
+          supported: false,
+          level: 'advisory',
+          evidence: 'Kilo Code has no hook system, so HARD_RULE protection is advisory-only through AGENTS.md.',
+        },
+      },
+      resources: [
+        { type: 'skills', path: KILO_SKILLS_DIR, action: 'synchronize', owned: true, source: ctx.PACKAGE_ROOT ?? 'unknown package root' },
+        { type: 'baseline', path: KILO_AGENTS_MD, action: 'update', owned: true },
+        { type: 'config-directory', path: KILO_CONFIG_DIR, action: 'ensure-directory', owned: true },
+        { type: 'skills-backup', path: KILO_SKILLS_BACKUP_DIR, action: 'backup-existing', owned: true },
+      ],
+      risks: [
+        {
+          category: 'enforcement', level: 'warning',
+          message: 'Kilo Code has no Hook system: HARD_RULE protection is advisory-only and cannot provide write prevention.',
+        },
+      ],
+      recommendation: {
+        action: detectionState === 'unknown' ? 'inspect' : 'install',
+        reason: 'Install advisory AGENTS.md and skills, then reload Kilo Code; do not treat this as enforced protection.',
+      },
+    };
   }
 
   static preflight(ctx) {

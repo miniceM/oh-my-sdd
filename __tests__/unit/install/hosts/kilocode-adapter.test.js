@@ -55,6 +55,24 @@ describe('KiloCodeAdapter', () => {
     assert.equal(typeof KiloCodeAdapter.isInstalled(), 'boolean');
   });
 
+  it('is always advisory and never claims write prevention', () => {
+    const host = KiloCodeAdapter.describe({ PACKAGE_ROOT });
+
+    assert.deepEqual(host.capabilities.write_prevention, {
+      supported: false,
+      level: 'advisory',
+      evidence: 'Kilo Code has no hook system, so HARD_RULE protection is advisory-only through AGENTS.md.',
+    });
+    assert.equal(host.risks.some((risk) => /no Hook|HARD_RULE|advisory/i.test(risk.message)), true);
+  });
+
+  it('uses version objects for every dependency fact', () => {
+    const host = KiloCodeAdapter.describe({ PACKAGE_ROOT });
+    assert.equal(host.dependencies.every((dependency) => (
+      dependency.version && typeof dependency.version === 'object' && !Array.isArray(dependency.version)
+    )), true);
+  });
+
   it('install() is an async function', () => {
     assert.equal(KiloCodeAdapter.install.constructor.name, 'AsyncFunction');
   });

@@ -5,10 +5,86 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { isDirectExecution as isInstallDirect } from '../../../install/main.js';
+import {
+  createInstaller,
+  isDirectExecution as isInstallDirect,
+} from '../../../install/main.js';
 import { isDirectExecution as isUninstallDirect } from '../../../install/uninstall.js';
 
 const projectRoot = process.cwd();
+
+function hostAdapter(id, { detected = false, install } = {}) {
+  return class {
+    static id = id;
+    static displayName = id;
+    static isInstalled() { return detected; }
+    static describe() { return { id, detected }; }
+    static preflight() {}
+    static install = install;
+  };
+}
+
+test('dry run returns a plan without invoking adapter install', async () => {
+  const installCalls = [];
+  const FakeAdapter = hostAdapter('fake', {
+    install: (ctx) => installCalls.push(ctx),
+  });
+  const install = createInstaller({
+    checkNodeVersionFn: () => true,
+    ensureStateDirFn: async () => assert.fail('dry run must not create state'),
+    getAdapterFn: () => FakeAdapter,
+    listToolsFn: () => ['fake'],
+  });
+
+  const plan = await install({ tool: 'fake', dryRun: true });
+
+  assert.equal(plan.schema_version, 1);
+  assert.equal(installCalls.length, 0);
+});
+
+test('provided installation plan is applied without rebuilding it', async () => {
+  const installCalls = [];
+  const confirmedPlan = { schema_version: 1, hosts: [{ id: 'fake' }] };
+  const FakeAdapter = hostAdapter('fake', {
+    install: (ctx) => installCalls.push(ctx),
+  });
+  const install = createInstaller({
+    checkNodeVersionFn: () => true,
+    ensureStateDirFn: async () => {},
+    getAdapterFn: () => FakeAdapter,
+    buildInstallationPlanFn: () => assert.fail('provided plan must not be rebuilt'),
+  });
+
+  await install({ tool: 'fake', plan: confirmedPlan });
+
+  assert.strictEqual(installCalls[0].plan, confirmedPlan);
+});
+
+test('multiple detected hosts require an explicit selection without installing', async () => {
+  const installCalls = [];
+  const adapters = new Map([
+    ['first', hostAdapter('first', {
+      detected: true,
+      install: () => installCalls.push('first'),
+    })],
+    ['second', hostAdapter('second', {
+      detected: true,
+      install: () => installCalls.push('second'),
+    })],
+  ]);
+  const install = createInstaller({
+    checkNodeVersionFn: () => true,
+    ensureStateDirFn: async () => assert.fail('ambiguous selection must not create state'),
+    getAdapterFn: (tool) => adapters.get(tool),
+    listToolsFn: () => [...adapters.keys()],
+  });
+
+  const result = await install();
+
+  assert.equal(result.selection_required, true);
+  assert.deepEqual(result.selection_options, ['first', 'second']);
+  assert.equal(installCalls.length, 0);
+});
 
 test('importing the package entry point has no install side effects and preserves exports', () => {
   const fakeHome = mkdtempSync(path.join(os.tmpdir(), 'oms-import-entry-'));

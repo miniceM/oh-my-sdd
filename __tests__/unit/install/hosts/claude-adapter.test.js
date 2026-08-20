@@ -25,6 +25,22 @@ describe('ClaudeAdapter', () => {
     assert.equal(typeof ClaudeAdapter.isInstalled(), 'boolean');
   });
 
+  it('describes PreToolUse as supported but unverified until the runtime loads it', () => {
+    const host = ClaudeAdapter.describe({ PACKAGE_ROOT: '/package/root' });
+
+    assert.equal(host.capabilities.write_prevention.supported, true);
+    assert.notEqual(host.capabilities.write_prevention.level, 'enforced');
+    assert.match(host.capabilities.write_prevention.reason, /loaded|verified/i);
+    assert.equal(host.resources.some((resource) => resource.type === 'plugin'), true);
+  });
+
+  it('uses version objects for every dependency fact', () => {
+    const host = ClaudeAdapter.describe({ PACKAGE_ROOT: '/package/root' });
+    assert.equal(host.dependencies.every((dependency) => (
+      dependency.version && typeof dependency.version === 'object' && !Array.isArray(dependency.version)
+    )), true);
+  });
+
   it('detects a Claude CLI only when claude --version succeeds on POSIX', () => {
     const invocations = [];
     assert.equal(isClaudeCliAvailable({

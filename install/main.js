@@ -27,7 +27,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkNodeVersion, MIN_NODE_VERSION } from '../lib/platform.js';
 import { ensureStateDir } from '../lib/state-dir.js';
-import { getAdapter, detectDefault } from './host-registry.js';
+import { getAdapter, listTools, detectDefault } from './host-registry.js';
+import { buildInstallationPlan } from './control-plane/plan.js';
 import { ClaudeAdapter } from './hosts/claude-adapter.js';
 import { LingmaAdapter } from './hosts/lingma-adapter.js';
 import { OpenCodeAdapter } from './hosts/opencode-adapter.js';
@@ -74,32 +75,102 @@ function isDirectExecution(
 // ============================================
 // 调度入口
 // ============================================
+function installedAdapters(getAdapterFn, listToolsFn) {
+  return listToolsFn()
+    .map((tool) => getAdapterFn(tool))
+    .filter((Adapter) => Adapter.isInstalled());
+}
+
+function prepareInstallation(options, dependencies) {
+  const {
+    getAdapterFn,
+    listToolsFn,
+    detectDefaultFn,
+    buildInstallationPlanFn,
+    packageRoot,
+    announceFn,
+  } = dependencies;
+  const ctx = { PACKAGE_ROOT: packageRoot, announce: announceFn };
+  const hasExplicitTool = options.tool !== undefined && options.tool !== null;
+
+  if (options.plan !== undefined) {
+    const plannedTool = hasExplicitTool ? options.tool : options.plan?.hosts?.[0]?.id;
+    return {
+      adapter: plannedTool ? getAdapterFn(plannedTool) : null,
+      plan: options.plan,
+      ctx,
+    };
+  }
+
+  const adapters = hasExplicitTool
+    ? [getAdapterFn(options.tool)]
+    : installedAdapters(getAdapterFn, listToolsFn);
+
+  if (!hasExplicitTool && adapters.length > 1) {
+    return {
+      adapter: null,
+      plan: {
+        ...buildInstallationPlanFn({ adapters, ctx }),
+        selection_required: true,
+        selection_options: adapters.map((Adapter) => Adapter.id),
+      },
+    };
+  }
+
+  const Adapter = adapters[0] ?? getAdapterFn(detectDefaultFn());
+  return {
+    adapter: Adapter,
+    plan: buildInstallationPlanFn({ adapters: [Adapter], ctx }),
+    ctx,
+  };
+}
+
+/**
+ * Create an installation entry point with replaceable dependencies for tests.
+ * The public `main` below always uses the production dependencies.
+ */
+function createInstaller({
+  checkNodeVersionFn = checkNodeVersion,
+  ensureStateDirFn = ensureStateDir,
+  getAdapterFn = getAdapter,
+  listToolsFn = listTools,
+  detectDefaultFn = detectDefault,
+  buildInstallationPlanFn = buildInstallationPlan,
+  packageRoot = PACKAGE_ROOT,
+  announceFn = announce,
+} = {}) {
+  const dependencies = {
+    getAdapterFn,
+    listToolsFn,
+    detectDefaultFn,
+    buildInstallationPlanFn,
+    packageRoot,
+    announceFn,
+  };
+
+  return async function install(options = {}) {
+    if (!checkNodeVersionFn(MIN_NODE_VERSION)) {
+      throw new Error(`Node 版本过低。需要 >= ${MIN_NODE_VERSION}，当前 ${process.version}`);
+    }
+
+    const prepared = prepareInstallation(options, dependencies);
+    if (prepared.plan.selection_required || options.dryRun === true) {
+      return prepared.plan;
+    }
+
+    await ensureStateDirFn();
+    prepared.adapter.preflight(prepared.ctx);
+    return prepared.adapter.install({ ...prepared.ctx, plan: prepared.plan });
+  };
+}
+
 /**
  * Install oh-my-sdd for an explicitly selected or auto-detected host.
  *
- * @param {{ tool?: string | null }} options installer options
- * @returns {Promise<unknown>} the selected adapter's installation result
+ * @param {{ tool?: string | null, dryRun?: boolean, plan?: object }} options installer options
+ * @returns {Promise<unknown>} the selected adapter's installation result or plan
  */
-async function main(options = {}) {
-  // 共享前置：Node 版本
-  if (!checkNodeVersion(MIN_NODE_VERSION)) {
-    throw new Error(`Node 版本过低。需要 >= ${MIN_NODE_VERSION}，当前 ${process.version}`);
-  }
-
-  // 共享状态目录
-  await ensureStateDir();
-
-  // 工具选择：显式或自动检测
-  const tool = options.tool ?? detectDefault();
-  const Adapter = getAdapter(tool);
-  const ctx = { PACKAGE_ROOT, announce };
-
-  // 工具特定前置检查（警告不阻断）
-  Adapter.preflight(ctx);
-
-  // 工具安装
-  return Adapter.install(ctx);
-}
+const main = createInstaller();
 
 // ============================================
 // 向后兼容导出：preflightFor
@@ -136,6 +207,7 @@ if (isDirectExecution(import.meta.url, process.argv[1])) {
 
 export {
   main,
+  createInstaller,
   preflightFor,
   detectDefaultTool,
   isClaudeInstalled,

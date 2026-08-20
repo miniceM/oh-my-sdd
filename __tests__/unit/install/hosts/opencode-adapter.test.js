@@ -26,6 +26,24 @@ describe('OpenCodeAdapter', () => {
     assert.equal(typeof OpenCodeAdapter.isInstalled(), 'boolean');
   });
 
+  it('separates npm plugin registration from host-runtime loading', () => {
+    const host = OpenCodeAdapter.describe({ PACKAGE_ROOT: '/package/root' });
+    const registration = host.resources.find((resource) => resource.type === 'npm-plugin');
+
+    assert.equal(registration.action, 'register-plugin');
+    assert.equal(registration.enforcement, 'registered');
+    assert.equal(host.risks.some((risk) => /load/i.test(risk.message)), true);
+    assert.equal(host.capabilities.write_prevention.supported, false);
+    assert.match(host.capabilities.write_prevention.evidence, /runtime/i);
+  });
+
+  it('uses version objects for every dependency fact', () => {
+    const host = OpenCodeAdapter.describe({ PACKAGE_ROOT: '/package/root' });
+    assert.equal(host.dependencies.every((dependency) => (
+      dependency.version && typeof dependency.version === 'object' && !Array.isArray(dependency.version)
+    )), true);
+  });
+
   it('install() is an async function', () => {
     assert.equal(OpenCodeAdapter.install.constructor.name, 'AsyncFunction');
   });

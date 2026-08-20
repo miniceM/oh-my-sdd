@@ -43,6 +43,18 @@ const LINGMA_SETTINGS_BACKUP = `${LINGMA_SETTINGS}.oh-my-sdd-backup`;
 // command handlers inside these arrays belong to this plugin.
 const OOMS_EVENTS = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop'];
 
+function inspectAvailability(check, source) {
+  try {
+    const available = Boolean(check());
+    return { available, state: available ? 'available' : 'missing', source };
+  } catch (error) {
+    return {
+      available: false, state: 'unknown', source,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export function replacePluginRoot(value, packageRoot) {
   if (typeof value === 'string') return value.replaceAll('<PLUGIN_ROOT>', packageRoot);
   if (Array.isArray(value)) return value.map(item => replacePluginRoot(item, packageRoot));
@@ -62,6 +74,68 @@ export class LingmaAdapter extends HostAdapter {
     // Lingma may not register a CLI; also check ~/.lingma/ presence
     if (isCliInPath('lingma')) return true;
     return isDirPresent(LINGMA_DIR);
+  }
+
+  static describe(ctx = {}) {
+    const cli = inspectAvailability(() => isCliInPath('lingma'), 'lingma CLI PATH probe');
+    const config = inspectAvailability(() => isDirPresent(LINGMA_DIR), `configuration directory probe: ${LINGMA_DIR}`);
+    const detected = cli.available || config.available;
+    const detectionState = detected ? 'available'
+      : (cli.state === 'unknown' || config.state === 'unknown' ? 'unknown' : 'missing');
+
+    return {
+      id: this.id,
+      display_name: this.displayName,
+      detected,
+      dependencies: [
+        {
+          name: 'node', required: true, available: true, state: 'available',
+          version: { state: 'available', value: process.version }, source: 'current Node.js process',
+        },
+        { name: 'lingma', required: false, ...cli, version: { state: 'unknown', reason: 'PATH discovery does not retain a CLI version.' } },
+        { name: 'lingma-config', required: false, ...config, version: { state: 'unknown', reason: 'Configuration directory presence has no version evidence.' } },
+      ],
+      capabilities: {
+        host_runtime: {
+          supported: detected,
+          level: detectionState === 'unknown' ? 'unknown' : 'detected',
+          evidence: detected ? (cli.available ? cli.source : config.source) : 'Lingma CLI and configuration directory were not detected.',
+          version: { state: 'unknown', reason: 'The adapter only performs availability probes.' },
+        },
+        documentation_adaptation: {
+          supported: true,
+          level: 'written',
+          evidence: 'Lingma rules, skills, and settings hook resources are documented installation targets.',
+        },
+        runtime_e2e: {
+          supported: false,
+          level: 'unknown',
+          evidence: 'No Lingma runtime or end-to-end hook-loading probe is available during planning.',
+        },
+        write_prevention: {
+          supported: false,
+          level: 'unknown',
+          evidence: 'Settings can declare PreToolUse hooks, but planning has no runtime enforcement evidence.',
+        },
+      },
+      resources: [
+        { type: 'skills', path: LINGMA_SKILLS_DIR, action: 'synchronize', owned: true, source: ctx.PACKAGE_ROOT ?? 'unknown package root' },
+        { type: 'baseline-rule', path: LINGMA_RULE_FILE, action: 'update', owned: true },
+        { type: 'settings', path: LINGMA_SETTINGS, action: 'merge-hooks', owned: true },
+        { type: 'settings-backup', path: LINGMA_SETTINGS_BACKUP, action: 'backup-on-invalid', owned: true },
+        { type: 'rules-directory', path: LINGMA_RULES_DIR, action: 'ensure-directory', owned: true },
+      ],
+      risks: [
+        {
+          category: 'runtime', level: 'warning',
+          message: 'Documented Lingma rules and hook configuration are not evidence that the IDE loaded them or that end-to-end enforcement occurred.',
+        },
+      ],
+      recommendation: {
+        action: detectionState === 'unknown' ? 'inspect' : 'install',
+        reason: 'Install documented Lingma resources, then restart the IDE and obtain runtime evidence separately.',
+      },
+    };
   }
 
   static preflight(ctx) {

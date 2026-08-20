@@ -12,6 +12,38 @@ describe('HostAdapter', () => {
     assert.equal(HostAdapter.isInstalled(), false);
   });
 
+  it('describes its default installation-plan facts without side effects', () => {
+    const result = HostAdapter.describe({
+      PACKAGE_ROOT: '/tmp',
+      announce: () => assert.fail('describe() must not announce'),
+    });
+
+    assert.deepEqual(result, {
+      id: 'abstract',
+      display_name: 'Abstract Host',
+      detected: false,
+      dependencies: [],
+      capabilities: [],
+      resources: [],
+      risks: [],
+      recommendation: {
+        action: 'skip',
+        reason: 'adapter has no plan facts',
+      },
+    });
+  });
+
+  it('uses isInstalled() to report whether the host is detected', () => {
+    const originalIsInstalled = HostAdapter.isInstalled;
+    HostAdapter.isInstalled = () => true;
+
+    try {
+      assert.equal(HostAdapter.describe({ PACKAGE_ROOT: '/tmp' }).detected, true);
+    } finally {
+      HostAdapter.isInstalled = originalIsInstalled;
+    }
+  });
+
   it('has preflight() as no-op by default', () => {
     // Should not throw
     HostAdapter.preflight({ PACKAGE_ROOT: '/tmp', announce: () => {} });
