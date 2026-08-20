@@ -12,7 +12,13 @@
 
 > 📖 **详细安装指南**：如需完整安装步骤和故障排除，请参考 [INSTALL.md](INSTALL.md)
 
-按你使用的工具选一条路径。多工具并存时请显式传入 `--tool`；不传时，`oms-install` 按 Claude → Lingma → OpenCode → KiloCode 顺序检测，全部未检测到时回退到 Claude。
+按你使用的工具选一条路径。
+
+💡 **安装交互设计**：
+- **安装计划预览与交互确认**：`oms-install` 在执行写入前会先展示结构化安装计划（检测事实、保护级别、目标资源、风险预警），并在终端提示 `确认执行此安装计划？[y/N]`。
+- **免交互与自动化**：脚本或 CI 环境中请添加 `-y` / `--yes` 参数跳过交互确认（如 `oms-install --tool opencode -y`）。
+- **只读预览**：可使用 `oms-install --dry-run` 仅输出计划而不写入文件；支持 `--json` 输出结构化 JSON。
+- **多宿主安全选择**：当检测到机器上安装了多个支持工具时，`oms-install` 会中断并要求显式传入 `--tool <name>` 明确选择；仅在单一工具检测到时默认选择，全部未检测到时回退到 Claude。
 
 ### OpenCode
 
@@ -125,6 +131,36 @@ oms-install --tool kilocode        # 再装 KiloCode
 > ```bash
 > npm config set foreground-scripts true
 > ```
+
+## 控制面与运维工具 (`oms` CLI)
+
+oh-my-sdd 提供了面向用户的顶层控制面 CLI `oms`，用于检查保护状态、诊断配置漂移与安全自愈：
+
+```bash
+# 1. 查看工具保护状态与能力分层 (written / registered / loaded / enforced / advisory)
+oms status                      # 检查所有已安装宿主
+oms status --tool opencode      # 检查指定工具
+oms status --json               # 以 JSON 输出状态报告
+
+# 2. 诊断环境依赖、缺失项与配置漂移
+oms doctor                      # 诊断所有宿主
+oms doctor --tool claude        # 诊断指定工具
+
+# 3. 安全自愈与资源修复（严格保护用户修改过的文件）
+oms repair                      # 默认 dry-run：仅生成并展示修复计划，不修改文件
+oms repair --apply              # 确认执行修复
+oms repair --tool lingma --apply # 修复指定工具
+```
+
+### Git 钩子管理 (`oms-git-hooks`)
+
+在项目目录中安装或管理企业提交规范与安全门禁钩子（commit-msg, pre-commit, pre-push, prepare-commit-msg）：
+
+```bash
+oms-git-hooks install           # 为当前 git 仓库安装钩子
+oms-git-hooks status            # 查看钩子安装状态
+oms-git-hooks uninstall         # 卸载钩子并恢复用户备份
+```
 
 ## 配置
 

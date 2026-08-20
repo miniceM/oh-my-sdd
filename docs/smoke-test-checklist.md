@@ -4,75 +4,70 @@
 
 ---
 
-## 1. 主包 `@cli-tools/oh-my-sdd`
+## 1. 安装器交互与控制面验证
 
-### 安装与注册
+### 安装计划与交互确认
 
-- [ ] 1. `npm install -g @cli-tools/oh-my-sdd`（无报错，看到"✓ 已注册 marketplace"等安装进度）
-- [ ] 2. `npm install -g @cli-tools/oh-my-sdd` 再次执行（升级场景，幂等）
-- [ ] 3. `oms-login` 交互式认证，看到"✓ 登录成功"
-- [ ] 4. `iam auth status -json` 显示 credentials 含 sdd system
+- [ ] 1. `oms-install --dry-run`（输出只读安装计划，不写入任何文件，退出码 0）
+- [ ] 2. `oms-install --tool claude`（终端渲染 Installation Plan，提示 `确认执行此安装计划？[y/N]`；输入 `n` 取消，验证未写入文件）
+- [ ] 3. `oms-install --tool claude -y`（免交互确认，成功执行安装并输出 step 结果）
+- [ ] 4. 多宿主安全阻断：当检测到多个工具且不带 `--tool` 时，验证返回退出码 2 并提示使用 `--tool <name>` 明确选择
 
-### Claude Code 会话
+### 统一控制面 (`oms` CLI)
 
-- [ ] 5. 启动新 Claude Code 会话
-- [ ] 6. 系统提示符含"企业 SDD Agent"baseline（session-start hook 注入成功）
-- [ ] 7. 输入 `/sdd-spec` 看到完整 Ring 1 工作流指令
-- [ ] 8. 依次验证 `/sdd-plan` `/sdd-task` `/sdd-apply` `/sdd-review`
-- [ ] 9. 修改一个文件，会话结束时 DOP 收到 `session.end`（含 `code_delta`）
+- [ ] 5. `oms status`（显示所有工具探测事实与能力分层：`written/registered/loaded/enforced/advisory`）
+- [ ] 6. `oms doctor`（诊断依赖、缺少项与配置漂移；无异常时输出 `✓ No issues detected.`）
+- [ ] 7. `oms repair`（默认 dry-run 预览自愈计划；`oms repair --apply` 执行自愈并保护用户改动）
+- [ ] 8. `oms-git-hooks install && oms-git-hooks status`（安装 git 门禁钩子并输出 INSTALLED）
 
-### Lingma 会话（可选）
+### 身份认证
 
-- [ ] 10. `oms-install --tool lingma`，重启通义灵码 IDE
-- [ ] 11. `~/.lingma/skills/` 含 sdd-* 命令
-- [ ] 12. 在 Lingma 中执行 `/sdd-spec`，baseline 注入到 `~/.lingma/rules/oh-my-sdd.md`
-
-### 异常路径
-
-- [ ] 13. 项目根目录建 `.sdd-no-telemetry` 文件，重启会话，DOP **不上报**
-- [ ] 14. 设置 `~/.oh-my-sdd/config.json` 的 `telemetry_disabled: true`，DOP **不上报**
-- [ ] 15. 断网跑一个会话，结束后恢复网络，下次启动时积压事件被 flush
-- [ ] 16. 删除 iam 凭据（`iam logout`），启动会话，看到红色 stderr 提示 + 无 baseline
-
-### 卸载
-
-- [ ] 17. `oms-uninstall && npm uninstall -g @cli-tools/oh-my-sdd`
-- [ ] 18. `~/.claude/plugins/oh-my-sdd/` 已删
-- [ ] 19. `~/.oh-my-sdd/` 仍存在（state 保留）
-- [ ] 20. 重装后配置和会话历史可继续使用
+- [ ] 9. `oms-login` 交互式认证（密码输入隐藏，devops + gitee 登录成功）
+- [ ] 10. `iam auth status --json` 显示 credentials 数组满足认证要求
 
 ---
 
-## 2. OpenCode 子包 `@cli-tools/oh-my-sdd-opencode`
+## 2. 宿主集成与 SDD 工作流
 
-### 安装与注册
+### Claude Code
 
-- [ ] 21. 在 `opencode/` 目录下 `npm install` + `npm run build`
-- [ ] 22. `oms-install --tool opencode`，看到"✓ 已安装 plugin"
-- [ ] 23. 在 OpenCode 会话中 `/status` 能看到 oh-my-sdd 插件
+- [ ] 11. 启动 Claude Code 会话（通过 wrapper `--append-system-prompt-file` 注入 baseline）
+- [ ] 12. 系统提示词含"企业 SDD Agent"
+- [ ] 13. 执行 `/sdd-spec`、`/sdd-plan`、`/sdd-task`、`/sdd-apply`、`/sdd-review` 流程
+- [ ] 14. 触发安全门禁（尝试写含硬编码 AK 的文件，验证 PreToolUse 阻断落盘）
 
-### OpenCode 会话
+### OpenCode
 
-- [ ] 24. 输入 `/sdd-spec` 看到 Ring 1 工作流指令
-- [ ] 25. 修改一个文件，`permissionDecision: "deny"` 触发（写含 AKIA 的文件验证 HARD_RULE 拦截）
+- [ ] 15. `oms-install --tool opencode -y`
+- [ ] 16. `~/.config/opencode/skills/`、`~/.config/opencode/commands/` 与 `~/.config/opencode/AGENTS.md` 包含受管内容
+- [ ] 17. 启动 OpenCode，验证 `/sdd-spec` 与 HARD_RULE 运行时拦截（throw Error）
+- [ ] 18. 卸载：`oms-uninstall --tool opencode`，验证受管区块清理且用户配置保留
 
-### 卸载
+### 通义灵码 Lingma
 
-- [ ] 26. 独立安装子包时运行 `oms-opencode-uninstall`；主包安装时运行 `oms-uninstall --tool opencode`
-- [ ] 27. `~/.config/opencode/plugins/oh-my-sdd/` 已删
-- [ ] 28. `opencode.json` 的 `plugin` 数组已移除 `oh-my-sdd`
+- [ ] 19. `oms-install --tool lingma -y`
+- [ ] 20. `~/.lingma/skills/` 含技能，`~/.lingma/rules/oh-my-sdd.md` 包含 baseline
+- [ ] 21. `oms-uninstall --tool lingma`，验证只清理 oms 相关 hooks 和 skills
+
+### KiloCode
+
+- [ ] 22. `oms-install --tool kilocode -y`
+- [ ] 23. `~/.kilo/skills/` 包含技能，`~/.config/kilo/AGENTS.md` 包含 baseline
+- [ ] 24. `oms status --tool kilocode` 输出保护级别为 `advisory`
 
 ---
 
-## 3. 跨平台验证
+## 3. 异常路径与卸载
 
-- [ ] 29. 在 Windows 上重复 1-16（重点：hook 命令字符串引号、path.sep、CRLF）
-- [ ] 30. 在 Linux 上重复 1-16（重点：文件权限 0o700/0o600）
-- [ ] 31. 在 macOS 上重复 1-16
+- [ ] 25. 项目根目录建 `.sdd-no-telemetry` 文件，重启会话，DOP 不上报
+- [ ] 26. 设置 `~/.oh-my-sdd/config.json` 的 `telemetry_disabled: true`，DOP 不上报
+- [ ] 27. `oms-uninstall && npm uninstall -g @cli-tools/oh-my-sdd`，验证 `~/.oh-my-sdd/` 状态目录默认保留
+- [ ] 28. `oms-uninstall --purge && npm uninstall -g @cli-tools/oh-my-sdd`，验证完全清空
 
 ---
 
-## 4. 多工具共存
+## 4. 跨平台验证
 
-- [ ] 32. 同时安装 Claude + Lingma + OpenCode，各自独立不覆盖
-- [ ] 33. `oms-uninstall --tool claude` 只删 Claude，Lingma + OpenCode 不受影响
+- [ ] 29. Windows 平台重复上述流程（重点：ComSpec、PATHEXT、CRLF、引号转义）
+- [ ] 30. Linux 平台重复上述流程（重点：文件权限 0o700/0o600）
+- [ ] 31. macOS 平台重复上述流程

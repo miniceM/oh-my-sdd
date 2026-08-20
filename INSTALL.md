@@ -52,15 +52,26 @@ npm install -g @fission-ai/openspec
 npm install -g --foreground-scripts @cli-tools/oh-my-sdd
 ```
 
-`--foreground-scripts` 只影响 npm 是否显示 `postinstall` 进度，不是安装成功的必要条件。安装后可使用以下命令：
+`--foreground-scripts` 只影响 npm 是否显示 `postinstall` 进度，不是安装成功的必要条件。安装后可使用以下 CLI 工具：
 
-```bash
-oms-install --help
-oms-uninstall --help
-oms-login --help
-```
+- `oms`：控制面统一入口（`oms status` / `oms doctor` / `oms repair`）
+- `oms-install`：多工具安装器（支持安装计划预览、交互确认、`-y` 免交互）
+- `oms-uninstall`：所有权感知卸载器
+- `oms-login`：企业 iam 身份认证
+- `oms-git-hooks`：git 提交规范与安全门禁钩子管理
 
-主包安装时会执行一次自动检测；要明确安装某个工具，请继续执行对应的 `oms-install --tool <name>`。
+### 安装交互选项 (`oms-install`)
+
+`oms-install` 提供了结构化的安装计划与安全交互：
+
+| 选项 | 作用 | 示例 |
+| --- | --- | --- |
+| `--tool <name>` | 指定目标 AI 工具（`claude` / `lingma` / `opencode` / `kilocode`） | `oms-install --tool opencode` |
+| `--dry-run` | 仅构造并展示安装计划，不执行任何磁盘写入 | `oms-install --tool opencode --dry-run` |
+| `--json` | 将安装计划或执行结果以 JSON 格式输出到 stdout | `oms-install --dry-run --json` |
+| `-y, --yes` | 跳过终端 `[y/N]` 交互确认，直接执行安装（CI / 脚本必备） | `oms-install --tool claude -y` |
+
+💡 **交互确认机制**：默认情况下，`oms-install` 会在终端完整呈现 Installation Plan（检测事实、保护级别、待写入资源与风险提示），并提示 `确认执行此安装计划？[y/N]`。仅在输入 `y` 或 `yes` 后才会修改文件；输入其他内容则安全取消。
 
 ## Claude Code
 
@@ -217,24 +228,39 @@ oms-install --tool opencode
 oms-install --tool kilocode
 ```
 
-不传 `--tool` 时，安装器按注册表顺序检查第一个已安装工具：
+不传 `--tool` 时，安装器的自动检测遵循以下安全策略：
 
-1. Claude Code：`claude --version` 成功
-2. Lingma：`lingma` CLI 或 `~/.lingma/` 存在
-3. OpenCode：`opencode` CLI 或 `~/.config/opencode/` 存在
-4. KiloCode：`kilo` CLI、`~/.kilo/` 或 `~/.config/kilo/` 存在
-5. 都未检测到时回退到 `claude`，保持旧版 npm postinstall 行为
+1. **单宿主检测**：当仅检测到 1 个已安装工具时，自动选择该工具生成安装计划；
+2. **多宿主安全拦截**：当检测到 2 个或更多已安装工具时，安装器会**安全中断**并返回退出码 2，提示 `❌ 检测到多个已安装宿主。请使用 --tool <name> 明确选择后重试。`，避免未经确认写入非预期工具路径；
+3. **未检测到宿主**：当所有宿主均未检测到时，默认回退到 `claude` 模式生成安装计划。
 
-因此，在多工具环境中请使用显式的 `--tool`，不要依赖自动检测。
+因此，在多工具共存或脚本自动化环境中，请始终使用显式的 `--tool <name>`。
 
 ## 验证安装
 
-### 通用验证
+### 推荐：使用 `oms status` 检查保护状态
+
+安装完成后，推荐使用统一控制面命令 `oms status` 查看所有工具或指定工具的真实保护生效状态：
+
+```bash
+oms status                      # 全量检查所有宿主
+oms status --tool opencode      # 检查指定宿主
+oms status --json               # 输出 JSON 格式状态报告
+```
+
+状态报告会清晰呈现每个工具的能力分层：
+- `enforced`：PreToolUse 安全钩子运行期硬阻断（如 Claude Code、OpenCode）
+- `advisory`：仅通过 Instructions/Rules 机制注入约束，无运行期 hook 阻断（如 KiloCode）
+- `registered` / `written`：资源已写入/已注册但宿主未启动
+- `loaded`：宿主已加载插件/技能
+
+### 通用环境验证
 
 ```bash
 node --version       # >= 18.0.0
 npm --version        # >= 9.0.0
 openspec --version
+which oms            # 验证顶层 CLI
 which oms-install    # Windows PowerShell 使用: Get-Command oms-install
 which oms-uninstall  # Windows PowerShell 使用: Get-Command oms-uninstall
 ```
@@ -266,6 +292,25 @@ Test-Path "$HOME\.config\opencode\AGENTS.md"
 ```
 
 ## 故障排除
+
+### 推荐首选：使用 `oms doctor` 与 `oms repair`
+
+当遇到安装异常、技能未生效或配置冲突时，优先使用内置诊断与自愈命令：
+
+```bash
+# 1. 自动诊断依赖、缺失项与配置漂移
+oms doctor                      # 诊断所有工具
+oms doctor --tool claude        # 诊断指定工具
+
+# 2. 安全自愈修复（仅修复属于 OMS 且未被用户修改的受管资源）
+oms repair                      # 默认 dry-run：仅预览修复计划，不写磁盘
+oms repair --apply              # 确认并应用修复计划
+oms repair --tool opencode --apply # 修复指定工具
+```
+
+---
+
+### 常见问题与手动处理
 
 ### `npm install` 没有安装进度
 

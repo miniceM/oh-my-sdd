@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-`@cli-tools/oh-my-sdd` is an **enterprise Claude Code / Lingma plugin** (v0.2+, multi-tool) that adds:
+`@cli-tools/oh-my-sdd` is an **enterprise SDD plugin & control plane** supporting 4 AI coding tools (Claude Code, Lingma, OpenCode, KiloCode) that adds:
 
 - 5 SDD slash commands: `/sdd-spec` → `/sdd-plan` → `/sdd-task` → `/sdd-apply` → `/sdd-review`
 - An "enterprise baseline" injected into the host agent's system prompt (HARD_RULE / SOFT_RULE rules)
@@ -39,18 +39,26 @@ OMS_MOCK_USER=alice ./scripts/dev-launch-claude.sh
 # Diagnose whether SessionStart hook is firing
 ./scripts/diag-session.sh
 
+# Control-plane status, diagnosis, and repair (unified oms CLI)
+oms status                      # view protection levels across hosts
+oms doctor                      # diagnose drift, missing dependencies, configs
+oms repair                      # dry-run repair plan
+oms repair --apply              # apply self-healing repairs to OMS resources
+
 # Install / uninstall specific tool (multi-tool support)
-oms-install --tool claude
-oms-install --tool lingma
+oms-install --tool claude       # interactive plan + [y/N] confirmation
+oms-install --tool opencode -y  # -y / --yes skips interactive confirmation for scripts/CI
+oms-install --dry-run           # preview installation plan
 oms-uninstall --tool claude
 ```
 
 ## High-level architecture
 
 ```
-install.js               ← dispatcher: preflightFor(tool) + main({tool}) + detectDefaultTool
-  ├── install/hosts/claude-adapter.js    (Claude Code path: marketplace + plugin + wrapper)
-  ├── install/hosts/lingma-adapter.js    (Lingma path: skills + rules + settings.json merge)
+install.js               ← dispatcher: main({tool, plan, dryRun}) + host registry
+  ├── install/host-registry.js           (host detection & adapter registry: claude, lingma, opencode, kilocode)
+  ├── install/hosts/*-adapter.js         (per-host installation & protection capability adapters)
+  ├── install/control-plane/             (plan, health, ownership, repair, executor, render)
   └── install/common/                    (sentinels, copyDirRecursive, copySkillsToDir)
 
 lib/                     ← Shared runtime utilities (paths, platform, config, rules, constitution, iam-cli, dop-client, …)
@@ -79,7 +87,7 @@ content/                 ← versioned governance content
 wrapper/                 ← claude.sh / claude.ps1 / claude.bat
                            inject baseline via --append-system-prompt-file at launch
 
-bin/                     ← CLI: oms-install, oms-uninstall, oms-login, oms-update, oms-git-hooks, oms-welcome, oms-wrapper-verify
+bin/                     ← CLI: oms (control plane), oms-install, oms-uninstall, oms-login, oms-update, oms-git-hooks, oms-welcome, oms-wrapper-verify
 __tests__/               ← node:test unit + integration
   ├── unit/            (per-module)
   ├── integration/     (per-hook + SDD workflow + git hooks + install)
