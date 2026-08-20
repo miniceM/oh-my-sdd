@@ -52,6 +52,7 @@ export declare function mapPreToolUse(input: {
     tool_name: string;
     tool_input: Record<string, unknown>;
     session_id: string;
+    cwd: string;
 } | null;
 export declare function mapPostToolUse(input: {
     tool: string;

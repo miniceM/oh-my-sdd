@@ -23,7 +23,9 @@
 // rules to session meta caused hard-gate short-circuit when auth failed.
 
 import { matchRules } from '../lib/rules.js';
-import { error } from '../lib/log.js';
+import { resolveChange, readSddContext } from '../lib/sdd-context.js';
+import { evaluateWritePolicy } from '../lib/sdd-policy.js';
+import { error, warn } from '../lib/log.js';
 const STDIN_TIMEOUT_MS = 5_000; // 增大超时,避免大型 payload 竞争
 
 // 规则引擎扫描 content 的工具集合。Claude Code 协议保证 tool_name 是 PascalCase。
@@ -67,6 +69,31 @@ function extractContentAndPath(toolName, toolInput) {
       .map((e) => (e && typeof e.newString === 'string' ? e.newString : ''))
       .join('\n');
     return { content, filePath };
+  }
+  return null;
+}
+
+
+// SDD Ring-aware workflow gate. Runs after HARD_RULE passes, before
+// SOFT_RULE. Fails OPEN: any error in context resolution → allow.
+// Only evaluates file-write tools (not Bash commands).
+async function checkSddPolicy(filePath, cwd) {
+  if (!filePath || !cwd) return null;
+  try {
+    const { change } = await resolveChange(cwd);
+    if (!change) return null; // No active SDD change → allow.
+    const sdd = change.sdd;
+    if (!sdd?.ring) return null; // No ring context → allow.
+    const result = evaluateWritePolicy({
+      filePath,
+      ring: sdd.ring,
+      changeDir: change.changeDir,
+      cwd,
+    });
+    if (!result.allowed) return result.reason;
+  } catch (err) {
+    // Fail-open: SDD policy errors must not block normal development.
+    warn(`SDD policy check error (fail-open): ${err.message}`);
   }
   return null;
 }
@@ -129,6 +156,26 @@ async function main() {
       systemMessage: reason,
     }));
     return;
+  }
+
+
+  // --- SDD Ring-aware workflow gate (Issue #37) ---
+  // Only for file-write tools; Bash is not subject to Ring policy.
+  if (toolName !== 'Bash' && filePath) {
+    const cwd = stdin.cwd || process.cwd();
+    const policyDeny = await checkSddPolicy(filePath, cwd);
+    if (policyDeny) {
+      const reason = `SDD workflow gate: ${policyDeny}`;
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'deny',
+          permissionDecisionReason: reason,
+        },
+        systemMessage: reason,
+      }));
+      return;
+    }
   }
 
   if (soft.length > 0) {
