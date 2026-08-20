@@ -11,10 +11,10 @@
 
 export class HostAdapter {
   /** Host identifier — used in CLI args, sentinel filenames, logs. */
-  static id = 'abstract';
+  static id = "abstract";
 
   /** Human-readable name — used in error messages and announce output. */
-  static displayName = 'Abstract Host';
+  static displayName = "Abstract Host";
 
   /**
    * Detect whether this host is installed on the current machine.
@@ -48,8 +48,8 @@ export class HostAdapter {
       resources: [],
       risks: [],
       recommendation: {
-        action: 'skip',
-        reason: 'adapter has no plan facts',
+        action: "skip",
+        reason: "adapter has no plan facts",
       },
     };
   }
@@ -60,6 +60,16 @@ export class HostAdapter {
    * @param {{PACKAGE_ROOT: string, announce: (msg: string) => void}} ctx
    */
   static preflight(ctx) {}
+
+  /**
+   * Apply an individual resource step.
+   * @param {object} resource
+   * @param {object} ctx
+   * @returns {Promise<{status?: string, message?: string, owned?: boolean}>}
+   */
+  static async applyResource(resource, ctx) {
+    return { status: "succeeded", owned: resource?.owned !== false };
+  }
 
   /**
    * Execute installation.
