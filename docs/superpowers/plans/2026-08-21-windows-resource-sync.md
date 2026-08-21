@@ -82,27 +82,27 @@ git commit -m "fix(opencode): diagnose persistent Windows rename locks" -m "Refs
 - 修改：`.github/workflows/opencode-e2e.yml`
 - 修改：`__tests__/unit/opencode/e2e-harness.test.js`
 
-- [ ] **步骤 1：编写失败测试**
+- [x] **步骤 1：编写失败测试**
 
 扩展 OpenCode E2E workflow contract 测试，读取工作流文本并断言 `npm run sync:resources --prefix opencode` 至少出现两次。当前工作流只有一次调用，因此测试必须失败。
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：`node --test __tests__/unit/opencode/e2e-harness.test.js`
 
 预期：新增 contract 测试失败，报告工作流只执行一次资源同步。
 
-- [ ] **步骤 3：编写最少实现代码**
+- [x] **步骤 3：编写最少实现代码**
 
 在 `.github/workflows/opencode-e2e.yml` 中把资源同步步骤改为连续执行两次，第二次针对已经物化的目标树验证 no-op 路径；保留后续资源脚本测试和 E2E 步骤不变。
 
-- [ ] **步骤 4：运行测试验证通过**
+- [x] **步骤 4：运行测试验证通过**
 
 运行：`node --test __tests__/unit/opencode/e2e-harness.test.js`
 
 预期：workflow contract 测试全部通过。
 
-- [ ] **步骤 5：Commit**
+- [x] **步骤 5：Commit**
 
 ```bash
 git add -- .github/workflows/opencode-e2e.yml __tests__/unit/opencode/e2e-harness.test.js

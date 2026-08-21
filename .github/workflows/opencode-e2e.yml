@@ -35,7 +35,10 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm ci --prefix opencode --ignore-scripts
       - run: npm run --prefix opencode build
-      - run: npm run sync:resources --prefix opencode
+      - name: Sync OpenCode resources twice
+        run: |
+          npm run sync:resources --prefix opencode
+          npm run sync:resources --prefix opencode
       - run: node --test __tests__/unit/opencode/resource-scripts.test.js
       - run: npm run test:e2e:opencode
       - name: Upload OpenCode E2E artifacts
