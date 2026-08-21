@@ -32,7 +32,14 @@ function runNpmWithOutput(args, options) {
 
 test('install + uninstall: oms-install/uninstall --tool opencode round-trip', () => {
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oms-install-'));
-  const env = { ...process.env, HOME: tmpHome, USERPROFILE: tmpHome };
+  const env = {
+    ...process.env,
+    HOME: tmpHome,
+    USERPROFILE: tmpHome,
+    XDG_HOME_DIR: tmpHome,
+    XDG_CONFIG_HOME: path.join(tmpHome, '.config'),
+    OPENCODE_CONFIG_DIR: path.join(tmpHome, '.config', 'opencode'),
+  };
 
   // Step 1: install (use CLI wrapper which parses --tool)
   execFileSync('node', ['bin/oms-install.js', '--tool', 'opencode', '-y'], {
