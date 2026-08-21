@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Manual installer entry point (mirrors postinstall behavior for re-runs)
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
@@ -173,10 +173,18 @@ async function runOmsInstall(argv, {
   return 0;
 }
 
-function isDirectExecution(moduleUrl, entryArg) {
+function isDirectExecution(moduleUrl, entryArg, { realpathSyncFn = realpathSync } = {}) {
   if (!entryArg) return false;
-  const modulePath = path.resolve(fileURLToPath(moduleUrl));
-  const entryPath = path.resolve(entryArg);
+  const resolveCanonicalPath = (filePath) => {
+    const absolutePath = path.resolve(filePath);
+    try {
+      return path.resolve(realpathSyncFn(absolutePath));
+    } catch {
+      return absolutePath;
+    }
+  };
+  const modulePath = resolveCanonicalPath(fileURLToPath(moduleUrl));
+  const entryPath = resolveCanonicalPath(entryArg);
   return process.platform === "win32"
     ? modulePath.toLowerCase() === entryPath.toLowerCase()
     : modulePath === entryPath;
