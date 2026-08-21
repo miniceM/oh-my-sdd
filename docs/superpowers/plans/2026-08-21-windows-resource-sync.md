@@ -116,17 +116,17 @@ git commit -m "test(ci): cover repeated OpenCode resource sync" -m "Refs #57"
 - 验证：`__tests__/unit/opencode/resource-scripts.test.js`
 - 验证：`.github/workflows/opencode-e2e.yml`
 
-- [ ] **步骤 1：运行目标测试**
+- [x] **步骤 1：运行目标测试**
 
 运行：`node --test __tests__/unit/opencode/resource-scripts.test.js __tests__/unit/opencode/e2e-harness.test.js`
 
-- [ ] **步骤 2：运行全量测试和基线检查**
+- [x] **步骤 2：运行全量测试和基线检查**
 
 运行：`npm test`、`npm run lint:baseline`、`git diff --check`
 
 预期：测试无失败，基线 lint 通过，diff 无空白错误。
 
-- [ ] **步骤 3：检查提交范围和敏感文件**
+- [x] **步骤 3：检查提交范围和敏感文件**
 
 运行：`git status --short`、`git diff origin/main..HEAD --stat`、`git diff origin/main..HEAD --check`
 
