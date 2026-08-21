@@ -49,27 +49,27 @@ git commit -m "fix(opencode): skip unchanged resource directory swaps" -m "Refs 
 - 修改：`__tests__/unit/opencode/resource-scripts.test.js`
 - 修改：`opencode/scripts/copy-resources.mjs`
 
-- [ ] **步骤 1：编写失败测试**
+- [x] **步骤 1：编写失败测试**
 
 将现有一次性锁测试保留为成功回归，并新增持续锁测试：注入 `renameSync` 对目标到 backup 的每次调用都抛出 `EPERM`，设置很小的 `renameTimeoutMs` 和 `renameDelayMs`，断言抛错信息同时包含 `destination-to-backup`、目标路径、`EPERM` 和 `attempts=`，并断言旧文件仍存在、新文件不存在。更新现有重试测试使用总时限配置，而不是依赖固定调用次数。
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：`node --test __tests__/unit/opencode/resource-scripts.test.js`
 
 预期：新增测试失败，因为当前实现没有 `renameTimeoutMs` 语义，也不会为 rename 错误补充操作和重试上下文。
 
-- [ ] **步骤 3：编写最少实现代码**
+- [x] **步骤 3：编写最少实现代码**
 
 将 `renameWithRetry()` 改为接受 `{ operation, timeoutMs, delayMs, maxDelayMs }`，默认总时限设为明显高于当前约 2 秒的有限窗口；只对 `EPERM`、`EBUSY`、`EACCES` 重试，使用 `Math.min()` 控制递增等待并在总时限耗尽后包装最后一个错误。包装错误保留 `code` 和 `cause`，消息包含操作、from/to、attempts 和 elapsedMs。让 backup、staging、restore 三类 rename 分别传入稳定的操作名；保留 `renameAttempts`/`renameDelayMs` 的兼容注入仅在现有测试需要时，生产默认路径使用总时限。
 
-- [ ] **步骤 4：运行测试验证通过**
+- [x] **步骤 4：运行测试验证通过**
 
 运行：`node --test __tests__/unit/opencode/resource-scripts.test.js`
 
 预期：资源同步相关测试全部通过，持续锁测试在毫秒级测试配置下完成。
 
-- [ ] **步骤 5：Commit**
+- [x] **步骤 5：Commit**
 
 ```bash
 git add -- __tests__/unit/opencode/resource-scripts.test.js opencode/scripts/copy-resources.mjs

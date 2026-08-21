@@ -109,30 +109,58 @@ const DEFAULT_STALE_LOCK_MS = 30 * 60 * 1000;
 // EPERM (and sometimes EBUSY/EACCES) while the same rename succeeds on POSIX.
 // A concurrent `npm pack` collects the package file list (and hashes file
 // contents) right after its own prepack sync, and antivirus can also briefly
-// hold a handle — both are transient, so retry with a short bounded backoff
-// before giving up. The lock above serializes sync *writers*; it cannot stop
+// hold a handle. The lock above serializes sync *writers*; it cannot stop
 // npm's read-only collection phase, which is exactly why the rename must be
 // tolerant of a briefly-open destination.
 const TRANSIENT_RENAME_ERRORS = new Set(['EPERM', 'EBUSY', 'EACCES']);
-const RENAME_RETRY_ATTEMPTS = 40; // 40 x 50ms ≈ 2s worst-case backoff
+const RENAME_RETRY_TIMEOUT_MS = 15_000;
 const RENAME_RETRY_DELAY_MS = 50;
+const RENAME_RETRY_MAX_DELAY_MS = 500;
 
 function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-function renameWithRetry(rename, from, to, attempts = RENAME_RETRY_ATTEMPTS, delayMs = RENAME_RETRY_DELAY_MS) {
+function renameWithRetry(
+  rename,
+  from,
+  to,
+  {
+    operation = 'rename',
+    timeoutMs = RENAME_RETRY_TIMEOUT_MS,
+    delayMs = RENAME_RETRY_DELAY_MS,
+    maxDelayMs = RENAME_RETRY_MAX_DELAY_MS,
+    maxAttempts,
+  } = {},
+) {
+  const startedAt = Date.now();
+  let attempts = 0;
+  let delay = delayMs;
   let lastError;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
+  while (true) {
+    attempts += 1;
     try {
       return rename(from, to);
     } catch (error) {
       if (!TRANSIENT_RENAME_ERRORS.has(error?.code)) throw error;
       lastError = error;
-      sleepSync(delayMs);
+      if (maxAttempts !== undefined && attempts >= maxAttempts) break;
+      const elapsedMs = Date.now() - startedAt;
+      const remainingMs = timeoutMs - elapsedMs;
+      if (remainingMs <= 0) break;
+      sleepSync(Math.min(delay, remainingMs));
+      delay = Math.min(delay * 2, maxDelayMs);
     }
   }
-  throw lastError;
+
+  const elapsedMs = Date.now() - startedAt;
+  const wrapped = new Error(
+    `[copy-resources] ${operation} failed (attempts=${attempts}, elapsedMs=${elapsedMs}) `
+      + `(${from} -> ${to}) [${lastError.code ?? 'unknown'}]: ${lastError.message}`,
+    { cause: lastError },
+  );
+  wrapped.code = lastError.code;
+  throw wrapped;
 }
 
 function readLockOwner(lockPath) {
@@ -267,7 +295,7 @@ export function withSyncLock(lockPath, operation, ops = {}) {
  *
  * @param {string} src source directory to mirror
  * @param {string} dst destination directory to replace
- * @param {{ cpSync?: Function, existsSync?: Function, renameSync?: Function, rmSync?: Function, mkdirSync?: Function, renameAttempts?: number, renameDelayMs?: number, lockTimeoutMs?: number, lockPollMs?: number, staleLockThresholdMs?: number }} [ops] injectable fs/lock options for tests
+ * @param {{ cpSync?: Function, existsSync?: Function, renameSync?: Function, rmSync?: Function, mkdirSync?: Function, renameAttempts?: number, renameTimeoutMs?: number, renameDelayMs?: number, renameMaxDelayMs?: number, lockTimeoutMs?: number, lockPollMs?: number, staleLockThresholdMs?: number }} [ops] injectable fs/lock options for tests
  * @returns {unknown} the operation result
  */
 export function syncResourceTree(src, dst, ops = {}) {
@@ -275,9 +303,17 @@ export function syncResourceTree(src, dst, ops = {}) {
   const exists = ops.existsSync ?? existsSync;
   const rename = ops.renameSync ?? renameSync;
   const remove = ops.rmSync ?? rmSync;
-  const renameAttempts = ops.renameAttempts ?? RENAME_RETRY_ATTEMPTS;
+  const renameAttempts = ops.renameAttempts;
+  const renameTimeoutMs = ops.renameTimeoutMs ?? RENAME_RETRY_TIMEOUT_MS;
   const renameDelayMs = ops.renameDelayMs ?? RENAME_RETRY_DELAY_MS;
-  const renameTolerant = (from, to) => renameWithRetry(rename, from, to, renameAttempts, renameDelayMs);
+  const renameMaxDelayMs = ops.renameMaxDelayMs ?? RENAME_RETRY_MAX_DELAY_MS;
+  const renameTolerant = (from, to, operation) => renameWithRetry(rename, from, to, {
+    operation,
+    timeoutMs: renameTimeoutMs,
+    delayMs: renameDelayMs,
+    maxDelayMs: renameMaxDelayMs,
+    maxAttempts: renameAttempts,
+  });
   const suffix = `${process.pid}-${randomUUID()}`;
   const staging = `${dst}.oh-my-sdd-sync.staging-${suffix}`;
   const backup = `${dst}.oh-my-sdd-sync.backup-${suffix}`;
@@ -295,18 +331,18 @@ export function syncResourceTree(src, dst, ops = {}) {
         filter: (source) => shouldCopy(basename(source)),
       });
       if (exists(dst)) {
-        renameTolerant(dst, backup);
+        renameTolerant(dst, backup, 'destination-to-backup');
         movedExisting = true;
       }
       try {
-        renameTolerant(staging, dst);
+        renameTolerant(staging, dst, 'staging-to-destination');
       } catch (error) {
-        if (movedExisting && !exists(dst)) renameTolerant(backup, dst);
+        if (movedExisting && !exists(dst)) renameTolerant(backup, dst, 'backup-restore');
         throw error;
       }
       if (movedExisting) remove(backup, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     } catch (error) {
-      if (movedExisting && exists(backup) && !exists(dst)) renameTolerant(backup, dst);
+      if (movedExisting && exists(backup) && !exists(dst)) renameTolerant(backup, dst, 'backup-restore');
       throw error;
     } finally {
       remove(staging, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

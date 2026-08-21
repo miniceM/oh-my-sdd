@@ -1034,7 +1034,7 @@ test('resource sync retries a transient Windows rename lock and still replaces t
     const realRename = renameSync;
     let backupAttempts = 0;
     syncResourceTree(src, dst, {
-      renameAttempts: 5,
+      renameTimeoutMs: 100,
       renameDelayMs: 1,
       renameSync: (from, to) => {
         if (to.includes('.oh-my-sdd-sync.backup-')) {
@@ -1075,7 +1075,42 @@ test('resource sync fails loudly when the destination rename stays locked and pr
     let attempts = 0;
     assert.throws(
       () => syncResourceTree(src, dst, {
-        renameAttempts: 3,
+        renameTimeoutMs: 20,
+        renameDelayMs: 2,
+        renameSync: (from, to) => {
+          if (to.includes('.oh-my-sdd-sync.backup-')) {
+            attempts += 1;
+            const error = new Error('destination locked');
+            error.code = 'EPERM';
+            throw error;
+          }
+          return renameSync(from, to);
+        },
+      }),
+      /destination-to-backup/,
+    );
+    assert.ok(attempts >= 2, 'the destination rename should retry before timing out');
+    assert.equal(readFileSync(join(dst, 'old.txt'), 'utf8'), 'old');
+    assert.equal(existsSync(join(dst, 'new.txt')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource sync reports context after a persistent Windows rename lock deadline', () => {
+  const root = fixture();
+  try {
+    const src = join(root, 'src');
+    const dst = join(root, 'dst');
+    mkdirSync(src, { recursive: true });
+    mkdirSync(dst, { recursive: true });
+    writeFileSync(join(src, 'new.txt'), 'new');
+    writeFileSync(join(dst, 'old.txt'), 'old');
+
+    let attempts = 0;
+    assert.throws(
+      () => syncResourceTree(src, dst, {
+        renameTimeoutMs: 10,
         renameDelayMs: 1,
         renameSync: (from, to) => {
           if (to.includes('.oh-my-sdd-sync.backup-')) {
@@ -1087,9 +1122,15 @@ test('resource sync fails loudly when the destination rename stays locked and pr
           return renameSync(from, to);
         },
       }),
-      /destination locked/,
+      (error) => {
+        assert.match(error.message, /destination-to-backup/);
+        assert.match(error.message, new RegExp(dst.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+        assert.match(error.message, /EPERM/);
+        assert.match(error.message, /attempts=\d+/);
+        assert.ok(attempts >= 2);
+        return true;
+      },
     );
-    assert.equal(attempts, 3, 'the destination rename should exhaust its retries');
     assert.equal(readFileSync(join(dst, 'old.txt'), 'utf8'), 'old');
     assert.equal(existsSync(join(dst, 'new.txt')), false);
   } finally {
