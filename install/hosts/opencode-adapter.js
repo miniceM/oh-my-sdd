@@ -203,7 +203,7 @@ export class OpenCodeAdapter extends HostAdapter {
       capabilities: {
         host_runtime: {
           supported: detected,
-          level: detectionState === 'unknown' ? 'unknown' : 'detected',
+          level: detectionState === 'available' ? 'detected' : detectionState,
           evidence: detected ? (cli.available ? cli.source : config.source) : 'OpenCode CLI and configuration directory were not detected.',
         version: { state: 'unknown', reason: 'The adapter only performs availability probes.' },
         },

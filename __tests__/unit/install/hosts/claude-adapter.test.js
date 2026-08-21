@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import {
   buildClaudeInvocation,
   ClaudeAdapter,
@@ -39,6 +40,22 @@ describe('ClaudeAdapter', () => {
     assert.equal(host.dependencies.every((dependency) => (
       dependency.version && typeof dependency.version === 'object' && !Array.isArray(dependency.version)
     )), true);
+  });
+
+  it('reports a missing host runtime when the Claude CLI is absent', () => {
+    const script = `
+      const { ClaudeAdapter } = await import(${JSON.stringify(new URL('../../../../install/hosts/claude-adapter.js', import.meta.url).href)});
+      process.stdout.write(JSON.stringify(ClaudeAdapter.describe()));
+    `;
+    const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
+      env: { ...process.env, PATH: '' },
+      encoding: 'utf8',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const host = JSON.parse(result.stdout);
+    assert.equal(host.detected, false);
+    assert.equal(host.capabilities.host_runtime.level, 'missing');
   });
 
   it('detects a Claude CLI only when claude --version succeeds on POSIX', () => {

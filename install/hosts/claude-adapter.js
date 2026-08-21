@@ -104,7 +104,7 @@ export class ClaudeAdapter extends HostAdapter {
       capabilities: {
         host_runtime: {
           supported: cli.available,
-          level: cli.state === 'unknown' ? 'unknown' : 'detected',
+          level: cli.state === 'available' ? 'detected' : cli.state,
           evidence: cli.source,
           version: { state: 'unknown', reason: 'The availability probe does not retain a CLI version.' },
         },
