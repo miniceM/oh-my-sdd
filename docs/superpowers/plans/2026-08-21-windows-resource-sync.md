@@ -16,27 +16,27 @@
 - 修改：`__tests__/unit/opencode/resource-scripts.test.js`
 - 修改：`opencode/scripts/copy-resources.mjs`
 
-- [ ] **步骤 1：编写失败测试**
+- [x] **步骤 1：编写失败测试**
 
 在资源同步测试文件中增加一个真实临时目录测试：源目录和目标目录各包含相同的文件；通过注入 `renameSync` 在任何调用时抛出错误；调用 `syncResourceTree()` 后断言成功且目标文件仍存在。该测试必须验证相同树不进入 staging/rename 路径，而不是只断言最终文件内容。
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：`node --test __tests__/unit/opencode/resource-scripts.test.js`
 
 预期：新增测试失败，注入的 `renameSync` 被当前实现调用。
 
-- [ ] **步骤 3：编写最少实现代码**
+- [x] **步骤 3：编写最少实现代码**
 
 在 `opencode/scripts/copy-resources.mjs` 中加入使用 `createHash`、`readdirSync` 和现有 `shouldCopy()` 的递归树指纹函数。指纹必须包含相对路径、目录/文件类型和文件字节，并按名称排序；读取失败时返回“不可比较”，不能把错误当作相等。将比较放入 `withSyncLock()` 回调的最前面，只有 `treesEquivalent(src, dst)` 为真时直接返回。
 
-- [ ] **步骤 4：运行测试验证通过**
+- [x] **步骤 4：运行测试验证通过**
 
 运行：`node --test __tests__/unit/opencode/resource-scripts.test.js`
 
 预期：新增 no-op 测试和既有资源同步测试全部通过。
 
-- [ ] **步骤 5：Commit**
+- [x] **步骤 5：Commit**
 
 ```bash
 git add -- __tests__/unit/opencode/resource-scripts.test.js opencode/scripts/copy-resources.mjs

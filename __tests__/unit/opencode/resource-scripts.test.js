@@ -981,6 +981,25 @@ test('resource sync excludes declared noise directories', () => {
   }
 });
 
+test('resource sync skips replacement when the destination already matches the source', () => {
+  const root = fixture();
+  try {
+    const src = join(root, 'src');
+    const dst = join(root, 'dst');
+    mkdirSync(src, { recursive: true });
+    mkdirSync(dst, { recursive: true });
+    writeFileSync(join(src, 'same.txt'), 'same');
+    writeFileSync(join(dst, 'same.txt'), 'same');
+
+    assert.doesNotThrow(() => syncResourceTree(src, dst, {
+      renameSync: () => { throw new Error('unchanged trees must not be renamed'); },
+    }));
+    assert.equal(readFileSync(join(dst, 'same.txt'), 'utf8'), 'same');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('resource sync preserves the existing destination when staging copy fails', () => {
   const root = fixture();
   try {

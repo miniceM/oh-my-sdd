@@ -27,13 +27,14 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -64,6 +65,41 @@ const EXCLUDE_BASENAMES = new Set([
 
 export function shouldCopy(name) {
   return !EXCLUDE_BASENAMES.has(name);
+}
+
+function treeDigest(root) {
+  const hash = createHash('sha256');
+  const visit = (directory, relativeRoot = '') => {
+    const entries = readdirSync(directory, { withFileTypes: true })
+      .filter((entry) => shouldCopy(entry.name))
+      .sort((left, right) => left.name.localeCompare(right.name));
+
+    for (const entry of entries) {
+      const relativePath = relativeRoot ? join(relativeRoot, entry.name) : entry.name;
+      const absolutePath = join(directory, entry.name);
+      hash.update(relativePath).update('\0');
+      if (entry.isDirectory()) {
+        hash.update('directory\0');
+        visit(absolutePath, relativePath);
+      } else if (entry.isFile()) {
+        hash.update('file\0').update(readFileSync(absolutePath));
+      } else {
+        hash.update('other\0');
+      }
+    }
+  };
+
+  visit(root);
+  return hash.digest('hex');
+}
+
+function treesEquivalent(src, dst, exists) {
+  if (!exists(dst)) return false;
+  try {
+    return treeDigest(src) === treeDigest(dst);
+  } catch {
+    return false;
+  }
 }
 
 const LOCK_OWNER_FILE = 'owner.json';
@@ -249,6 +285,8 @@ export function syncResourceTree(src, dst, ops = {}) {
 
   mkdirSync(dirname(dst), { recursive: true });
   return withSyncLock(lock, () => {
+    if (treesEquivalent(src, dst, exists)) return;
+
     let movedExisting = false;
     try {
       copy(src, staging, {
