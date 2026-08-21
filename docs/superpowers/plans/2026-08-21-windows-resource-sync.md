@@ -136,7 +136,7 @@ git commit -m "test(ci): cover repeated OpenCode resource sync" -m "Refs #57"
 
 以设计文档、Issue 57 和 `origin/main..HEAD` 差异为上下文执行代码审查；Critical/Important 问题修复后再继续。
 
-- [ ] **步骤 5：推送并创建 Draft PR**
+- [x] **步骤 5：推送并创建 Draft PR**
 
 推送：`git push -u origin fix/issue-57-windows-resource-sync`
 
