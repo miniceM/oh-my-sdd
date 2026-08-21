@@ -29,6 +29,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   renameSync,
   rmSync,
   statSync,
@@ -83,6 +84,8 @@ function treeDigest(root) {
         visit(absolutePath, relativePath);
       } else if (entry.isFile()) {
         hash.update('file\0').update(readFileSync(absolutePath));
+      } else if (entry.isSymbolicLink()) {
+        hash.update('symbolic-link\0').update(readlinkSync(absolutePath));
       } else {
         hash.update('other\0');
       }

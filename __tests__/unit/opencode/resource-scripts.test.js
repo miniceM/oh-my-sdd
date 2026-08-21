@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { basename, dirname, join } from 'node:path';
@@ -995,6 +995,28 @@ test('resource sync skips replacement when the destination already matches the s
       renameSync: () => { throw new Error('unchanged trees must not be renamed'); },
     }));
     assert.equal(readFileSync(join(dst, 'same.txt'), 'utf8'), 'same');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource sync replaces a destination when a symlink target changes', { skip: process.platform === 'win32' }, () => {
+  const root = fixture();
+  try {
+    const src = join(root, 'src');
+    const dst = join(root, 'dst');
+    mkdirSync(src, { recursive: true });
+    mkdirSync(dst, { recursive: true });
+    writeFileSync(join(src, 'one.txt'), 'one');
+    writeFileSync(join(src, 'two.txt'), 'two');
+    writeFileSync(join(dst, 'one.txt'), 'one');
+    writeFileSync(join(dst, 'two.txt'), 'two');
+    symlinkSync('one.txt', join(src, 'current.txt'));
+    symlinkSync('two.txt', join(dst, 'current.txt'));
+
+    syncResourceTree(src, dst);
+
+    assert.notEqual(readlinkSync(join(dst, 'current.txt')), 'two.txt');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
