@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -74,6 +74,33 @@ describe('LingmaAdapter', () => {
     assert.equal(host.dependencies.every((dependency) => (
       dependency.version && typeof dependency.version === 'object' && !Array.isArray(dependency.version)
     )), true);
+  });
+
+  it('reports a missing host runtime when CLI and config are absent', () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), 'oms-lingma-detection-'));
+    const script = `
+      const { LingmaAdapter } = await import(${JSON.stringify(ADAPTER_URL)});
+      process.stdout.write(JSON.stringify(LingmaAdapter.describe()));
+    `;
+    try {
+      const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
+        env: {
+          ...process.env,
+          HOME: fakeHome,
+          USERPROFILE: fakeHome,
+          XDG_HOME_DIR: fakeHome,
+          PATH: '',
+        },
+        encoding: 'utf8',
+      });
+
+      assert.equal(result.status, 0, result.stderr);
+      const host = JSON.parse(result.stdout);
+      assert.equal(host.detected, false);
+      assert.equal(host.capabilities.host_runtime.level, 'missing');
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
   });
 
   it('install() is an async function', () => {
