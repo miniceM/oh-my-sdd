@@ -7,6 +7,7 @@ import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { main } from '../install/main.js';
 import { renderJson, renderText, renderResultJson, renderResultText } from '../install/control-plane/render.js';
+import { installerBanner } from './oms-welcome.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SUPPORTED_TOOLS = ['claude', 'lingma', 'opencode', 'kilocode'];
@@ -97,6 +98,82 @@ function writeSelectionRequired(plan, { stderr = process.stderr } = {}) {
   stderr.write(`  请使用 oms-install --tool <name> 明确选择后重试。\n`);
 }
 
+function isInteractive({ input = process.stdin, output = process.stdout } = {}) {
+  return input.isTTY === true && output.isTTY === true && typeof input.setRawMode === 'function';
+}
+
+function selectionCandidates(plan) {
+  if (Array.isArray(plan.selection_candidates) && plan.selection_candidates.length > 0) {
+    return plan.selection_candidates;
+  }
+  return (Array.isArray(plan.selection_options) ? plan.selection_options : [])
+    .map((id) => ({ id, display_name: id }));
+}
+
+function renderHostMenu(candidates, activeIndex, output, redraw) {
+  if (redraw) output.write(`\x1b[${candidates.length}A`);
+  if (!redraw) output.write('\n选择目标宿主（↑/↓ 选择，Enter 确认）：\n');
+  for (const [index, candidate] of candidates.entries()) {
+    const marker = index === activeIndex ? '❯' : ' ';
+    output.write(`\x1b[2K\r${marker} ${candidate.display_name} (${candidate.id})\n`);
+  }
+}
+
+async function selectHost(candidates, { input = process.stdin, output = process.stderr } = {}) {
+  if (candidates.length === 0) return null;
+
+  let activeIndex = 0;
+  let redraw = false;
+  let buffered = '';
+
+  return new Promise((resolve) => {
+    const cleanup = () => {
+      input.removeListener('data', onData);
+      if (typeof input.setRawMode === 'function') input.setRawMode(false);
+      if (typeof input.pause === 'function') input.pause();
+      output.write('\x1b[?25h');
+    };
+    const finish = (selected) => {
+      cleanup();
+      resolve(selected);
+    };
+    const render = () => {
+      renderHostMenu(candidates, activeIndex, output, redraw);
+      redraw = true;
+    };
+    const onData = (chunk) => {
+      buffered += String(chunk);
+      while (buffered.length > 0) {
+        if (buffered.startsWith('\x1b[')) {
+          if (buffered.length < 3) return;
+          const key = buffered.slice(0, 3);
+          buffered = buffered.slice(3);
+          if (key === '\x1b[A') {
+            activeIndex = (activeIndex + candidates.length - 1) % candidates.length;
+            render();
+          } else if (key === '\x1b[B') {
+            activeIndex = (activeIndex + 1) % candidates.length;
+            render();
+          }
+          continue;
+        }
+
+        const key = buffered[0];
+        buffered = buffered.slice(1);
+        if (key === '\r' || key === '\n') return finish(candidates[activeIndex].id);
+        if (key === '\u0003') return finish(null);
+      }
+    };
+
+    if (typeof input.setEncoding === 'function') input.setEncoding('utf8');
+    input.setRawMode(true);
+    if (typeof input.resume === 'function') input.resume();
+    output.write('\x1b[?25l');
+    render();
+    input.on('data', onData);
+  });
+}
+
 /**
  * Render the installation plan before applying it, with collaborators exposed
  * for tests. Returns a process-compatible exit code instead of exiting.
@@ -108,6 +185,9 @@ async function runOmsInstall(argv, {
   renderResultJsonFn = renderResultJson,
   renderResultTextFn = renderResultText,
   confirmFn = confirmInstall,
+  isInteractiveFn = isInteractive,
+  selectHostFn = selectHost,
+  input = process.stdin,
   stdout = process.stdout,
   stderr = process.stderr,
 } = {}) {
@@ -131,7 +211,9 @@ async function runOmsInstall(argv, {
     return 0;
   }
 
-  const plan = await mainFn({ tool: args.tool, dryRun: true });
+  stderr.write(installerBanner() + '\n');
+  let selectedTool = args.tool;
+  let plan = await mainFn({ tool: selectedTool, dryRun: true });
   if (args.dryRun) {
     if (args.json) stdout.write(renderJsonFn(plan));
     else stderr.write(renderTextFn(plan));
@@ -139,12 +221,22 @@ async function runOmsInstall(argv, {
   }
 
   if (plan?.selection_required) {
-    if (args.json) stdout.write(renderJsonFn(plan));
-    else {
-      stderr.write(renderTextFn(plan));
-      writeSelectionRequired(plan, { stderr });
+    const canSelectHost = !args.json && !args.yes && isInteractiveFn({ input, output: stdout });
+    if (!canSelectHost) {
+      if (args.json) stdout.write(renderJsonFn(plan));
+      else {
+        stderr.write(renderTextFn(plan));
+        writeSelectionRequired(plan, { stderr });
+      }
+      return 2;
     }
-    return 2;
+
+    selectedTool = await selectHostFn(selectionCandidates(plan), { input, output: stderr });
+    if (!selectedTool) {
+      stderr.write('安装已取消，未写入任何文件。\n');
+      return 130;
+    }
+    plan = await mainFn({ tool: selectedTool, dryRun: true });
   }
 
   if (!args.json) {
@@ -160,7 +252,7 @@ async function runOmsInstall(argv, {
     return 1;
   }
 
-  const result = await mainFn({ tool: args.tool, plan });
+  const result = await mainFn({ tool: selectedTool, plan });
   if (args.json) {
     stdout.write((renderResultJsonFn || renderJsonFn)(result));
   } else if (result?.type === "installation-result") {
@@ -207,4 +299,5 @@ export {
   parseArgs,
   printHelp,
   runOmsInstall,
+  selectHost,
 };
