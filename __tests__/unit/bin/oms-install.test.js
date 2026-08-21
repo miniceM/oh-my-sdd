@@ -4,8 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { spawn } from 'node:child_process';
+import { PassThrough } from 'node:stream';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { runOmsInstall } from '../../../bin/oms-install.js';
+import { runOmsInstall, selectHost } from '../../../bin/oms-install.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const CLI = path.join(ROOT, 'bin', 'oms-install.js');
@@ -91,6 +92,138 @@ test('multiple detected hosts require an explicit selection before apply', async
   assert.equal(result.code, 2);
   assert.match(result.stderr, /claude.*kilocode.*--tool/s);
   assert.deepEqual(result.calls, [{ tool: null, dryRun: true }]);
+});
+
+test('selectHost changes the active option with the down arrow and restores the terminal', async () => {
+  const input = new PassThrough();
+  const output = { value: '', write(chunk) { this.value += chunk; } };
+  const rawModes = [];
+  input.isTTY = true;
+  input.setRawMode = (enabled) => rawModes.push(enabled);
+
+  const selected = selectHost([
+    { id: 'claude', display_name: 'Claude Code' },
+    { id: 'kilocode', display_name: 'KiloCode' },
+  ], { input, output });
+  input.write('\x1b[B');
+  input.write('\r');
+
+  assert.equal(await selected, 'kilocode');
+  assert.deepEqual(rawModes, [true, false]);
+  assert.match(output.value, /Claude Code/);
+  assert.match(output.value, /KiloCode/);
+  assert.match(output.value, /\x1b\[\?25h/);
+});
+
+test('selectHost cancels on Ctrl-C and restores the terminal', async () => {
+  const input = new PassThrough();
+  const output = { write() {} };
+  const rawModes = [];
+  input.isTTY = true;
+  input.setRawMode = (enabled) => rawModes.push(enabled);
+
+  const selected = selectHost([{ id: 'claude', display_name: 'Claude Code' }], { input, output });
+  input.write('\u0003');
+
+  assert.equal(await selected, null);
+  assert.deepEqual(rawModes, [true, false]);
+});
+
+test('TTY selection rebuilds a single-host plan before confirmation', async () => {
+  const calls = [];
+  const stderr = { value: '', write(chunk) { this.value += chunk; } };
+  const initialPlan = {
+    ...PLAN,
+    selection_required: true,
+    selection_options: ['claude', 'kilocode'],
+    selection_candidates: [
+      { id: 'claude', display_name: 'Claude Code' },
+      { id: 'kilocode', display_name: 'KiloCode' },
+    ],
+  };
+  const selectedPlan = { ...PLAN, hosts: [{ ...PLAN.hosts[0], id: 'kilocode' }] };
+
+  const exitCode = await runOmsInstall([], {
+    mainFn: async (options) => {
+      calls.push(options);
+      return calls.length === 1 ? initialPlan : selectedPlan;
+    },
+    isInteractiveFn: () => true,
+    selectHostFn: async () => 'kilocode',
+    confirmFn: async () => true,
+    stderr,
+  });
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(calls, [
+    { tool: null, dryRun: true },
+    { tool: 'kilocode', dryRun: true },
+    { tool: 'kilocode', plan: selectedPlan },
+  ]);
+});
+
+test('non-TTY multi-host selection remains non-interactive', async () => {
+  const calls = [];
+  const stderr = { write() {} };
+  const selectionPlan = { ...PLAN, selection_required: true, selection_options: ['claude', 'kilocode'] };
+
+  const exitCode = await runOmsInstall([], {
+    mainFn: async (options) => {
+      calls.push(options);
+      return selectionPlan;
+    },
+    isInteractiveFn: () => false,
+    stderr,
+  });
+
+  assert.equal(exitCode, 2);
+  assert.deepEqual(calls, [{ tool: null, dryRun: true }]);
+});
+
+test('--yes multi-host selection remains non-interactive in a TTY', async () => {
+  const calls = [];
+  const stderr = { write() {} };
+  const selectionPlan = { ...PLAN, selection_required: true, selection_options: ['claude', 'kilocode'] };
+
+  const exitCode = await runOmsInstall(['-y'], {
+    mainFn: async (options) => {
+      calls.push(options);
+      return selectionPlan;
+    },
+    isInteractiveFn: () => true,
+    selectHostFn: async () => assert.fail('the host menu must not run with --yes'),
+    stderr,
+  });
+
+  assert.equal(exitCode, 2);
+  assert.deepEqual(calls, [{ tool: null, dryRun: true }]);
+});
+
+test('normal install writes the installer banner to stderr', async () => {
+  const stderr = { value: '', write(chunk) { this.value += chunk; } };
+
+  await runOmsInstall(['--tool', 'kilocode', '-y'], {
+    mainFn: async () => PLAN,
+    stderr,
+  });
+
+  assert.match(stderr.value, /oh-my-sdd/);
+  assert.match(stderr.value, /Installation plan/);
+});
+
+test('JSON install keeps stdout parseable and writes its banner to stderr', async () => {
+  const stdout = { value: '', write(chunk) { this.value += chunk; } };
+  const stderr = { value: '', write(chunk) { this.value += chunk; } };
+
+  await runOmsInstall(['--tool', 'kilocode', '--dry-run', '--json'], {
+    mainFn: async () => PLAN,
+    stdout,
+    stderr,
+  });
+
+  assert.deepEqual(JSON.parse(stdout.value), { type: 'installation-plan', plan: PLAN });
+  assert.doesNotMatch(stdout.value, /____/);
+  assert.match(stderr.value, /oh-my-sdd/);
 });
 
 test('interactive install renders its plan and stops when confirmation is rejected', async () => {

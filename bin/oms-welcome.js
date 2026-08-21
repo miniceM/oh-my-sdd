@@ -70,6 +70,17 @@ function welcome({ version = 'v0.2.1-alpha', username = null } = {}) {
   return out.join('\n');
 }
 
+function installerBanner() {
+  const out = [''];
+  for (const line of LOGO) {
+    out.push(`${CYAN}${BOLD}${line}${RESET}`);
+  }
+  out.push('');
+  out.push(`  ${BOLD}oh-my-sdd${RESET} ${DIM}多工具安装器${RESET}`);
+  out.push('');
+  return out.join('\n');
+}
+
 function printWelcome(opts) {
   process.stdout.write(welcome(opts) + '\n');
 }
@@ -79,4 +90,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   printWelcome();
 }
 
-export { welcome, printWelcome, LOGO };
+export { welcome, printWelcome, installerBanner, LOGO };
