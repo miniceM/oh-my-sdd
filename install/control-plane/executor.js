@@ -119,19 +119,32 @@ export function summarizeExecution(plan, events = []) {
   const allEvents = arrayOrEmpty(events);
   const terminalEvents = allEvents.filter((e) => e.status !== "running");
   const failedEvents = terminalEvents.filter((e) => e.status === "failed");
+  const unsupportedEvents = terminalEvents.filter((e) => e.status === "unsupported");
+  const warningEvents = terminalEvents.filter((e) => e.status === "warning");
   const succeededEvents = terminalEvents.filter((e) => e.status === "succeeded");
 
   let status = "succeeded";
-  if (failedEvents.length > 0 && succeededEvents.length > 0) {
+  if ((failedEvents.length > 0 || unsupportedEvents.length > 0) && succeededEvents.length > 0) {
     status = "partial-failure";
-  } else if (failedEvents.length > 0 && succeededEvents.length === 0) {
+  } else if ((failedEvents.length > 0 || unsupportedEvents.length > 0) && succeededEvents.length === 0) {
     status = "failed";
   }
 
   const nextActions = [];
-  for (const failed of failedEvents) {
-    if (failed.next_action && !nextActions.includes(failed.next_action)) {
-      nextActions.push(failed.next_action);
+  for (const event of [...failedEvents, ...unsupportedEvents, ...warningEvents]) {
+    if (event.next_action && !nextActions.includes(event.next_action)) {
+      nextActions.push(event.next_action);
+    }
+  }
+
+  const completedKeys = new Set(terminalEvents.map((event) => event.id));
+  const notExecuted = [];
+  for (const host of arrayOrEmpty(safePlan.hosts)) {
+    for (const resource of arrayOrEmpty(host.resources)) {
+      const action = resource.action || "update";
+      const target = resource.path || resource.name || resource.type || "resource";
+      const id = host.id + ":" + action + ":" + target;
+      if (!completedKeys.has(id)) notExecuted.push({ host: host.id || "unknown", resource });
     }
   }
 
@@ -145,6 +158,9 @@ export function summarizeExecution(plan, events = []) {
       total_steps: terminalEvents.length,
       succeeded: succeededEvents.length,
       failed: failedEvents.length,
+      warnings: warningEvents.length,
+      unsupported: unsupportedEvents.length,
+      not_executed: notExecuted,
       status,
       next_actions: nextActions,
     },

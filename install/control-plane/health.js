@@ -90,8 +90,10 @@ export async function status({ adapters = [], ctx = {} } = {}) {
       protection,
       dependencies: description.dependencies || [],
       resources: description.resources || [],
+      scope: description.scope || null,
       risks: description.risks || [],
       recommendation: description.recommendation || { action: "inspect" },
+      evidence: runtimeEvidence,
     });
   }
 
@@ -132,7 +134,7 @@ export async function doctor({ adapters = [], ctx = {} } = {}) {
     const isAdvisory = Adapter.id === "kilocode" || description.capabilities?.write_prevention?.level === "advisory";
     const protection = buildHealthFinding(runtimeEvidence, { isAdvisoryOnly: isAdvisory, host: Adapter.id });
 
-    // Check missing dependencies
+    // Check dependency state without treating unknown as available.
     for (const dep of description.dependencies || []) {
       if (dep.required && dep.available === false) {
         findings.push({
@@ -142,12 +144,39 @@ export async function doctor({ adapters = [], ctx = {} } = {}) {
           level: "error",
           repairable: false,
           owned: false,
+          evidence: dep.source || dep.reason || null,
           next_action: "Install " + dep.name,
+        });
+      }
+      if (dep.state === "unknown") {
+        findings.push({
+          host: Adapter.id,
+          code: "dependency-unknown",
+          message: "Dependency state is unknown: " + dep.name,
+          level: "warning",
+          repairable: false,
+          owned: false,
+          evidence: dep.reason || dep.source || null,
+          next_action: "Verify " + dep.name + " manually, then rerun oms doctor --tool " + Adapter.id,
         });
       }
     }
 
-    // Check resource drift / missing
+    if (runtimeEvidence.written?.state === "unknown") {
+      findings.push({
+        host: Adapter.id,
+        code: "configuration-invalid",
+        path: runtimeEvidence.written.path || null,
+        message: runtimeEvidence.written.reason || "Managed configuration could not be read",
+        level: "error",
+        repairable: false,
+        owned: true,
+        evidence: runtimeEvidence.written.evidence || null,
+        next_action: "Fix the configuration JSON manually; oms repair will not overwrite user files",
+      });
+    }
+
+    // Check resource drift / missing.
     if (runtimeEvidence.written?.state === "missing") {
       findings.push({
         host: Adapter.id,
@@ -156,8 +185,70 @@ export async function doctor({ adapters = [], ctx = {} } = {}) {
         level: "warning",
         repairable: true,
         owned: true,
-        next_action: "Run oms repair to restore OMS resources",
+        path: runtimeEvidence.written.path || null,
+        action: Adapter.id === "opencode" ? "patch-config" : "repair-resource",
+        evidence: runtimeEvidence.written.evidence || null,
+        next_action: "Run oms repair --tool " + Adapter.id + " --apply to restore OMS resources",
       });
+    }
+
+    if (runtimeEvidence.registered?.state === "missing") {
+      findings.push({
+        host: Adapter.id,
+        code: "registration-missing",
+        message: runtimeEvidence.registered.reason || "Plugin registration is missing",
+        level: "error",
+        repairable: Adapter.id === "opencode",
+        owned: Adapter.id === "opencode",
+        path: runtimeEvidence.registered.path || null,
+        action: Adapter.id === "opencode" ? "patch-config" : "repair-resource",
+        evidence: runtimeEvidence.registered.evidence || null,
+        next_action: "Run oms repair --tool " + Adapter.id + " --apply to restore registration",
+      });
+    }
+
+    if (runtimeEvidence.postinstall?.state === "pending") {
+      findings.push({
+        host: Adapter.id,
+        code: "postinstall-pending",
+        message: runtimeEvidence.postinstall.reason || "npm postinstall resources are pending",
+        level: "warning",
+        repairable: false,
+        owned: false,
+        evidence: runtimeEvidence.postinstall.evidence || null,
+        next_action: runtimeEvidence.postinstall.next_action || "Run the plugin lifecycle, then rerun doctor",
+      });
+    }
+
+    if (runtimeEvidence.postinstall?.state === "drifted") {
+      findings.push({
+        host: Adapter.id,
+        code: "resource-drifted",
+        path: runtimeEvidence.postinstall.path || null,
+        message: runtimeEvidence.postinstall.reason || "A managed postinstall resource was modified",
+        level: "warning",
+        repairable: false,
+        owned: true,
+        current_digest: runtimeEvidence.postinstall.current_digest || null,
+        expected_digest: runtimeEvidence.postinstall.expected_digest || null,
+        evidence: runtimeEvidence.postinstall.evidence || null,
+        next_action: runtimeEvidence.postinstall.next_action || "Review user changes; repair will preserve them",
+      });
+    }
+
+    for (const layer of ["loaded", "enforced"]) {
+      if (runtimeEvidence[layer]?.state === "unknown") {
+        findings.push({
+          host: Adapter.id,
+          code: `runtime-${layer}-unknown`,
+          message: `${layer} status is not verified`,
+          level: "warning",
+          repairable: false,
+          owned: false,
+          evidence: runtimeEvidence[layer].evidence || null,
+          next_action: runtimeEvidence[layer].reason || "Start the host runtime and rerun doctor",
+        });
+      }
     }
 
     if (runtimeEvidence.written?.state === "drifted") {
@@ -168,6 +259,8 @@ export async function doctor({ adapters = [], ctx = {} } = {}) {
         level: "warning",
         repairable: false,
         owned: true,
+        path: runtimeEvidence.written.path || null,
+        evidence: runtimeEvidence.written.evidence || null,
         next_action: "Review user changes; repair preserves user modifications",
       });
     }
@@ -179,7 +272,9 @@ export async function doctor({ adapters = [], ctx = {} } = {}) {
       protection,
       dependencies: description.dependencies || [],
       resources: description.resources || [],
+      scope: description.scope || null,
       risks: description.risks || [],
+      evidence: runtimeEvidence,
     });
   }
 

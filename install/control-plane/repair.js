@@ -27,6 +27,25 @@ export function buildRepairPlan(doctorReport = {}, { ownershipManifest = [] } = 
         expected_digest: finding.expected_digest || null,
         message: finding.message || ("Repair " + (finding.path || "resource")),
       });
+    } else if (finding?.host === "opencode" && [
+      "configuration-invalid",
+      "postinstall-pending",
+      "resource-drifted",
+      "runtime-loaded-unknown",
+      "runtime-enforced-unknown",
+    ].includes(finding?.code)) {
+      steps.push({
+        host: finding.host || "unknown",
+        path: finding.path || null,
+        code: finding.code,
+        action: "unsupported",
+        owned: finding.owned === true,
+        current_digest: finding.current_digest || null,
+        expected_digest: finding.expected_digest || null,
+        unsupported: true,
+        message: finding.message || "This finding cannot be repaired automatically",
+        next_action: finding.next_action || "Handle this finding manually",
+      });
     }
   }
 
@@ -37,6 +56,7 @@ export function buildRepairPlan(doctorReport = {}, { ownershipManifest = [] } = 
     summary: {
       total_steps: steps.length,
       eligible: steps.length,
+      unsupported: steps.filter((step) => step.unsupported === true).length,
     },
   };
 }
@@ -60,20 +80,33 @@ export async function applyRepair(repairPlan = {}, { applyStep, io = {} } = {}) 
       continue;
     }
 
+    if (step.unsupported === true || step.action === "unsupported") {
+      executedSteps.push({
+        ...step,
+        status: "unsupported",
+        reason: step.message || "This repair step is not supported automatically",
+        next_action: step.next_action || "Handle this finding manually",
+      });
+      continue;
+    }
+
     try {
       if (typeof applyStep === "function") {
         const result = await applyStep(step);
         executedSteps.push({
           ...step,
-          status: result?.status || "succeeded",
+          status: result?.status || "unsupported",
           message: result?.message || ("Repaired " + (step.path || "")),
+          reason: result?.reason || null,
           next_action: result?.next_action || null,
         });
       } else {
         executedSteps.push({
           ...step,
-          status: "succeeded",
-          message: "Repaired " + (step.path || ""),
+          status: "unsupported",
+          message: "No repair executor was provided",
+          reason: "The repair step was not executed.",
+          next_action: "Run oms repair --tool <name> --apply through the host adapter.",
         });
       }
     } catch (error) {
@@ -89,11 +122,12 @@ export async function applyRepair(repairPlan = {}, { applyStep, io = {} } = {}) 
   const failedCount = executedSteps.filter((s) => s.status === "failed").length;
   const succeededCount = executedSteps.filter((s) => s.status === "succeeded").length;
   const warningCount = executedSteps.filter((s) => s.status === "warning").length;
+  const unsupportedCount = executedSteps.filter((s) => s.status === "unsupported").length;
 
   let status = "succeeded";
-  if (failedCount > 0 && succeededCount > 0) {
+  if ((failedCount > 0 || unsupportedCount > 0) && succeededCount > 0) {
     status = "partial-failure";
-  } else if (failedCount > 0 && succeededCount === 0) {
+  } else if ((failedCount > 0 || unsupportedCount > 0) && succeededCount === 0) {
     status = "failed";
   }
 
@@ -107,6 +141,7 @@ export async function applyRepair(repairPlan = {}, { applyStep, io = {} } = {}) 
       succeeded: succeededCount,
       failed: failedCount,
       warnings: warningCount,
+      unsupported: unsupportedCount,
       status,
     },
   };

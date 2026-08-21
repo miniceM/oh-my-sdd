@@ -73,6 +73,9 @@ export function normalizeHost(host = {}, Adapter = {}) {
       ? facts.display_name
       : (adapter.displayName ?? adapter.id ?? 'unknown'),
     detected: facts.detected === true,
+    ...(facts.scope && typeof facts.scope === 'object' && !Array.isArray(facts.scope)
+      ? { scope: facts.scope }
+      : {}),
     dependencies,
     capabilities: objectOrEmpty(facts.capabilities),
     resources: arrayOrEmpty(facts.resources),
