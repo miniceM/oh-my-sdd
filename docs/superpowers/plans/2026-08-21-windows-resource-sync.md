@@ -132,7 +132,7 @@ git commit -m "test(ci): cover repeated OpenCode resource sync" -m "Refs #57"
 
 确认只包含 Issue 57 的设计文档、资源同步实现/测试和 CI 契约，不暂存无关文件或敏感文件。
 
-- [ ] **步骤 4：请求代码审查**
+- [x] **步骤 4：请求代码审查**
 
 以设计文档、Issue 57 和 `origin/main..HEAD` 差异为上下文执行代码审查；Critical/Important 问题修复后再继续。
 
