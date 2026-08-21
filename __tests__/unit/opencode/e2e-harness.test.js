@@ -130,6 +130,12 @@ test('OpenCode E2E workflow runs the AGENTS lifecycle tests on every platform', 
   assert.match(workflow, /node --test __tests__\/unit\/opencode\/resource-scripts\.test\.js/);
 });
 
+test('OpenCode E2E workflow repeats resource sync against an existing destination', () => {
+  const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', 'opencode-e2e.yml'), 'utf8');
+  const syncCount = workflow.match(/npm run sync:resources --prefix opencode/g)?.length ?? 0;
+  assert.ok(syncCount >= 2, `expected repeated resource sync, found ${syncCount} invocation(s)`);
+});
+
 test('OpenCode E2E workflow prepends repository mocks on Windows without Bash', () => {
   const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', 'opencode-e2e.yml'), 'utf8');
   assert.match(workflow, /if: runner\.os == 'Windows'/);

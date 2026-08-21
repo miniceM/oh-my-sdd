@@ -27,13 +27,15 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
+  readlinkSync,
   renameSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -66,6 +68,43 @@ export function shouldCopy(name) {
   return !EXCLUDE_BASENAMES.has(name);
 }
 
+function treeDigest(root) {
+  const hash = createHash('sha256');
+  const visit = (directory, relativeRoot = '') => {
+    const entries = readdirSync(directory, { withFileTypes: true })
+      .filter((entry) => shouldCopy(entry.name))
+      .sort((left, right) => left.name.localeCompare(right.name));
+
+    for (const entry of entries) {
+      const relativePath = relativeRoot ? join(relativeRoot, entry.name) : entry.name;
+      const absolutePath = join(directory, entry.name);
+      hash.update(relativePath).update('\0');
+      if (entry.isDirectory()) {
+        hash.update('directory\0');
+        visit(absolutePath, relativePath);
+      } else if (entry.isFile()) {
+        hash.update('file\0').update(readFileSync(absolutePath));
+      } else if (entry.isSymbolicLink()) {
+        hash.update('symbolic-link\0').update(readlinkSync(absolutePath));
+      } else {
+        hash.update('other\0');
+      }
+    }
+  };
+
+  visit(root);
+  return hash.digest('hex');
+}
+
+function treesEquivalent(src, dst, exists) {
+  if (!exists(dst)) return false;
+  try {
+    return treeDigest(src) === treeDigest(dst);
+  } catch {
+    return false;
+  }
+}
+
 const LOCK_OWNER_FILE = 'owner.json';
 const DEFAULT_STALE_LOCK_MS = 30 * 60 * 1000;
 
@@ -73,30 +112,58 @@ const DEFAULT_STALE_LOCK_MS = 30 * 60 * 1000;
 // EPERM (and sometimes EBUSY/EACCES) while the same rename succeeds on POSIX.
 // A concurrent `npm pack` collects the package file list (and hashes file
 // contents) right after its own prepack sync, and antivirus can also briefly
-// hold a handle — both are transient, so retry with a short bounded backoff
-// before giving up. The lock above serializes sync *writers*; it cannot stop
+// hold a handle. The lock above serializes sync *writers*; it cannot stop
 // npm's read-only collection phase, which is exactly why the rename must be
 // tolerant of a briefly-open destination.
 const TRANSIENT_RENAME_ERRORS = new Set(['EPERM', 'EBUSY', 'EACCES']);
-const RENAME_RETRY_ATTEMPTS = 40; // 40 x 50ms ≈ 2s worst-case backoff
+const RENAME_RETRY_TIMEOUT_MS = 15_000;
 const RENAME_RETRY_DELAY_MS = 50;
+const RENAME_RETRY_MAX_DELAY_MS = 500;
 
 function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-function renameWithRetry(rename, from, to, attempts = RENAME_RETRY_ATTEMPTS, delayMs = RENAME_RETRY_DELAY_MS) {
+function renameWithRetry(
+  rename,
+  from,
+  to,
+  {
+    operation = 'rename',
+    timeoutMs = RENAME_RETRY_TIMEOUT_MS,
+    delayMs = RENAME_RETRY_DELAY_MS,
+    maxDelayMs = RENAME_RETRY_MAX_DELAY_MS,
+    maxAttempts,
+  } = {},
+) {
+  const startedAt = Date.now();
+  let attempts = 0;
+  let delay = delayMs;
   let lastError;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
+  while (true) {
+    attempts += 1;
     try {
       return rename(from, to);
     } catch (error) {
       if (!TRANSIENT_RENAME_ERRORS.has(error?.code)) throw error;
       lastError = error;
-      sleepSync(delayMs);
+      if (maxAttempts !== undefined && attempts >= maxAttempts) break;
+      const elapsedMs = Date.now() - startedAt;
+      const remainingMs = timeoutMs - elapsedMs;
+      if (remainingMs <= 0) break;
+      sleepSync(Math.min(delay, remainingMs));
+      delay = Math.min(delay * 2, maxDelayMs);
     }
   }
-  throw lastError;
+
+  const elapsedMs = Date.now() - startedAt;
+  const wrapped = new Error(
+    `[copy-resources] ${operation} failed (attempts=${attempts}, elapsedMs=${elapsedMs}) `
+      + `(${from} -> ${to}) [${lastError.code ?? 'unknown'}]: ${lastError.message}`,
+    { cause: lastError },
+  );
+  wrapped.code = lastError.code;
+  throw wrapped;
 }
 
 function readLockOwner(lockPath) {
@@ -231,7 +298,7 @@ export function withSyncLock(lockPath, operation, ops = {}) {
  *
  * @param {string} src source directory to mirror
  * @param {string} dst destination directory to replace
- * @param {{ cpSync?: Function, existsSync?: Function, renameSync?: Function, rmSync?: Function, mkdirSync?: Function, renameAttempts?: number, renameDelayMs?: number, lockTimeoutMs?: number, lockPollMs?: number, staleLockThresholdMs?: number }} [ops] injectable fs/lock options for tests
+ * @param {{ cpSync?: Function, existsSync?: Function, renameSync?: Function, rmSync?: Function, mkdirSync?: Function, renameAttempts?: number, renameTimeoutMs?: number, renameDelayMs?: number, renameMaxDelayMs?: number, lockTimeoutMs?: number, lockPollMs?: number, staleLockThresholdMs?: number }} [ops] injectable fs/lock options for tests
  * @returns {unknown} the operation result
  */
 export function syncResourceTree(src, dst, ops = {}) {
@@ -239,9 +306,17 @@ export function syncResourceTree(src, dst, ops = {}) {
   const exists = ops.existsSync ?? existsSync;
   const rename = ops.renameSync ?? renameSync;
   const remove = ops.rmSync ?? rmSync;
-  const renameAttempts = ops.renameAttempts ?? RENAME_RETRY_ATTEMPTS;
+  const renameAttempts = ops.renameAttempts;
+  const renameTimeoutMs = ops.renameTimeoutMs ?? RENAME_RETRY_TIMEOUT_MS;
   const renameDelayMs = ops.renameDelayMs ?? RENAME_RETRY_DELAY_MS;
-  const renameTolerant = (from, to) => renameWithRetry(rename, from, to, renameAttempts, renameDelayMs);
+  const renameMaxDelayMs = ops.renameMaxDelayMs ?? RENAME_RETRY_MAX_DELAY_MS;
+  const renameTolerant = (from, to, operation) => renameWithRetry(rename, from, to, {
+    operation,
+    timeoutMs: renameTimeoutMs,
+    delayMs: renameDelayMs,
+    maxDelayMs: renameMaxDelayMs,
+    maxAttempts: renameAttempts,
+  });
   const suffix = `${process.pid}-${randomUUID()}`;
   const staging = `${dst}.oh-my-sdd-sync.staging-${suffix}`;
   const backup = `${dst}.oh-my-sdd-sync.backup-${suffix}`;
@@ -249,6 +324,8 @@ export function syncResourceTree(src, dst, ops = {}) {
 
   mkdirSync(dirname(dst), { recursive: true });
   return withSyncLock(lock, () => {
+    if (treesEquivalent(src, dst, exists)) return;
+
     let movedExisting = false;
     try {
       copy(src, staging, {
@@ -257,18 +334,18 @@ export function syncResourceTree(src, dst, ops = {}) {
         filter: (source) => shouldCopy(basename(source)),
       });
       if (exists(dst)) {
-        renameTolerant(dst, backup);
+        renameTolerant(dst, backup, 'destination-to-backup');
         movedExisting = true;
       }
       try {
-        renameTolerant(staging, dst);
+        renameTolerant(staging, dst, 'staging-to-destination');
       } catch (error) {
-        if (movedExisting && !exists(dst)) renameTolerant(backup, dst);
+        if (movedExisting && !exists(dst)) renameTolerant(backup, dst, 'backup-restore');
         throw error;
       }
       if (movedExisting) remove(backup, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     } catch (error) {
-      if (movedExisting && exists(backup) && !exists(dst)) renameTolerant(backup, dst);
+      if (movedExisting && exists(backup) && !exists(dst)) renameTolerant(backup, dst, 'backup-restore');
       throw error;
     } finally {
       remove(staging, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
