@@ -64,7 +64,14 @@ describe('OpenCodeAdapter', () => {
 
     try {
       const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
-        env: { ...process.env, HOME: home, USERPROFILE: home },
+        env: {
+          ...process.env,
+          HOME: home,
+          USERPROFILE: home,
+          XDG_HOME_DIR: home,
+          XDG_CONFIG_HOME: join(home, '.config'),
+          OPENCODE_CONFIG_DIR: join(home, '.config', 'opencode'),
+        },
         encoding: 'utf8',
       });
       assert.equal(result.status, 0, result.stderr);

@@ -20,11 +20,16 @@ function announce(msg) {
 /**
  * Patch opencode.json to register plugin.
  */
-export function patchOpencodeJson() {
+export function patchOpencodeJson({ configPath = OPENCODE_JSON } = {}) {
   let cfg = {};
   try {
-    cfg = JSON.parse(readFileSync(OPENCODE_JSON, 'utf8'));
-  } catch { /* fresh config */ }
+    cfg = JSON.parse(readFileSync(configPath, 'utf8'));
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw new Error(`无法解析 OpenCode 配置 ${configPath}：${error.message}`);
+    }
+    // A missing config is a normal first-install case.
+  }
 
   const plugins = Array.isArray(cfg.plugin) ? [...cfg.plugin] : [];
 
@@ -41,8 +46,8 @@ export function patchOpencodeJson() {
   }
 
   cfg.plugin = cleaned;
-  mkdirSync(dirname(OPENCODE_JSON), { recursive: true });
-  writeFileSync(OPENCODE_JSON, JSON.stringify(cfg, null, 2) + '\n', {
+  mkdirSync(dirname(configPath), { recursive: true });
+  writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n', {
     mode: FILE_PERMISSIONS.CONFIG_FILE
   });
   announce(`  ✓ opencode.json 已加 "plugin": ["${OPENCODE_PLUGIN_ENTRY}"]`);
@@ -51,14 +56,14 @@ export function patchOpencodeJson() {
 /**
  * Unpatch opencode.json to unregister plugin.
  */
-export function unpatchOpencodeJson() {
-  if (!existsSync(OPENCODE_JSON)) {
+export function unpatchOpencodeJson({ configPath = OPENCODE_JSON } = {}) {
+  if (!existsSync(configPath)) {
     return;
   }
 
   let cfg;
   try {
-    cfg = JSON.parse(readFileSync(OPENCODE_JSON, 'utf8'));
+    cfg = JSON.parse(readFileSync(configPath, 'utf8'));
   } catch (parseErr) {
     announce(`  ⚠️  opencode.json JSON 损坏: ${parseErr.message}`);
     announce('  ⚠️  跳过配置清理');
@@ -84,7 +89,7 @@ export function unpatchOpencodeJson() {
     delete cfg.plugin;
   }
 
-  writeFileSync(OPENCODE_JSON, JSON.stringify(cfg, null, 2) + '\n', {
+  writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n', {
     mode: FILE_PERMISSIONS.CONFIG_FILE
   });
   announce(`  ✓ 已从 opencode.json 移除 oh-my-sdd 相关条目`);

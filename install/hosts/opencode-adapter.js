@@ -5,18 +5,19 @@
 // backwards-compatible uninstall cleanup.
 
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
 import { HostAdapter } from '../host-adapter.js';
 import { rmIfExistsSync } from '../common/fs.js';
-import { isCliInPath, isDirPresent } from '../common/detect.js';
+import { isCliInPath } from '../common/detect.js';
 import { patchOpencodeJson, unpatchOpencodeJson } from '../common/config-patcher.js';
 import { removeSentinelBlock } from '../common/sentinel.js';
+import { getHomeDir } from '../../lib/platform.js';
 import { main as cleanupNpmResources } from '../../opencode/scripts/uninstall.mjs';
+import { readOwnershipManifest, resourceDigest } from '../../opencode/scripts/resource-ownership.mjs';
+import { getAgentsPath, getOpenCodeConfigDir } from '../../opencode/scripts/agents-md.mjs';
+import { executePlan, summarizeExecution } from '../control-plane/executor.js';
 import {
-  OPENCODE_PLUGIN_DIR,
-  OPENCODE_CONFIG_DIR,
-  OPENCODE_AGENTS_MD,
-  OPENCODE_JSON,
-  OPENCODE_COMMANDS_DIR,
   OPENCODE_PLUGIN_ENTRY,
 } from '../../lib/paths.js';
 
@@ -32,44 +33,179 @@ function inspectAvailability(check, source) {
   }
 }
 
+function inspectCliVersion(available) {
+  if (!available) {
+    return { state: 'unknown', value: 'unknown', reason: 'OpenCode CLI was not found on PATH.' };
+  }
+  try {
+    const value = execFileSync('opencode', ['--version'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+    return value
+      ? { state: 'available', value, source: 'opencode --version' }
+      : { state: 'unknown', value: 'unknown', reason: 'opencode --version returned no output.' };
+  } catch (error) {
+    return {
+      state: 'unknown',
+      value: 'unknown',
+      reason: `Unable to run opencode --version: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+function getOpenCodePaths() {
+  // Do not rely on os.homedir() alone here. On Linux, Node may resolve the
+  // passwd database home even when a caller deliberately supplies HOME (as
+  // the installer tests and isolated package managers do). All OpenCode
+  // paths must follow the effective process environment so a sandbox cannot
+  // leak writes into the invoking user's real home directory.
+  const home = getHomeDir();
+  const configDir = getOpenCodeConfigDir(home);
+  return {
+    configDir,
+    pluginDir: join(configDir, 'plugins', 'oh-my-sdd'),
+    json: join(configDir, 'opencode.json'),
+    commandsDir: join(configDir, 'commands'),
+    skillsDir: join(configDir, 'skills'),
+    agents: getAgentsPath(home),
+    manifest: join(home, '.oh-my-sdd', 'opencode-npm-resources.json'),
+  };
+}
+
+function dependency(name, { required, available, state, source, version, reason } = {}) {
+  return {
+    name,
+    required,
+    classification: required ? 'required' : 'optional',
+    available,
+    state,
+    source,
+    version: version || { state: 'unknown', value: 'unknown', reason: reason || 'Version evidence unavailable.' },
+    ...(reason ? { reason } : {}),
+  };
+}
+
+function readRuntimeConfig() {
+  const paths = getOpenCodePaths();
+  if (!existsSync(paths.json)) {
+    return { state: 'missing', path: paths.json, reason: `Config file missing: ${paths.json}` };
+  }
+  try {
+    return { state: 'valid', path: paths.json, config: JSON.parse(readFileSync(paths.json, 'utf8')) };
+  } catch (error) {
+    return { state: 'invalid', path: paths.json, reason: `Invalid JSON in ${paths.json}: ${error.message}` };
+  }
+}
+
+function postinstallEvidence() {
+  const paths = getOpenCodePaths();
+  const manifest = paths.manifest;
+  const checks = [
+    [paths.skillsDir, 'OpenCode managed skills directory'],
+    [paths.commandsDir, 'OpenCode managed commands directory'],
+    [paths.agents, 'OpenCode AGENTS.md'],
+    [manifest, 'npm ownership manifest'],
+  ];
+  const missing = checks.filter(([path]) => !existsSync(path)).map(([, label]) => label);
+  const manifestRecords = readOwnershipManifest(manifest);
+  const missingTargets = manifestRecords
+    .filter((record) => !existsSync(record.target))
+    .map((record) => record.target);
+  const drifted = manifestRecords.map((record) => {
+    if (!existsSync(record.target)) return null;
+    try {
+      const current = resourceDigest(record.target);
+      return current === record.installed_digest ? null : { ...record, current_digest: current };
+    } catch {
+      return { ...record, current_digest: null };
+    }
+  }).filter(Boolean);
+  if (drifted.length > 0) {
+    const first = drifted[0];
+    return {
+      state: 'drifted',
+      path: first.target,
+      current_digest: first.current_digest,
+      expected_digest: first.installed_digest,
+      reason: `User modification detected in ${first.target}; OMS will not overwrite it.`,
+      next_action: 'Review the user change and handle it manually; repair preserves modified resources.',
+    };
+  }
+  if (missing.length === 0 && missingTargets.length === 0 && manifestRecords.length > 0) {
+    return { state: 'verified', evidence: 'npm postinstall resources and ownership manifest are present' };
+  }
+  return {
+    state: 'pending',
+    reason: `npm lifecycle has not completed; missing ${[...missing, ...missingTargets].join(', ') || 'valid ownership records'}`,
+    next_action: 'Start OpenCode to run the plugin lifecycle, then run oms doctor --tool opencode.',
+  };
+}
+
 export class OpenCodeAdapter extends HostAdapter {
   static id = 'opencode';
   static displayName = 'OpenCode';
 
   static isInstalled() {
     if (isCliInPath('opencode')) return true;
-    // fallback: 检测 ~/.config/opencode/ 目录
-    return isDirPresent(OPENCODE_CONFIG_DIR);
+    // A bare config directory is common on runner images and is not enough
+    // evidence that OpenCode is installed. Require its actual config file for
+    // the non-CLI fallback to avoid selecting OpenCode during default install.
+    return existsSync(getOpenCodePaths().json);
   }
 
   static describe() {
+    const paths = getOpenCodePaths();
     const cli = inspectAvailability(() => isCliInPath('opencode'), 'opencode CLI PATH probe');
     const config = inspectAvailability(
-      () => isDirPresent(OPENCODE_CONFIG_DIR),
-      `configuration directory probe: ${OPENCODE_CONFIG_DIR}`,
+      () => existsSync(paths.json),
+      `configuration file probe: ${paths.json}`,
     );
     const detected = cli.available || config.available;
     const detectionState = detected ? 'available'
       : (cli.state === 'unknown' || config.state === 'unknown' ? 'unknown' : 'missing');
+    const cliVersion = inspectCliVersion(cli.available);
 
     return {
       id: this.id,
       display_name: this.displayName,
       detected,
+      scope: {
+        kind: 'global',
+        path: paths.configDir,
+        project_supported: false,
+        reason: 'oms-install manages the global OpenCode configuration; project-level resources are owned by npm postinstall.',
+      },
       dependencies: [
-        {
-          name: 'node', required: true, available: true, state: 'available',
-          version: { state: 'available', value: process.version }, source: 'current Node.js process',
-        },
-        { name: 'opencode', required: false, ...cli, version: { state: 'unknown', reason: 'PATH discovery does not retain a CLI version.' } },
-        { name: 'opencode-config', required: false, ...config, version: { state: 'unknown', reason: 'Configuration directory presence has no version evidence.' } },
+        dependency('node', {
+          required: true,
+          available: true,
+          state: 'available',
+          source: 'current Node.js process',
+          version: { state: 'available', value: process.version, source: 'process.version' },
+        }),
+        dependency('opencode', {
+          required: false,
+          available: cli.available,
+          state: cli.state,
+          source: cli.source,
+          version: cliVersion,
+          reason: cliVersion.reason,
+        }),
+        dependency('opencode-config', {
+          required: false,
+          available: config.available,
+          state: config.state,
+          source: config.source,
+          version: { state: 'unknown', value: 'unknown', reason: 'Configuration directory presence has no version evidence.' },
+        }),
       ],
       capabilities: {
         host_runtime: {
           supported: detected,
           level: detectionState === 'unknown' ? 'unknown' : 'detected',
           evidence: detected ? (cli.available ? cli.source : config.source) : 'OpenCode CLI and configuration directory were not detected.',
-          version: { state: 'unknown', reason: 'The adapter only performs availability probes.' },
+        version: { state: 'unknown', reason: 'The adapter only performs availability probes.' },
         },
         write_prevention: {
           supported: false,
@@ -78,21 +214,25 @@ export class OpenCodeAdapter extends HostAdapter {
         },
       },
       resources: [
-        { type: 'config', path: OPENCODE_JSON, action: 'patch', owned: true },
+        { type: 'config', path: paths.json, action: 'patch', phase: 'install', owner: 'oms-install', scope: 'global', owned: true },
         {
-          type: 'npm-plugin', id: OPENCODE_PLUGIN_ENTRY, path: OPENCODE_JSON,
-          action: 'register-plugin', enforcement: 'registered', owned: true,
+          type: 'npm-plugin', id: OPENCODE_PLUGIN_ENTRY, path: paths.json,
+          action: 'register-plugin', phase: 'install', owner: 'oms-install', scope: 'global', enforcement: 'registered', owned: true,
         },
-        { type: 'plugin-resources', path: OPENCODE_PLUGIN_DIR, action: 'synchronize', owned: true },
-        { type: 'commands', path: OPENCODE_COMMANDS_DIR, action: 'synchronize', owned: true },
-        { type: 'agents', path: OPENCODE_AGENTS_MD, action: 'update', owned: true },
-        { type: 'runtime', path: OPENCODE_CONFIG_DIR, action: 'await-host-load', owned: false },
+        { type: 'plugin-resources', path: paths.skillsDir, action: 'synchronize', phase: 'postinstall', owner: 'npm-plugin', scope: 'global', owned: true },
+        { type: 'commands', path: paths.commandsDir, action: 'synchronize', phase: 'postinstall', owner: 'npm-plugin', scope: 'global', owned: true },
+        { type: 'agents', path: paths.agents, action: 'update', phase: 'postinstall', owner: 'npm-plugin', scope: 'global', owned: true },
+        { type: 'runtime', path: paths.configDir, action: 'await-host-load', phase: 'runtime', owner: 'OpenCode', scope: 'global', owned: false },
       ],
       risks: [
         {
           category: 'runtime', level: 'warning',
           message: 'Registering the npm plugin does not prove that OpenCode has downloaded, loaded, or enforced it; wait for the host runtime to load it.',
         },
+        ...(!cli.available ? [{
+          category: 'dependency', level: 'warning',
+          message: 'OpenCode CLI was not detected. Install it from https://opencode.ai, then start OpenCode and rerun oms doctor --tool opencode.',
+        }] : []),
       ],
       recommendation: {
         action: detectionState === 'unknown' ? 'inspect' : 'install',
@@ -102,78 +242,126 @@ export class OpenCodeAdapter extends HostAdapter {
   }
 
   static preflight(ctx) {
-    if (!this.isInstalled()) {
+    const facts = this.describe(ctx);
+    const cli = facts.dependencies.find((item) => item.name === 'opencode');
+    if (cli?.available !== true) {
       ctx.announce('⚠️  未检测到 OpenCode。继续安装，但 OpenCode 不在时不生效。');
       ctx.announce('    安装: https://opencode.ai');
+      ctx.announce('    后续：安装并启动 OpenCode，然后执行 oms doctor --tool opencode');
     }
   }
 
   static async inspectRuntime(ctx = {}) {
-    const hasConfig = existsSync(OPENCODE_JSON);
-    let isRegistered = false;
-    if (hasConfig) {
-      try {
-        const config = JSON.parse(readFileSync(OPENCODE_JSON, "utf8"));
-        const plugins = Array.isArray(config.plugin) ? config.plugin : [];
-        isRegistered = plugins.includes(OPENCODE_PLUGIN_ENTRY);
-      } catch {}
-    }
+    const paths = getOpenCodePaths();
+    const runtimeConfig = readRuntimeConfig();
+    const isRegistered = runtimeConfig.state === 'valid'
+      && Array.isArray(runtimeConfig.config.plugin)
+      && runtimeConfig.config.plugin.includes(OPENCODE_PLUGIN_ENTRY);
+    const invalid = runtimeConfig.state === 'invalid';
     return {
       written: {
-        state: hasConfig ? "verified" : "missing",
-        evidence: hasConfig ? "Config exists at " + OPENCODE_JSON : "Config file missing",
+        state: runtimeConfig.state === 'valid' ? 'verified' : (invalid ? 'unknown' : 'missing'),
+        path: paths.json,
+        evidence: runtimeConfig.state === 'valid' ? "Config exists at " + paths.json : null,
+        reason: runtimeConfig.reason || null,
       },
       registered: {
-        state: isRegistered ? "verified" : "missing",
-        evidence: isRegistered ? "Plugin " + OPENCODE_PLUGIN_ENTRY + " registered in config" : "Plugin entry missing from config",
+        state: invalid ? 'unknown' : (isRegistered ? "verified" : "missing"),
+        path: paths.json,
+        evidence: isRegistered ? "Plugin " + OPENCODE_PLUGIN_ENTRY + " registered in config" : null,
+        reason: invalid ? runtimeConfig.reason : (isRegistered ? null : "Plugin entry missing from config"),
       },
+      postinstall: postinstallEvidence(),
       loaded: { state: "unknown", reason: "OpenCode host launch evidence unavailable" },
       enforced: { state: "unknown", reason: "Write prevention evidence requires active runtime" },
     };
   }
 
   static async install(ctx) {
-    const { announce } = ctx;
+    const usedFallbackPlan = !ctx.plan;
+    const plan = ctx.plan || { schema_version: 1, hosts: [this.describe(ctx)] };
+    const events = [];
+    for await (const event of executePlan(plan, {
+      applyResource: async (resource, resourceCtx) => this.applyResource(resource, { ...ctx, ...resourceCtx }),
+    })) {
+      events.push(event);
+      if (event.status === 'running') ctx.announce(`→ ${event.message}`);
+      else if (event.status === 'succeeded') ctx.announce(`✓ ${event.message}`);
+      else if (event.status === 'warning') ctx.announce(`⚠️  ${event.message}${event.reason ? `：${event.reason}` : ''}`);
+      else ctx.announce(`❌ ${event.message}${event.reason ? `：${event.reason}` : ''}`);
+    }
+    const result = summarizeExecution(plan, events);
+    result.summary.next_actions.push(
+      '启动 OpenCode 后执行 oms status --tool opencode 或 oms doctor --tool opencode，确认 loaded/enforced。',
+    );
+    if (usedFallbackPlan && result.status === 'succeeded') {
+      ctx.announce('✓ oh-my-sdd (OpenCode) npm 插件安装完成');
+    }
+    return result;
+  }
 
-    announce('→ 安装 OpenCode 适配');
-    announce('');
-    announce('  通过 npm 插件安装（由 OpenCode 自动安装和更新）');
-    patchOpencodeJson();
-
-    announce('');
-    announce('✓ oh-my-sdd (OpenCode) npm 插件安装完成');
-    announce('');
-    announce('下一步：');
-    announce('  1. 启动 OpenCode（自动安装并加载 oh-my-sdd 插件）');
-    announce('  2. 在 OpenCode 中试 /sdd-spec <change-name>');
-    announce('');
-    announce('卸载：oms-uninstall --tool opencode');
+  static async applyResource(resource) {
+    if (resource?.phase === 'postinstall') {
+      return {
+        status: 'warning',
+        owned: resource.owned !== false,
+        message: `${resource.type || 'resource'} deferred to npm postinstall`,
+        reason: '该资源由 npm plugin lifecycle 写入，当前 oms-install 未执行该 lifecycle。',
+        next_action: '启动 OpenCode 或重新执行 npm plugin lifecycle，然后运行 oms doctor --tool opencode。',
+      };
+    }
+    if (resource?.phase === 'runtime') {
+      return {
+        status: 'warning',
+        owned: false,
+        message: 'OpenCode runtime verification pending',
+        reason: '当前没有 OpenCode 宿主运行时证据。',
+        next_action: '启动 OpenCode 后运行 oms status --tool opencode。',
+      };
+    }
+    if (resource?.action === 'patch' || resource?.action === 'register-plugin' || resource?.action === 'patch-config') {
+      const paths = getOpenCodePaths();
+      patchOpencodeJson({ configPath: paths.json });
+      return { status: 'succeeded', owned: true, message: `Wrote ${paths.json}` };
+    }
+    return {
+      status: 'unsupported',
+      owned: resource?.owned !== false,
+      message: `Unsupported OpenCode repair resource: ${resource?.type || resource?.action || 'unknown'}`,
+      reason: '该资源必须由 npm plugin lifecycle 或宿主运行时处理，adapter 不会伪造成功。',
+      next_action: '运行 npm plugin lifecycle 或启动 OpenCode 后重试 doctor。',
+    };
   }
 
   static async uninstall(ctx) {
     const { announce } = ctx;
+    const paths = getOpenCodePaths();
 
     announce('→ 卸载 OpenCode 适配');
 
     // 1. 删 plugin 目录
-    if (rmIfExistsSync(OPENCODE_PLUGIN_DIR)) {
-      announce(`  ✓ 已删除: ${OPENCODE_PLUGIN_DIR}`);
+    if (rmIfExistsSync(paths.pluginDir)) {
+      announce(`  ✓ 已删除: ${paths.pluginDir}`);
     }
 
     // 2. 从 opencode.json 移除
-    unpatchOpencodeJson();
+    unpatchOpencodeJson({ configPath: paths.json });
 
     // 3. 精准移除 fallback AGENTS.md 中的 OMS 区块，保留用户内容
-    if (existsSync(OPENCODE_AGENTS_MD)) {
-      const existing = readFileSync(OPENCODE_AGENTS_MD, 'utf8');
+    if (existsSync(paths.agents)) {
+      const existing = readFileSync(paths.agents, 'utf8');
       const preserved = removeSentinelBlock(existing);
-      if (preserved.length === 0) unlinkSync(OPENCODE_AGENTS_MD);
-      else writeFileSync(OPENCODE_AGENTS_MD, preserved);
+      if (preserved.length === 0) unlinkSync(paths.agents);
+      else writeFileSync(paths.agents, preserved);
     }
 
     // 4. 仅通过 ownership manifest 清理 npm postinstall 写入的资源。
     // 用户修改过的 command 会被保留为带 .oh-my-sdd-modified-* 后缀的同级文件。
     cleanupNpmResources({
+      manifestPath: paths.manifest,
+      configPath: paths.json,
+      agentsPath: paths.agents,
+      allowedRoots: [paths.skillsDir, paths.commandsDir, join(getHomeDir(), '.agents', 'skills'), join(getHomeDir(), '.agents', 'command')],
       warn: (message) => announce(`  ⚠️  ${message}`),
       log: (message) => announce(`  ✓ ${message}`),
     });

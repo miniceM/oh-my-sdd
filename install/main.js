@@ -113,6 +113,7 @@ function prepareInstallation(options, dependencies) {
         ...buildInstallationPlanFn({ adapters, ctx }),
         selection_required: true,
         selection_options: adapters.map((Adapter) => Adapter.id),
+        selection_candidates: adapters.map((Adapter) => ({ id: Adapter.id, display_name: Adapter.displayName })),
       },
     };
   }
@@ -159,20 +160,51 @@ function createInstaller({
     }
 
     await ensureStateDirFn();
-    prepared.adapter.preflight(prepared.ctx);
-    const installOutcome = await prepared.adapter.install({ ...prepared.ctx, plan: prepared.plan });
-    if (installOutcome && typeof installOutcome === "object" && installOutcome.type === "installation-result") {
-      return installOutcome;
-    }
-    return {
+    const installContext = { ...prepared.ctx, plan: prepared.plan };
+    prepared.adapter.preflight(installContext);
+    const installOutcome = await prepared.adapter.install(installContext);
+    const result = installOutcome && typeof installOutcome === "object" && installOutcome.type === "installation-result"
+      ? installOutcome
+      : {
       type: "installation-result",
       schema_version: prepared.plan.schema_version || 1,
       status: installOutcome === false ? "failed" : "succeeded",
       plan: prepared.plan,
+      events: [],
       summary: {
         status: installOutcome === false ? "failed" : "succeeded",
       },
     };
+
+    if (typeof prepared.adapter.inspectRuntime === "function") {
+      try {
+        const postflight = await prepared.adapter.inspectRuntime(installContext);
+        result.postflight = postflight;
+        result.summary = {
+          ...(result.summary || {}),
+          layers: {
+            written: postflight.written || { state: "unknown", reason: "No postflight evidence" },
+            registered: postflight.registered || { state: "unknown", reason: "No postflight evidence" },
+            loaded: postflight.loaded || { state: "unknown", reason: "No runtime evidence" },
+            enforced: postflight.enforced || { state: "unknown", reason: "No runtime evidence" },
+          },
+        };
+      } catch (error) {
+        result.postflight = {
+          written: { state: "unknown", reason: error.message },
+          registered: { state: "unknown", reason: error.message },
+          loaded: { state: "unknown", reason: "Postflight failed before runtime inspection" },
+          enforced: { state: "unknown", reason: "Postflight failed before runtime inspection" },
+        };
+        result.summary = {
+          ...(result.summary || {}),
+          layers: result.postflight,
+          next_actions: [...new Set([...(result.summary?.next_actions || []), "运行 oms doctor --tool " + prepared.adapter.id + " 重试 postflight。"])],
+        };
+      }
+    }
+
+    return result;
   };
 }
 

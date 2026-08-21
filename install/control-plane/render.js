@@ -29,7 +29,14 @@ function formatProtection(capabilities) {
 function formatResource(resource) {
   if (typeof resource === "string") return resource;
   if (!resource || typeof resource !== "object") return String(resource);
-  return [resource.kind || resource.type, resource.path || resource.id].filter(Boolean).join(": ") || JSON.stringify(resource);
+  const target = [resource.kind || resource.type, resource.path || resource.id].filter(Boolean).join(": ") || JSON.stringify(resource);
+  const details = [
+    resource.phase ? `phase: ${resource.phase}` : null,
+    resource.action ? `action: ${resource.action}` : null,
+    resource.owner ? `owner: ${resource.owner}` : null,
+    resource.scope ? `scope: ${resource.scope}` : null,
+  ].filter(Boolean);
+  return details.length > 0 ? `${target} (${details.join(', ')})` : target;
 }
 
 function formatRisk(risk) {
@@ -47,7 +54,21 @@ export function renderText(plan) {
   for (const candidate of arrayOrEmpty(safePlan.hosts)) {
     const host = objectOrEmpty(candidate);
     lines.push("", (host.display_name ?? host.id ?? "Unknown host") + " (" + (host.id ?? "unknown") + ")");
+    lines.push("  Detected: " + (host.detected === true ? "yes" : host.detected === false ? "no" : "unknown"));
+    const scope = objectOrEmpty(host.scope);
+    if (scope.kind || scope.path) {
+      lines.push("  Scope: " + (scope.kind ?? "unknown") + (scope.path ? " — " + scope.path : ""));
+      if (scope.project_supported === false) lines.push("  Project scope: unsupported — " + (scope.reason ?? "global scope only"));
+    }
     lines.push("  Protection: " + formatProtection(host.capabilities));
+    lines.push("  Dependencies:");
+    for (const dependency of arrayOrEmpty(host.dependencies)) {
+      const item = objectOrEmpty(dependency);
+      const classification = item.classification || (item.required ? "required" : "optional");
+      const state = item.state || (item.available === true ? "available" : item.available === false ? "missing" : "unknown");
+      const version = item.version?.value || item.version?.state;
+      lines.push("  - " + (item.name ?? "unknown") + ` (${classification}, ${state}${version ? `, version: ${version}` : ""})` + (item.reason ? ` — ${item.reason}` : ""));
+    }
     lines.push("  Resources:");
     for (const resource of arrayOrEmpty(host.resources)) lines.push("  - " + formatResource(resource));
     lines.push("  Risks:");
@@ -72,7 +93,10 @@ export function renderResultText(result) {
     for (const event of terminalEvents) {
       const icon = event.status === "succeeded" ? "✓" : (event.status === "warning" ? "⚠️" : "❌");
       const hostLabel = event.host ? "[" + event.host + "] " : "";
-      lines.push("  " + icon + " " + hostLabel + (event.message || event.action || "step"));
+      const resource = objectOrEmpty(event.resource);
+      const target = resource.path || resource.id || null;
+      const phase = resource.phase ? ` (${resource.phase}${resource.owner ? `, owner: ${resource.owner}` : ""})` : "";
+      lines.push("  " + icon + " " + hostLabel + (event.message || event.action || "step") + (target ? ` — ${target}${phase}` : phase));
       if (event.reason) {
         lines.push("      Reason: " + event.reason);
       }
@@ -80,7 +104,23 @@ export function renderResultText(result) {
   }
 
   if (summary.total_steps !== undefined) {
-    lines.push("", "Summary: " + (summary.succeeded || 0) + " succeeded, " + (summary.failed || 0) + " failed, " + (summary.total_steps || 0) + " total");
+    const detail = (summary.warnings || 0) > 0 || (summary.unsupported || 0) > 0
+      ? `, ${summary.warnings || 0} warnings, ${summary.unsupported || 0} unsupported`
+      : "";
+    lines.push("", "Summary: " + (summary.succeeded || 0) + " succeeded, " + (summary.failed || 0) + " failed" + detail + ", " + (summary.total_steps || 0) + " total");
+  }
+
+  if (summary.not_executed?.length > 0) {
+    lines.push("Not executed:");
+    for (const item of summary.not_executed) lines.push("  - " + (item.resource?.path || item.resource?.type || "resource") + " on " + (item.host || "unknown"));
+  }
+
+  if (summary.layers) {
+    lines.push("Evidence:");
+    for (const layer of ["written", "registered", "loaded", "enforced"]) {
+      const evidence = objectOrEmpty(summary.layers[layer]);
+      lines.push(`  - ${layer}: ${evidence.state || "unknown"}${evidence.reason ? ` — ${evidence.reason}` : ""}`);
+    }
   }
 
   const nextActions = arrayOrEmpty(summary.next_actions);

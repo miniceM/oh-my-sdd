@@ -93,7 +93,8 @@ async function confirmInstall({ input = process.stdin, output = process.stderr }
 
 function writeSelectionRequired(plan, { stderr = process.stderr } = {}) {
   const choices = Array.isArray(plan.selection_options) ? plan.selection_options.join(', ') : '未知';
-  stderr.write(`❌ 检测到多个已安装宿主（${choices}）。请使用 --tool <name> 明确选择后重试。\n`);
+  stderr.write(`❌ 检测到多个已安装宿主（${choices}），未执行写入。\n`);
+  stderr.write(`  请使用 oms-install --tool <name> 明确选择后重试。\n`);
 }
 
 /**
@@ -139,7 +140,10 @@ async function runOmsInstall(argv, {
 
   if (plan?.selection_required) {
     if (args.json) stdout.write(renderJsonFn(plan));
-    else writeSelectionRequired(plan, { stderr });
+    else {
+      stderr.write(renderTextFn(plan));
+      writeSelectionRequired(plan, { stderr });
+    }
     return 2;
   }
 

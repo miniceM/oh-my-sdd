@@ -61,6 +61,10 @@ function renderHealthText(report) {
     lines.push("", `${host.display_name || host.id} (${host.id})`);
     lines.push(`  Detected: ${host.detected ? "Yes" : "No"}`);
     lines.push(`  Protection Level: ${host.protection?.level || "unknown"}`);
+    for (const layer of ["written", "registered", "loaded", "enforced"]) {
+      const evidence = host.protection?.[layer];
+      if (evidence) lines.push(`  ${layer}: ${evidence.state || "unknown"}${evidence.reason ? ` — ${evidence.reason}` : ""}`);
+    }
     if (host.protection?.reason) {
       lines.push(`  Reason: ${host.protection.reason}`);
     }
@@ -70,7 +74,14 @@ function renderHealthText(report) {
     lines.push("", "Findings:");
     for (const finding of report.findings) {
       const icon = finding.level === "error" ? "❌" : "⚠️";
-      lines.push(`  ${icon} [${finding.host}] ${finding.message}`);
+      const label = [finding.code, finding.level].filter(Boolean).join("/");
+      lines.push(`  ${icon} [${finding.host}]${label ? ` [${label}]` : ""} ${finding.message}`);
+      if (finding.path) lines.push(`      Path: ${finding.path}`);
+      if (finding.evidence) lines.push(`      Evidence: ${finding.evidence}`);
+      if (finding.current_digest || finding.expected_digest) {
+        lines.push(`      Digest: current=${finding.current_digest || "unknown"}, expected=${finding.expected_digest || "unknown"}`);
+      }
+      if (finding.repairable !== undefined) lines.push(`      Repairable: ${finding.repairable ? "yes" : "no"}`);
       if (finding.next_action) {
         lines.push(`      Action: ${finding.next_action}`);
       }
@@ -172,7 +183,7 @@ export async function runOmsCli(argv = process.argv.slice(2), {
 
       if (isJson) stdout.write(JSON.stringify(repairResult) + "\n");
       else stdout.write(renderRepairText(repairResult));
-      return repairResult.status === "succeeded" ? 0 : 1;
+      return repairResult.status === "succeeded" && (repairResult.summary?.unsupported || 0) === 0 ? 0 : 1;
     }
 
     stderr.write("❌ 未知命令: " + subcommand + "\n");
