@@ -6,13 +6,13 @@
 
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { HostAdapter } from '../host-adapter.js';
 import { rmIfExistsSync } from '../common/fs.js';
-import { isCliInPath, isDirPresent } from '../common/detect.js';
+import { isCliInPath } from '../common/detect.js';
 import { patchOpencodeJson, unpatchOpencodeJson } from '../common/config-patcher.js';
 import { removeSentinelBlock } from '../common/sentinel.js';
+import { getHomeDir } from '../../lib/platform.js';
 import { main as cleanupNpmResources } from '../../opencode/scripts/uninstall.mjs';
 import { readOwnershipManifest, resourceDigest } from '../../opencode/scripts/resource-ownership.mjs';
 import { getAgentsPath, getOpenCodeConfigDir } from '../../opencode/scripts/agents-md.mjs';
@@ -55,15 +55,21 @@ function inspectCliVersion(available) {
 }
 
 function getOpenCodePaths() {
-  const configDir = getOpenCodeConfigDir();
+  // Do not rely on os.homedir() alone here. On Linux, Node may resolve the
+  // passwd database home even when a caller deliberately supplies HOME (as
+  // the installer tests and isolated package managers do). All OpenCode
+  // paths must follow the effective process environment so a sandbox cannot
+  // leak writes into the invoking user's real home directory.
+  const home = getHomeDir();
+  const configDir = getOpenCodeConfigDir(home);
   return {
     configDir,
     pluginDir: join(configDir, 'plugins', 'oh-my-sdd'),
     json: join(configDir, 'opencode.json'),
     commandsDir: join(configDir, 'commands'),
     skillsDir: join(configDir, 'skills'),
-    agents: getAgentsPath(),
-    manifest: join(homedir(), '.oh-my-sdd', 'opencode-npm-resources.json'),
+    agents: getAgentsPath(home),
+    manifest: join(home, '.oh-my-sdd', 'opencode-npm-resources.json'),
   };
 }
 
@@ -142,16 +148,18 @@ export class OpenCodeAdapter extends HostAdapter {
 
   static isInstalled() {
     if (isCliInPath('opencode')) return true;
-    // fallback: 检测 ~/.config/opencode/ 目录
-    return isDirPresent(getOpenCodePaths().configDir);
+    // A bare config directory is common on runner images and is not enough
+    // evidence that OpenCode is installed. Require its actual config file for
+    // the non-CLI fallback to avoid selecting OpenCode during default install.
+    return existsSync(getOpenCodePaths().json);
   }
 
   static describe() {
     const paths = getOpenCodePaths();
     const cli = inspectAvailability(() => isCliInPath('opencode'), 'opencode CLI PATH probe');
     const config = inspectAvailability(
-      () => isDirPresent(paths.configDir),
-      `configuration directory probe: ${paths.configDir}`,
+      () => existsSync(paths.json),
+      `configuration file probe: ${paths.json}`,
     );
     const detected = cli.available || config.available;
     const detectionState = detected ? 'available'
@@ -353,7 +361,7 @@ export class OpenCodeAdapter extends HostAdapter {
       manifestPath: paths.manifest,
       configPath: paths.json,
       agentsPath: paths.agents,
-      allowedRoots: [paths.skillsDir, paths.commandsDir, join(homedir(), '.agents', 'skills'), join(homedir(), '.agents', 'command')],
+      allowedRoots: [paths.skillsDir, paths.commandsDir, join(getHomeDir(), '.agents', 'skills'), join(getHomeDir(), '.agents', 'command')],
       warn: (message) => announce(`  ⚠️  ${message}`),
       log: (message) => announce(`  ✓ ${message}`),
     });
