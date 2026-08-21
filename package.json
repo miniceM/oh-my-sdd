@@ -39,6 +39,7 @@
     "README.md",
     "opencode/dist/",
     "opencode/build.js",
+    "opencode/scripts/agents-md.mjs",
     "opencode/scripts/uninstall.mjs",
     "opencode/scripts/resource-ownership.mjs"
   ],
