@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -140,4 +140,19 @@ test('install with -y flag applies the plan without interactive confirmation', a
   assert.equal(exitCode, 0);
   assert.equal(calls[0].dryRun, true);
   assert.strictEqual(calls[1].plan, plan);
+});
+
+test('npm bin symlink invokes oms-install help', { skip: process.platform === 'win32' }, async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'oms-install-symlink-'));
+  const symlinkPath = path.join(tempDir, 'oms-install');
+
+  try {
+    await symlink(CLI, symlinkPath);
+    const result = await runProcess(symlinkPath, ['--help']);
+
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stdout, /oms-install/);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 });
