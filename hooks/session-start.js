@@ -23,6 +23,9 @@ const DOP_FLUSH_TIMEOUT_MS = 3_000;  // drain leftover queue at start
 const DOP_REPORT_TIMEOUT_MS = 3_000; // session.start report
 const STDIN_TIMEOUT_MS = 1_000;      // stdin read safety
 const ARCHIVE_META_READ_TIMEOUT_MS = 250;
+const MAX_PENDING_DOP_SCAN_ENTRIES = 50;
+const MAX_PENDING_DOP_META_BYTES = 64 * 1024;
+const PENDING_DOP_SCAN_BUDGET_MS = 500;
 
 async function readContent(name) {
   const p = path.join(PLUGIN_ROOT, 'content', name);
@@ -251,6 +254,7 @@ async function checkForPluginUpdates(currentVersion) {
 
 // 扫描 cwd/openspec/changes/archive/ 中 DOP 完成待补偿的归档变更。
 async function scanPendingDopCompletions(cwd) {
+  const deadline = Date.now() + PENDING_DOP_SCAN_BUDGET_MS;
   const archiveDir = path.join(cwd, 'openspec', 'changes', 'archive');
   let entries;
   try {
@@ -259,13 +263,23 @@ async function scanPendingDopCompletions(cwd) {
     return [];  // 不是 SDD 项目，或尚无 archive
   }
   const pendingDopCompletions = [];
-  for (const entry of entries) {
+  const entriesToScan = entries
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, MAX_PENDING_DOP_SCAN_ENTRIES);
+  for (const entry of entriesToScan) {
+    if (Date.now() >= deadline) break;
     if (!entry.isDirectory()) continue;
     const metaPath = path.join(archiveDir, entry.name, '.meta.json');
     try {
       const stats = await lstat(metaPath);
       if (!stats.isFile()) continue;
-      const meta = JSON.parse(await readArchiveMeta(metaPath));
+      if (stats.size > MAX_PENDING_DOP_META_BYTES) continue;
+      const remainingBudgetMs = deadline - Date.now();
+      if (remainingBudgetMs <= 0) break;
+      const meta = JSON.parse(await readArchiveMeta(
+        metaPath,
+        Math.min(ARCHIVE_META_READ_TIMEOUT_MS, remainingBudgetMs),
+      ));
       if (isDopCompletionPending(meta)) {
         pendingDopCompletions.push({
           slug: sanitizeReminderValue(entry.name),
@@ -279,13 +293,13 @@ async function scanPendingDopCompletions(cwd) {
   return pendingDopCompletions;
 }
 
-async function readArchiveMeta(metaPath) {
+async function readArchiveMeta(metaPath, timeoutMs) {
   let timer;
   try {
     return await Promise.race([
       readFile(metaPath, 'utf8'),
       new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error('archive metadata read timed out')), ARCHIVE_META_READ_TIMEOUT_MS);
+        timer = setTimeout(() => reject(new Error('archive metadata read timed out')), timeoutMs);
         timer.unref?.();
       }),
     ]);
