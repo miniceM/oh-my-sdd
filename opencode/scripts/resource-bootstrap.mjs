@@ -40,6 +40,7 @@ export function bootstrapOpenCodeResources(options = {}) {
   const configDir = options.configDir ?? getOpenCodeConfigDir(home);
   const manifestPath = options.manifestPath ?? join(home, '.oh-my-sdd', 'opencode-npm-resources.json');
   const delegated = options.delegatedSkillNames ?? DELEGATED_SKILL_NAMES;
+  const copy = options.copySync ?? cpSync;
   const ownership = new Map(readOwnershipManifest(manifestPath).map((item) => [item.target, item]));
   const drifted_resources = [];
   const failed_resources = [];
@@ -58,12 +59,17 @@ export function bootstrapOpenCodeResources(options = {}) {
         // that ownership across upgrades so uninstall removes it, rather than
         // restoring a previous OMS version as if it belonged to the user.
         const backup = prior ? prior.backup : `${destination}.oh-my-sdd-backup-${Date.now()}`;
-        if (backup) {
-          mkdirSync(dirname(backup), { recursive: true });
-          cpSync(destination, backup, { recursive: true, force: false, errorOnExist: true });
-        }
+        const rollback = backup ?? `${destination}.oh-my-sdd-rollback-${Date.now()}`;
+        mkdirSync(dirname(rollback), { recursive: true });
+        copy(destination, rollback, { recursive: true, force: false, errorOnExist: true });
         rmSync(destination, { recursive: true, force: true });
-        cpSync(source, destination, { recursive: true });
+        try {
+          copy(source, destination, { recursive: true });
+        } catch (error) {
+          try { copy(rollback, destination, { recursive: true }); } catch { /* retain rollback for recovery */ }
+          throw error;
+        }
+        if (!backup) rmSync(rollback, { recursive: true, force: true });
         ownership.set(destination, { target: destination, backup, created: prior?.created ?? false, installed_digest: resourceDigest(destination), resource_kind: kind, resource_name: name });
       } else if (!existsSync(destination)) {
         mkdirSync(dirname(destination), { recursive: true });

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -80,6 +80,30 @@ test('managed upgrade retains created ownership so uninstall deletes it', () => 
     assert.equal(record.backup, null);
     uninstallOwnedResources({ manifestPath: manifest, allowedRoots: [join(home, '.config', 'opencode')] });
     assert.equal(existsSync(join(home, '.config', 'opencode', 'skills', 'sdd-plan')), false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('resource update restores the previous resource when replacement copy fails', () => {
+  const root = fixture();
+  try {
+    skill(root, 'sdd-plan');
+    mkdirSync(join(root, '.opencode', 'commands'), { recursive: true });
+    for (const dir of ['dist', 'hooks', 'lib', 'content']) mkdirSync(join(root, dir), { recursive: true });
+    const home = join(root, 'home');
+    bootstrapOpenCodeResources({ pluginRoot: root, home, delegatedSkillNames: [] });
+    const source = join(root, 'oms-skills', 'sdd-plan', 'SKILL.md');
+    writeFileSync(source, '# upgraded\n');
+    let calls = 0;
+    const result = bootstrapOpenCodeResources({
+      pluginRoot: root, home, delegatedSkillNames: [],
+      copySync(...args) {
+        calls += 1;
+        if (calls === 2) throw new Error('simulated copy failure');
+        return cpSync(...args);
+      },
+    });
+    assert.equal(result.state, 'failed');
+    assert.equal(readFileSync(join(home, '.config', 'opencode', 'skills', 'sdd-plan', 'SKILL.md'), 'utf8'), '# sdd-plan\n');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

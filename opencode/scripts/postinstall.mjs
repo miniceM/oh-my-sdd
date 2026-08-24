@@ -477,7 +477,10 @@ function legacyPostinstall() {
 
 /** Compatibility entrypoint: native OpenCode installs use this same shared API at load time. */
 export function main() {
-  return bootstrapOpenCodeResources();
+  bootstrapOpenCodeResources();
+  // npm's lifecycle keeps the historic cross-tool mirrors, AGENTS baseline,
+  // and diagnostics. Native plugin loading never enters this compatibility path.
+  return legacyPostinstall();
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
