@@ -268,7 +268,11 @@ export function withSyncLock(lockPath, operation, ops = {}) {
       }
       break;
     } catch (error) {
-      if (error?.code !== 'EEXIST') throw error;
+      // On Windows mkdir can report EPERM (rather than EEXIST) while another
+      // process owns the lock directory. Treat that as contention only when
+      // the directory is observable; genuine permission errors still surface.
+      const lockExists = error?.code === 'EPERM' && existsSync(lockPath);
+      if (error?.code !== 'EEXIST' && !lockExists) throw error;
       if (reclaimStaleLock(lockPath, staleThresholdMs, now, rename, remove, stat)) continue;
       if (now() - startedAt >= timeoutMs) {
         throw new Error(
