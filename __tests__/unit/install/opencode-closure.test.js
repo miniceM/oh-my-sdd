@@ -22,8 +22,9 @@ test('OpenCode plan exposes detection, versions, scope, and lifecycle ownership'
   assert.ok(dependencyNames.includes('opencode'));
   assert.ok(plan.dependencies.every((dependency) => ['required', 'optional'].includes(dependency.classification)));
   assert.ok(plan.dependencies.every((dependency) => ['available', 'missing', 'unknown'].includes(dependency.state)));
-  assert.equal(resourceKinds.config.phase, 'install');
   assert.equal(resourceKinds['npm-plugin'].phase, 'install');
+  assert.equal(resourceKinds['npm-plugin'].action, 'install-plugin-native');
+  assert.equal(resourceKinds.config, undefined);
   assert.equal(resourceKinds['plugin-resources'].phase, 'postinstall');
   assert.equal(resourceKinds.commands.phase, 'postinstall');
   assert.equal(resourceKinds.agents.phase, 'postinstall');
@@ -63,7 +64,7 @@ test('OpenCode reports a missing host runtime when CLI and config are absent', (
   }
 });
 
-test('OpenCode installation returns structured events and postflight evidence', () => {
+test('OpenCode installation fails structurally when the native CLI is unavailable', () => {
   const home = mkdtempSync(join(tmpdir(), 'oms-opencode-closure-'));
   const mainUrl = new URL('../../../install/main.js', import.meta.url).href;
   const script = `
@@ -88,30 +89,19 @@ test('OpenCode installation returns structured events and postflight evidence', 
     assert.equal(result.status, 0, result.stderr);
     const installation = JSON.parse(result.stdout);
     assert.equal(installation.type, 'installation-result');
-    assert.equal(installation.status, 'succeeded');
+    assert.equal(installation.status, 'failed');
     assert.equal(installation.summary.warnings, 0);
-    assert.equal(installation.summary.deferred, 4);
-    assert.deepEqual(installation.summary.next_actions, [
-      '重启 OpenCode 后完成插件加载；随后可运行 oms doctor --tool opencode 查看注册状态。',
-      'Start OpenCode to run the plugin lifecycle, then run oms doctor --tool opencode.',
-    ]);
-    const deferredEvents = installation.events.filter((event) => event.status === 'deferred');
-    assert.equal(deferredEvents.length, 4);
-    assert.deepEqual(deferredEvents.map((event) => event.resource.phase).sort(), [
-      'postinstall', 'postinstall', 'postinstall', 'runtime',
-    ]);
-    assert.ok(deferredEvents.every((event) => event.next_action
-      === '重启 OpenCode 后完成插件加载；随后可运行 oms doctor --tool opencode 查看注册状态。'));
+    assert.ok(installation.summary.next_actions.includes(
+      'Retry: opencode plugin @cli-tools/oh-my-sdd-opencode --global --force',
+    ));
+    const failure = installation.events.find((event) => event.status === 'failed');
+    assert.equal(failure.resource.action, 'install-plugin-native');
+    assert.match(failure.reason, /opencode/i);
     assert.ok(installation.events.some((event) => event.status === 'running'));
-    assert.ok(installation.events.some((event) => event.status === 'succeeded'));
-    assert.ok(installation.events.every((event) => event.status !== 'warning' || event.resource.phase !== 'postinstall'));
-    assert.equal(installation.postflight.written.state, 'verified');
-    assert.equal(installation.postflight.registered.state, 'verified');
+    assert.equal(installation.postflight.written.state, 'missing');
+    assert.equal(installation.postflight.registered.state, 'missing');
     assert.equal(installation.postflight.loaded.state, 'unknown');
     assert.equal(installation.postflight.enforced.state, 'unknown');
-    assert.deepEqual(JSON.parse(readFileSync(join(home, '.config/opencode/opencode.json'), 'utf8')).plugin, [
-      '@cli-tools/oh-my-sdd-opencode',
-    ]);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
@@ -241,13 +231,18 @@ test('repair plan keeps non-repairable OpenCode findings explicit', async () => 
   assert.equal(result.steps[0].status, 'unsupported');
 });
 
-test('OpenCode adapter follows an explicit effective configuration directory', () => {
+test('OpenCode native install accepts an injected runner without writing configuration', () => {
   const home = mkdtempSync(join(tmpdir(), 'oms-opencode-custom-dir-'));
   const configDir = join(home, 'custom-opencode');
-  const mainUrl = new URL('../../../install/main.js', import.meta.url).href;
+  const adapterUrl = new URL('../../../install/hosts/opencode-adapter.js', import.meta.url).href;
   const script = `
-    const { main } = await import(${JSON.stringify(mainUrl)});
-    process.stdout.write(JSON.stringify(await main({ tool: 'opencode' })));
+    const { OpenCodeAdapter } = await import(${JSON.stringify(adapterUrl)});
+    const calls = [];
+    const installation = await OpenCodeAdapter.install({
+      announce() {},
+      execFileSync(command, args, options) { calls.push({ command, args, options }); },
+    });
+    process.stdout.write(JSON.stringify({ installation, calls, plan: OpenCodeAdapter.describe() }));
   `;
 
   try {
@@ -256,11 +251,15 @@ test('OpenCode adapter follows an explicit effective configuration directory', (
       encoding: 'utf8',
     });
     assert.equal(result.status, 0, result.stderr);
-    const installation = JSON.parse(result.stdout);
-    assert.equal(installation.postflight.written.path, join(configDir, 'opencode.json'));
-    assert.deepEqual(JSON.parse(readFileSync(join(configDir, 'opencode.json'), 'utf8')).plugin, [
-      '@cli-tools/oh-my-sdd-opencode',
-    ]);
+    const { installation, calls, plan } = JSON.parse(result.stdout);
+    assert.equal(installation.status, 'succeeded');
+    assert.deepEqual(calls, [{
+      command: 'opencode',
+      args: ['plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'],
+      options: { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    }]);
+    assert.equal(plan.resources.find((resource) => resource.type === 'npm-plugin').path, configDir);
+    assert.equal(existsSync(join(configDir, 'opencode.json')), false);
     assert.equal(existsSync(join(home, '.config/opencode/opencode.json')), false);
   } finally {
     rmSync(home, { recursive: true, force: true });
