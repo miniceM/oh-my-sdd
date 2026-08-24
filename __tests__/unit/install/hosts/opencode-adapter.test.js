@@ -72,6 +72,25 @@ describe('OpenCodeAdapter', () => {
     assert.equal(installation.events.filter((event) => event.status === 'deferred').length, 4);
   });
 
+  it('runs the native OpenCode plugin command through ComSpec on Windows', async () => {
+    const calls = [];
+    const installation = await OpenCodeAdapter.install({
+      announce: () => {},
+      platform: 'win32',
+      comspec: 'C:\\Windows\\System32\\cmd.exe',
+      execFileSync: (command, args, options) => {
+        calls.push({ command, args, options });
+      },
+    });
+
+    assert.equal(installation.status, 'succeeded');
+    assert.deepEqual(calls, [{
+      command: 'C:\\Windows\\System32\\cmd.exe',
+      args: ['/d', '/s', '/c', 'opencode', 'plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'],
+      options: { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    }]);
+  });
+
   it('reports a native plugin install failure with output and a retry command', async () => {
     const installation = await OpenCodeAdapter.install({
       announce: () => {},

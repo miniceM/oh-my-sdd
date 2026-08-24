@@ -22,6 +22,19 @@ import {
 
 const DEFERRED_LOAD_ACTION = '重启 OpenCode 后完成插件加载；随后可运行 oms doctor --tool opencode 查看注册状态。';
 
+export function buildOpenCodeInvocation(
+  args,
+  { platform = process.platform, comspec = process.env.ComSpec } = {},
+) {
+  if (platform === 'win32') {
+    return {
+      command: comspec || 'cmd.exe',
+      args: ['/d', '/s', '/c', 'opencode', ...args],
+    };
+  }
+  return { command: 'opencode', args };
+}
+
 function inspectAvailability(check, source) {
   try {
     const available = Boolean(check());
@@ -332,11 +345,14 @@ export class OpenCodeAdapter extends HostAdapter {
     }
     if (resource?.action === 'install-plugin-native') {
       const runCommand = ctx.execFileSync || execFileSync;
-      const command = 'opencode';
       const args = ['plugin', OPENCODE_PLUGIN_ENTRY, '--global', '--force'];
-      const retry = `Retry: ${command} ${args.join(' ')}`;
+      const invocation = buildOpenCodeInvocation(args, {
+        platform: ctx.platform,
+        comspec: ctx.comspec,
+      });
+      const retry = `Retry: opencode ${args.join(' ')}`;
       try {
-        runCommand(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+        runCommand(invocation.command, invocation.args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
         return {
           status: 'succeeded', owned: true,
           message: `Installed ${OPENCODE_PLUGIN_ENTRY} through the OpenCode CLI.`,
