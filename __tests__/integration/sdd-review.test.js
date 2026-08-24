@@ -9,6 +9,11 @@ const SKILL_PATH = path.resolve(__dirname, '..', '..', 'skills', 'sdd-review', '
 const MIRROR_SKILL_PATH = path.resolve(
   __dirname, '..', '..', 'opencode', 'oms-skills', 'sdd-review', 'SKILL.md'
 );
+const SPEC_SKILL_PATH = path.resolve(__dirname, '..', '..', 'skills', 'sdd-spec', 'SKILL.md');
+const MIRROR_SPEC_SKILL_PATH = path.resolve(
+  __dirname, '..', '..', 'opencode', 'oms-skills', 'sdd-spec', 'SKILL.md'
+);
+const RUNBOOK_PATH = path.resolve(__dirname, '..', '..', 'docs', 'release', 'runbook-internal-test-v0.2.md');
 
 async function readSkill() {
   return readFile(SKILL_PATH, 'utf8');
@@ -126,6 +131,33 @@ test('OVERRIDE minimum-reason threshold (20 chars) is documented', async () => {
 
 test('OpenCode mirror is byte-for-byte identical to the canonical review skill', async () => {
   assert.equal(await readFile(MIRROR_SKILL_PATH, 'utf8'), await readSkill());
+  assert.equal(await readFile(MIRROR_SPEC_SKILL_PATH, 'utf8'), await readFile(SPEC_SKILL_PATH, 'utf8'));
+});
+
+test('Ring 5 checks GitHub context and Issue acceptance before a repo-targeted PR', async () => {
+  const skill = await readSkill();
+  assert.match(skill, /gh auth status/);
+  assert.match(skill, /仓库上下文/);
+  assert.match(skill, /state.*OPEN|OPEN.*state/);
+  assert.match(skill, /验收标准.*checklist|checklist.*验收标准/);
+  assert.match(skill, /证据/);
+  assert.match(skill, /gh pr create --repo <owner\/repo>/);
+});
+
+test('Post-PR DOP handling leaves archive metadata pending and retry only calls done', async () => {
+  const skill = await readSkill();
+  const postPr = skill.slice(skill.indexOf('### 步骤 5：PR 创建成功后完成 DOP'));
+  const retry = skill.slice(skill.indexOf('## `--retry-dop <slug>`'));
+  assert.doesNotMatch(postPr, /dop_completion\.status.*(?:done|failed)/);
+  assert.match(postPr, /保持.*pending/);
+  assert.match(retry, /只.*dop change done <change-id>/);
+  assert.doesNotMatch(retry, /openspec archive|gh pr create|git push/);
+});
+
+test('runbook documents only the single Ring 5 delivery phase', async () => {
+  const runbook = await readFile(RUNBOOK_PATH, 'utf8');
+  assert.equal(runbook.includes('--finalize'), false);
+  assert.doesNotMatch(runbook, /\| 6 \|/);
 });
 
 test('Ring 5 archives before creating the atomic PR, then completes DOP', async () => {

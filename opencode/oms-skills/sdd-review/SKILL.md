@@ -10,7 +10,7 @@ Ring 5 是**单阶段**：code review → validate → archive → 验证 canoni
 
 ## 默认流程
 
-**前置检查**：tasks.md 所有 `- [ ]` 已勾选；iam 校验；读 change `.meta.json` 的 change_id 和当前 issue branch；工作树仅含本 change 待提交工件；测试覆盖率 ≥ 80%。
+**前置检查**：tasks.md 所有 `- [ ]` 已勾选；iam 校验；读 change `.meta.json` 的 change_id 和当前 issue branch；工作树仅含本 change 待提交工件；测试覆盖率 ≥ 80%。执行 `gh auth status`，确认仓库上下文为 `<owner/repo>`；用 `gh issue view <issue-number> --repo <owner/repo> --json title,body,state,url` 确认 Issue 为 OPEN、含验收标准 checklist，并逐项保留测试命令输出或人工检查证据。任一不满足即停止。
 
 ### 步骤 1：前置检查
 
@@ -44,7 +44,7 @@ PR 必须同时含实现、`openspec/specs/`、`openspec/changes/archive/<slug>/
 git add <本 change 的实现文件> openspec/specs/ openspec/changes/archive/<slug>/
 git commit -m '[<change-id>] review: ring 5 archive and atomic PR delivery'
 git push origin <issue-branch>
-gh pr create --base main --head <issue-branch> --body-file <pr-body-file>
+gh pr create --repo <owner/repo> --base main --head <issue-branch> --body-file <pr-body-file>
 ```
 
 `gh pr create` 失败时停止并报告错误；不得调用 DOP done。
@@ -53,12 +53,12 @@ gh pr create --base main --head <issue-branch> --body-file <pr-body-file>
 
 仅在 `gh pr create` 成功返回 PR URL 后调用 `dop change done <change-id>`；change_id 仅从 archive meta 读取。
 
-- 成功：在 archive meta 写 `dop_completion.status:'done'`、`done_at` 与 `pr_url`；输出 PR URL 和 Ring 5 完成。
-- 失败：在 archive meta 写 `dop_completion.status:'failed'`、`failed_at`、错误摘要与 `pr_url`；**DOP done 失败绝不撤销 PR，也不报告五环完成**。输出 PR URL、错误摘要和 `/sdd-review --retry-dop <slug>`。
+- 成功：保持 archive meta 中预 PR 写入的 `dop_completion.status:'pending'` 不变；输出 PR URL 和 Ring 5 完成。
+- 失败：保持 archive meta 中预 PR 写入的 pending 状态不变；**DOP done 失败绝不撤销 PR，也不报告五环完成**。输出 PR URL、错误摘要和 `/sdd-review --retry-dop <slug>`。
 
 ## `--retry-dop <slug>`：仅重试 DOP 完成
 
-只从 archive meta 读 change_id，然后调用 `dop change done <change-id>`。不得 archive、审核、合并、创建或修改 PR。成功时将 `dop_completion.status` 写为 `done` 并写入 `done_at`；失败保留/写入 `failed`、`failed_at` 和错误摘要。
+只从 archive meta 读 change_id，然后只调用 `dop change done <change-id>`。不得 archive、审核、合并、创建或修改 PR，也不得编辑 archive meta。
 
 ## 强制规则
 
