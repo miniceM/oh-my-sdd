@@ -158,7 +158,8 @@ async function runDop(argv) {
   const subcommand = remaining[1] ?? '';
   const user = env('OMS_MOCK_DOP_USER', 'alice');
   if (command !== 'change') return dopHelp(command);
-  await dopLog(`change ${subcommand} (endpoint=${endpoint} json=${json ? 1 : 0})`);
+  const code = remaining[2] ?? '';
+  await dopLog(`change ${subcommand}${code ? ` ${code}` : ''} (endpoint=${endpoint} json=${json ? 1 : 0})`);
   if (env('OMS_MOCK_DOP_FAIL_GET', '0') === '1' && ['list', 'view'].includes(subcommand)) return writeError('❌ dop change request failed (forced)');
   if (subcommand === 'list') return console.log(JSON.stringify(changeList(user), null, 2));
   if (subcommand === 'view') {
@@ -170,13 +171,18 @@ async function runDop(argv) {
     if (env('OMS_MOCK_DOP_FAIL_UPDATE', '0') === '1') return writeError('❌ dop change create failed (forced)');
     return console.log(JSON.stringify({ id: `ARD${Math.floor(100000 + Math.random() * 899999)}`, status: 'open', type: 'feature', owner: user, created_at: new Date().toISOString() }, null, 2));
   }
-  if (subcommand === 'update') return writeError('❌ dop change update 不存在。\n真实 dop CLI 只有 create / list / view 三个子命令。');
+  if (subcommand === 'done') {
+    if (!code) return writeError('❌ dop change done requires a change code');
+    if (env('OMS_MOCK_DOP_FAIL_DONE', '0') === '1') return writeError('❌ dop change done failed (forced)');
+    return console.log(JSON.stringify({ id: code, status: 'done' }, null, 2));
+  }
+  if (subcommand === 'update') return writeError('❌ dop change update 不支持。\n请使用 dop change done <code> 完成变更。');
   return dopHelp(subcommand);
 }
 
 function dopHelp(command) {
   if (command && !['-h', '--help'].includes(command)) return writeError(`Error: unknown command "dop change ${command}"`);
-  console.log('dop mock CLI v0.2.0-dev — 对齐企业真实契约\n\nUsage:\n  dop change [create|list|view]\n\nGlobal Flags:\n  --endpoint string\n  -j, --json');
+  console.log('dop mock CLI v0.2.0-dev — 对齐企业真实契约\n\nUsage:\n  dop change [create|list|view|done]\n\nGlobal Flags:\n  --endpoint string\n  -j, --json');
 }
 
 if (tool === 'iam') runIam(args);

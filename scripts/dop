@@ -2,7 +2,7 @@
 # scripts/dop — mock 企业 dop CLI（对齐真实契约，2026-07-06 校准）
 #
 # 真实契约（来自内网 `dop change --help`）：
-#   - dop change create / list / view  （只有这 3 个子命令，无 update）
+#   - dop change create / list / view / done
 #   - 全局 flag：--endpoint string、-j/--json
 #   - 默认 endpoint：http://10.182.35.66
 #   - change view JSON 字段契约（2026-07-06 校准，对齐 sdd-doc 排期信息章节需求）：
@@ -19,8 +19,7 @@
 #       }]
 #
 # 改造说明（2026-06-22，Q1=A 决策）：
-#   原 mock 的 `change update` 子命令已删除——真实 dop 不支持。
-#   skills 改为通过 .meta.json 本地记录进度，不再调 dop CLI 上报状态。
+#   `change update` 子命令不受支持；变更完成通过 `change done <code>` 上报。
 #
 # 已知 change-id 测试数据：
 #   ARD123456  → "用户测试demo"  → 1 个 user_story，含 release_info
@@ -192,6 +191,27 @@ change_create() {
 EOF
 }
 
+change_done() {
+  local id="${1:-}"
+  log "change done $id (endpoint=$ENDPOINT json=$JSON_MODE)"
+
+  if [[ -z "$id" ]]; then
+    echo "❌ dop change done requires a change code" >&2
+    exit 1
+  fi
+  if [[ "${OMS_MOCK_DOP_FAIL_DONE:-0}" == "1" ]]; then
+    echo "❌ dop change done failed (forced)" >&2
+    exit 1
+  fi
+
+  cat <<EOF
+{
+  "id": "$id",
+  "status": "done"
+}
+EOF
+}
+
 print_change_help() {
   cat <<EOF
 Usage:
@@ -201,6 +221,7 @@ Available Commands:
   create      Create a new system change
   list        List system changes
   view        View system change details
+  done        Mark a system change as done
 
 Flags:
   -h, --help   help for change
@@ -241,6 +262,7 @@ case "$cmd" in
       list)   change_list ;;
       view)   change_view "${REMAINING[2]:-}" ;;
       create) change_create ;;
+      done)   change_done "${REMAINING[2]:-}" ;;
       -h|--help|"") print_change_help ;;
       *)
         # 兼容已废弃的 update：明确告知用户
@@ -248,10 +270,7 @@ case "$cmd" in
           cat >&2 <<EOF
 ❌ dop change update 不存在。
 
-真实 dop CLI 只有 create / list / view 三个子命令（见 dop change --help）。
-oh-my-sdd 已迁移到 .meta.json 本地记录进度方案（Q1=A 决策）。
-
-如果你的 skill 还在调 change update，请更新到最新版本。
+`dop change update` 不受支持；请使用 `dop change done <code>` 完成变更。
 EOF
           exit 1
         fi
@@ -270,7 +289,7 @@ Usage:
   dop [command]
 
 Available Commands:
-  change      Manage system changes (create / list / view)
+  change      Manage system changes (create / list / view / done)
 
 Flags:
   -h, --help   help for dop
@@ -288,10 +307,10 @@ Use "dop [command] --help" for more information about a command.
 环境变量:
   OMS_MOCK_DOP_USER        用户名（默认 alice）
   OMS_MOCK_DOP_FAIL_GET    =1 时 change view/list 模拟失败
-  OMS_MOCK_DOP_FAIL_UPDATE =1 时 change create 模拟失败
+  OMS_MOCK_DOP_FAIL_DONE   =1 时 change done 模拟失败
   OMS_MOCK_DOP_LOG         日志路径（默认 ~/.oh-my-sdd/logs/mock-dop.log）
 
-注意: change update 子命令已被移除（对齐真实 dop）。
+注意: change update 子命令不受支持；使用 change done <code> 完成变更。
 EOF
     ;;
 

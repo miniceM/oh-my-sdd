@@ -19,7 +19,7 @@
 #   OMS_MOCK_SYSTEM                            默认 sdd
 #   OMS_MOCK_LOGGED_OUT=1                      模拟未登录（测试 NEED_LOGIN）
 #   OMS_MOCK_DOP_FAIL_GET=1                    dop change view 模拟失败
-#   OMS_MOCK_DOP_FAIL_UPDATE=1                 dop change update 模拟失败
+#   OMS_MOCK_DOP_FAIL_DONE=1                   dop change done 模拟失败
 
 set -euo pipefail
 
@@ -54,4 +54,3 @@ echo ""
 echo "→ mock dop change view ARD123456 (示例):"
 dop change view ARD123456 2>&1 | head -5
 echo ""
-

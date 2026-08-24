@@ -61,3 +61,25 @@ test('Node mock remains runnable with a PATH that has no Bash', () => {
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout).credentials.map(({ username }) => username), ['deepus', 'gituser']);
 });
+
+test('Node DOP mock completes a change', () => {
+  const script = join(root, 'scripts', 'mock-cli.mjs');
+  const result = spawnSync(process.execPath, [script, 'dop', 'change', 'done', 'ARD123456'], {
+    env: process.env,
+    encoding: 'utf8',
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), { id: 'ARD123456', status: 'done' });
+});
+
+test('Node DOP mock reports a forced change completion failure', () => {
+  const script = join(root, 'scripts', 'mock-cli.mjs');
+  const result = spawnSync(process.execPath, [script, 'dop', 'change', 'done', 'ARD123456'], {
+    env: { ...process.env, OMS_MOCK_DOP_FAIL_DONE: '1' },
+    encoding: 'utf8',
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /done failed/);
+});
