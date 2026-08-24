@@ -71,4 +71,28 @@ describe("control-plane renderers", () => {
     assert.match(output, /Summary: 1 succeeded, 0 failed, 1 total/);
     assert.match(output, /Restart Kilo Code/);
   });
+
+  it("omits deferred installation steps from human-readable output", () => {
+    const text = renderResultText({
+      status: "succeeded",
+      events: [
+        { status: "succeeded", host: "opencode", message: "Wrote config" },
+        { status: "deferred", host: "opencode", message: "commands pending OpenCode plugin loading" },
+      ],
+      summary: {
+        succeeded: 1,
+        failed: 0,
+        warnings: 0,
+        deferred: 1,
+        total_steps: 2,
+        next_actions: ["Restart OpenCode to complete plugin loading."],
+      },
+    });
+
+    assert.match(text, /Wrote config/);
+    assert.doesNotMatch(text, /commands pending/);
+    assert.doesNotMatch(text, /⚠️|❌/);
+    assert.doesNotMatch(text, /warnings/);
+    assert.match(text, /Restart OpenCode to complete plugin loading/);
+  });
 });

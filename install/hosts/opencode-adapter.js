@@ -21,6 +21,8 @@ import {
   OPENCODE_PLUGIN_ENTRY,
 } from '../../lib/paths.js';
 
+const DEFERRED_LOAD_ACTION = '重启 OpenCode 后完成插件加载；随后可运行 oms status --tool opencode 查看注册状态。';
+
 function inspectAvailability(check, source) {
   try {
     const available = Boolean(check());
@@ -288,12 +290,9 @@ export class OpenCodeAdapter extends HostAdapter {
       if (event.status === 'running') ctx.announce(`→ ${event.message}`);
       else if (event.status === 'succeeded') ctx.announce(`✓ ${event.message}`);
       else if (event.status === 'warning') ctx.announce(`⚠️  ${event.message}${event.reason ? `：${event.reason}` : ''}`);
-      else ctx.announce(`❌ ${event.message}${event.reason ? `：${event.reason}` : ''}`);
+      else if (event.status !== 'deferred') ctx.announce(`❌ ${event.message}${event.reason ? `：${event.reason}` : ''}`);
     }
     const result = summarizeExecution(plan, events);
-    result.summary.next_actions.push(
-      '启动 OpenCode 后执行 oms status --tool opencode 或 oms doctor --tool opencode，确认 loaded/enforced。',
-    );
     if (usedFallbackPlan && result.status === 'succeeded') {
       ctx.announce('✓ oh-my-sdd (OpenCode) npm 插件安装完成');
     }
@@ -303,20 +302,20 @@ export class OpenCodeAdapter extends HostAdapter {
   static async applyResource(resource) {
     if (resource?.phase === 'postinstall') {
       return {
-        status: 'warning',
+        status: 'deferred',
         owned: resource.owned !== false,
-        message: `${resource.type || 'resource'} deferred to npm postinstall`,
-        reason: '该资源由 npm plugin lifecycle 写入，当前 oms-install 未执行该 lifecycle。',
-        next_action: '启动 OpenCode 或重新执行 npm plugin lifecycle，然后运行 oms doctor --tool opencode。',
+        message: `${resource.type || 'resource'} will be completed by the npm plugin lifecycle.`,
+        reason: 'Expected npm plugin lifecycle work has not run in this installation process.',
+        next_action: DEFERRED_LOAD_ACTION,
       };
     }
     if (resource?.phase === 'runtime') {
       return {
-        status: 'warning',
+        status: 'deferred',
         owned: false,
-        message: 'OpenCode runtime verification pending',
-        reason: '当前没有 OpenCode 宿主运行时证据。',
-        next_action: '启动 OpenCode 后运行 oms status --tool opencode。',
+        message: 'OpenCode runtime loading will complete after restart.',
+        reason: 'Expected runtime loading has no evidence until OpenCode restarts.',
+        next_action: DEFERRED_LOAD_ACTION,
       };
     }
     if (resource?.action === 'patch' || resource?.action === 'register-plugin' || resource?.action === 'patch-config') {

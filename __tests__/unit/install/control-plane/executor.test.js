@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { executePlan, createStepResult } from '../../../../install/control-plane/executor.js';
+import { executePlan, createStepResult, summarizeExecution } from '../../../../install/control-plane/executor.js';
 
 async function collectEvents(generator) {
   const events = [];
@@ -94,4 +94,40 @@ test('classifyError handles standard Error and string errors', async () => {
   const failedEvent = events.find(e => e.status === 'failed');
   assert.ok(failedEvent);
   assert.equal(failedEvent.reason, 'Disk full');
+});
+
+test('deferred steps do not count as warnings and retain one next action', () => {
+  const result = summarizeExecution({ schema_version: 1, hosts: [] }, [
+    { id: 'opencode:a', status: 'succeeded' },
+    { id: 'opencode:b', status: 'deferred', next_action: 'Restart OpenCode to complete plugin loading.' },
+    { id: 'opencode:c', status: 'deferred', next_action: 'Restart OpenCode to complete plugin loading.' },
+  ]);
+  assert.equal(result.status, 'succeeded');
+  assert.equal(result.summary.succeeded, 1);
+  assert.equal(result.summary.warnings, 0);
+  assert.equal(result.summary.deferred, 2);
+  assert.deepEqual(result.summary.next_actions, ['Restart OpenCode to complete plugin loading.']);
+});
+
+test('deferred steps preserve failed execution semantics', () => {
+  const result = summarizeExecution({ schema_version: 1, hosts: [] }, [
+    { id: 'opencode:a', status: 'failed' },
+    { id: 'opencode:b', status: 'deferred' },
+  ]);
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.summary.failed, 1);
+  assert.equal(result.summary.deferred, 1);
+});
+
+test('deferred steps preserve partial failure semantics for unsupported steps', () => {
+  const result = summarizeExecution({ schema_version: 1, hosts: [] }, [
+    { id: 'opencode:a', status: 'succeeded' },
+    { id: 'opencode:b', status: 'unsupported' },
+    { id: 'opencode:c', status: 'deferred' },
+  ]);
+
+  assert.equal(result.status, 'partial-failure');
+  assert.equal(result.summary.unsupported, 1);
+  assert.equal(result.summary.deferred, 1);
 });

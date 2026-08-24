@@ -58,8 +58,8 @@ describe('OpenCodeAdapter', () => {
     const script = `
       const { OpenCodeAdapter } = await import(${JSON.stringify(adapterUrl)});
       const messages = [];
-      await OpenCodeAdapter.install({ announce: (message) => messages.push(message) });
-      process.stdout.write(JSON.stringify(messages));
+      const installation = await OpenCodeAdapter.install({ announce: (message) => messages.push(message) });
+      process.stdout.write(JSON.stringify({ installation, messages }));
     `;
 
     try {
@@ -79,10 +79,16 @@ describe('OpenCodeAdapter', () => {
       const config = JSON.parse(readFileSync(join(home, '.config', 'opencode', 'opencode.json'), 'utf8'));
       assert.deepEqual(config.plugin, ['@cli-tools/oh-my-sdd-opencode']);
 
-      const messages = JSON.parse(result.stdout);
+      const { installation, messages } = JSON.parse(result.stdout);
       assert.ok(messages.includes('✓ oh-my-sdd (OpenCode) npm 插件安装完成'));
       assert.ok(!messages.some((message) => message.includes('HARD_RULE')));
       assert.ok(!messages.some((message) => message.includes('本地开发模式')));
+      assert.deepEqual(installation.summary.next_actions, [
+        '重启 OpenCode 后完成插件加载；随后可运行 oms status --tool opencode 查看注册状态。',
+      ]);
+      const deferredEvents = installation.events.filter((event) => event.status === 'deferred');
+      assert.equal(deferredEvents.length, 4);
+      assert.ok(deferredEvents.every((event) => !messages.some((message) => message.includes(event.message))));
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

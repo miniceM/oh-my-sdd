@@ -88,9 +88,22 @@ test('OpenCode installation returns structured events and postflight evidence', 
     assert.equal(result.status, 0, result.stderr);
     const installation = JSON.parse(result.stdout);
     assert.equal(installation.type, 'installation-result');
+    assert.equal(installation.status, 'succeeded');
+    assert.equal(installation.summary.warnings, 0);
+    assert.equal(installation.summary.deferred, 4);
+    assert.deepEqual(installation.summary.next_actions, [
+      '重启 OpenCode 后完成插件加载；随后可运行 oms status --tool opencode 查看注册状态。',
+    ]);
+    const deferredEvents = installation.events.filter((event) => event.status === 'deferred');
+    assert.equal(deferredEvents.length, 4);
+    assert.deepEqual(deferredEvents.map((event) => event.resource.phase).sort(), [
+      'postinstall', 'postinstall', 'postinstall', 'runtime',
+    ]);
+    assert.ok(deferredEvents.every((event) => event.next_action
+      === '重启 OpenCode 后完成插件加载；随后可运行 oms status --tool opencode 查看注册状态。'));
     assert.ok(installation.events.some((event) => event.status === 'running'));
     assert.ok(installation.events.some((event) => event.status === 'succeeded'));
-    assert.ok(installation.events.some((event) => event.status === 'warning' && event.resource.phase === 'postinstall'));
+    assert.ok(installation.events.every((event) => event.status !== 'warning' || event.resource.phase !== 'postinstall'));
     assert.equal(installation.postflight.written.state, 'verified');
     assert.equal(installation.postflight.registered.state, 'verified');
     assert.equal(installation.postflight.loaded.state, 'unknown');

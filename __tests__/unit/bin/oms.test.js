@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { spawn } from "node:child_process";
+import { mkdtemp, rm, symlink } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const CLI = path.join(ROOT, "bin", "oms.js");
 
-function runOms(args = [], { env } = {}) {
+function runOms(args = [], { env, entryScript = CLI } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [CLI, ...args], {
+    const child = spawn(process.execPath, [entryScript, ...args], {
       cwd: ROOT,
       env: { ...process.env, ...env },
       stdio: ["pipe", "pipe", "pipe"],
@@ -22,6 +24,22 @@ function runOms(args = [], { env } = {}) {
     child.once("close", (code) => resolve({ code, stdout, stderr }));
   });
 }
+
+test("oms follows a symlinked entry script", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "oms-symlink-"));
+  const symlinkPath = path.join(tempDir, "oms");
+  await symlink(CLI, symlinkPath);
+
+  try {
+    const statusResult = await runOms(["status", "--tool", "opencode"], { entryScript: symlinkPath });
+    assert.match(statusResult.stdout, /Status Report/);
+
+    const doctorResult = await runOms(["doctor", "--tool", "opencode"], { entryScript: symlinkPath });
+    assert.match(doctorResult.stdout, /Doctor Report/);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
 
 test("oms --help shows supported commands", async () => {
   const { code, stdout } = await runOms(["--help"]);
