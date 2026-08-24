@@ -88,6 +88,22 @@ describe('OpenCodeAdapter', () => {
     assert.equal(failure.next_action, 'Retry: opencode plugin @cli-tools/oh-my-sdd-opencode --global --force');
   });
 
+  it('includes both stderr and stdout when the native plugin install fails', async () => {
+    const installation = await OpenCodeAdapter.install({
+      announce: () => {},
+      execFileSync: () => {
+        const error = new Error('Command failed');
+        error.stderr = 'registry unavailable';
+        error.stdout = 'retrying package resolution';
+        throw error;
+      },
+    });
+
+    const failure = installation.events.find((event) => event.status === 'failed');
+    assert.match(failure.reason, /registry unavailable/);
+    assert.match(failure.reason, /retrying package resolution/);
+  });
+
   it('numbers the five SDD workflow commands with integer rings', () => {
     assert.deepEqual(
       SDD_COMMANDS.slice(0, 5).map((command) => command.description.match(/第 (\d+) 环/)?.[1]),

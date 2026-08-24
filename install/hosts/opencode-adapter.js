@@ -343,7 +343,10 @@ export class OpenCodeAdapter extends HostAdapter {
           next_action: DEFERRED_LOAD_ACTION,
         };
       } catch (error) {
-        const output = error?.stderr || error?.stdout || error?.message || String(error);
+        const output = [error?.stderr, error?.stdout]
+          .map((value) => value == null ? '' : String(value).trim())
+          .filter(Boolean)
+          .join('\n') || error?.message || String(error);
         return {
           status: 'failed', owned: true,
           message: `Failed to install ${OPENCODE_PLUGIN_ENTRY} through the OpenCode CLI.`,
