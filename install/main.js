@@ -185,14 +185,22 @@ function createInstaller({
           layers: {
             written: postflight.written || { state: "unknown", reason: "No postflight evidence" },
             registered: postflight.registered || { state: "unknown", reason: "No postflight evidence" },
+            postinstall: postflight.postinstall || { state: "unknown", reason: "No npm postinstall evidence" },
             loaded: postflight.loaded || { state: "unknown", reason: "No runtime evidence" },
             enforced: postflight.enforced || { state: "unknown", reason: "No runtime evidence" },
           },
+          next_actions: [...new Set([
+            ...(result.summary?.next_actions || []),
+            ...Object.values(postflight)
+              .filter((layer) => layer && typeof layer === "object" && layer.next_action)
+              .map((layer) => layer.next_action),
+          ])],
         };
       } catch (error) {
         result.postflight = {
           written: { state: "unknown", reason: error.message },
           registered: { state: "unknown", reason: error.message },
+          postinstall: { state: "unknown", reason: "Postflight failed before npm lifecycle inspection" },
           loaded: { state: "unknown", reason: "Postflight failed before runtime inspection" },
           enforced: { state: "unknown", reason: "Postflight failed before runtime inspection" },
         };

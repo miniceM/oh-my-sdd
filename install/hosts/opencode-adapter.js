@@ -21,7 +21,7 @@ import {
   OPENCODE_PLUGIN_ENTRY,
 } from '../../lib/paths.js';
 
-const DEFERRED_LOAD_ACTION = '重启 OpenCode 后完成插件加载；随后可运行 oms status --tool opencode 查看注册状态。';
+const DEFERRED_LOAD_ACTION = '重启 OpenCode 后完成插件加载；随后可运行 oms doctor --tool opencode 查看注册状态。';
 
 function inspectAvailability(check, source) {
   try {
@@ -109,7 +109,7 @@ function postinstallEvidence() {
     [paths.agents, 'OpenCode AGENTS.md'],
     [manifest, 'npm ownership manifest'],
   ];
-  const missing = checks.filter(([path]) => !existsSync(path)).map(([, label]) => label);
+  const missingChecks = checks.filter(([path]) => !existsSync(path));
   const manifestRecords = readOwnershipManifest(manifest);
   const missingTargets = manifestRecords
     .filter((record) => !existsSync(record.target))
@@ -130,16 +130,22 @@ function postinstallEvidence() {
       path: first.target,
       current_digest: first.current_digest,
       expected_digest: first.installed_digest,
+      evidence: `npm ownership manifest digest mismatch detected at ${first.target}`,
       reason: `User modification detected in ${first.target}; OMS will not overwrite it.`,
       next_action: 'Review the user change and handle it manually; repair preserves modified resources.',
     };
   }
-  if (missing.length === 0 && missingTargets.length === 0 && manifestRecords.length > 0) {
+  if (missingChecks.length === 0 && missingTargets.length === 0 && manifestRecords.length > 0) {
     return { state: 'verified', evidence: 'npm postinstall resources and ownership manifest are present' };
   }
   return {
     state: 'pending',
-    reason: `npm lifecycle has not completed; missing ${[...missing, ...missingTargets].join(', ') || 'valid ownership records'}`,
+    paths: [...missingChecks.map(([path]) => path), ...missingTargets],
+    evidence: `Checked npm lifecycle outputs: ${checks.map(([path, label]) => `${label} (${path})`).join('; ')}`,
+    reason: `npm lifecycle has not completed; missing ${[
+      ...missingChecks.map(([path, label]) => `${label} (${path})`),
+      ...missingTargets,
+    ].join(', ') || 'valid ownership records'}`,
     next_action: 'Start OpenCode to run the plugin lifecycle, then run oms doctor --tool opencode.',
   };
 }
@@ -274,8 +280,16 @@ export class OpenCodeAdapter extends HostAdapter {
         reason: invalid ? runtimeConfig.reason : (isRegistered ? null : "Plugin entry missing from config"),
       },
       postinstall: postinstallEvidence(),
-      loaded: { state: "unknown", reason: "OpenCode host launch evidence unavailable" },
-      enforced: { state: "unknown", reason: "Write prevention evidence requires active runtime" },
+      loaded: {
+        state: "unknown",
+        evidence: "No OpenCode host launch event was observed by oms-install",
+        reason: "OpenCode host launch evidence unavailable",
+      },
+      enforced: {
+        state: "unknown",
+        evidence: "No active OpenCode runtime write-prevention probe was observed by oms-install",
+        reason: "Write prevention evidence requires active runtime",
+      },
     };
   }
 
