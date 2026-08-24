@@ -10,6 +10,7 @@ import { loadConfig } from '../lib/config.js';
 import { debug, warn, error } from '../lib/log.js';
 import { getStateDir, sessionMetaPath, isIamInPath } from '../lib/platform.js';
 import { checkForUpdates, buildUpdateNotification } from '../lib/update-check.js';
+import { isDopCompletionPending } from '../lib/sdd-context.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT ?? path.resolve(__dirname, '..');
@@ -193,25 +194,24 @@ async function main() {
     }
   }
 
-  // 扫描 unfinalized SDD changes（PR 已创建但 /sdd-review --finalize 未跑）
-  // 防止用户 merge PR 后忘记 finalize，导致 openspec/specs/ drift
-  let unfinalizedReminder = '';
+  // 扫描已归档变更中 PR 已提交后的 DOP 完成待补偿意图。
+  let pendingDopCompletionReminder = '';
   if (authState.state === 'OK') {
     try {
-      const unfinalized = await scanUnfinalizedReviews(stdin.cwd);
-      if (unfinalized.length > 0) {
-        const lines = unfinalized.map(c =>
-          `  • ${c.slug} (change-id: ${c.change_id}, status: ${c.dop_status})`
+      const pendingDopCompletions = await scanPendingDopCompletions(stdin.cwd);
+      if (pendingDopCompletions.length > 0) {
+        const lines = pendingDopCompletions.map(c =>
+          `  • ${c.slug} (change-id: ${c.change_id}, DOP completion: pending)`
         );
-        const header = `⚠️ oh-my-sdd: ${unfinalized.length} 个变更未完成 /sdd-review --finalize\n` +
-                       `   openspec/specs/ 可能 drift。请尽快 finalize：\n`;
-        const footer = `\n   命令：/sdd-review --finalize <slug>\n`;
+        const header = `⚠️ oh-my-sdd: ${pendingDopCompletions.length} 个归档变更的 PR 已提交后的 DOP 完成待补偿\n` +
+                       `   请尽快重试 DOP 完成上报：\n`;
+        const footer = `\n   命令：/sdd-review --retry-dop <slug>\n`;
         const msg = header + lines.join('\n') + footer;
         process.stderr.write(msg + '\n');
-        unfinalizedReminder = msg;
+        pendingDopCompletionReminder = msg;
       }
     } catch (err) {
-      debug(`扫描 unfinalized 失败（非阻塞）: ${err.message}`);
+      debug(`扫描待补偿 DOP 完成意图失败（非阻塞）: ${err.message}`);
     }
   }
 
@@ -220,8 +220,8 @@ async function main() {
   if (updateInfo?.hasUpdate) {
     finalContext += updateInfo.additionalContext;
   }
-  if (unfinalizedReminder) {
-    finalContext += `\n\n---\n${unfinalizedReminder}`;
+  if (pendingDopCompletionReminder) {
+    finalContext += `\n\n---\n${pendingDopCompletionReminder}`;
   }
 
   const output = {
@@ -248,36 +248,32 @@ async function checkForPluginUpdates(currentVersion) {
   return null;
 }
 
-// 扫描 cwd/openspec/changes/ 找出 dop_status=pr-created 且未 archive 的变更
-async function scanUnfinalizedReviews(cwd) {
-  const changesDir = path.join(cwd, 'openspec', 'changes');
+// 扫描 cwd/openspec/changes/archive/ 中 DOP 完成待补偿的归档变更。
+async function scanPendingDopCompletions(cwd) {
+  const archiveDir = path.join(cwd, 'openspec', 'changes', 'archive');
   let entries;
   try {
-    entries = await readdir(changesDir, { withFileTypes: true });
+    entries = await readdir(archiveDir, { withFileTypes: true });
   } catch {
-    return [];  // 不是 SDD 项目（无 openspec/changes/）
+    return [];  // 不是 SDD 项目，或尚无 archive
   }
-  const unfinalized = [];
+  const pendingDopCompletions = [];
   for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name === 'archive') continue;
-    const metaPath = path.join(changesDir, entry.name, '.meta.json');
+    if (!entry.isDirectory()) continue;
+    const metaPath = path.join(archiveDir, entry.name, '.meta.json');
     try {
       const meta = JSON.parse(await readFile(metaPath, 'utf8'));
-      // 阶段 1 完成的标志：dop_status=pr-created 或 review-done-pr 但没有 archive_done_at
-      if ((meta.dop_status === 'pr-created' || meta.dop_status === 'pr-ready-to-finalize')
-          && !meta.archive_done_at) {
-        unfinalized.push({
+      if (isDopCompletionPending(meta)) {
+        pendingDopCompletions.push({
           slug: entry.name,
           change_id: meta.change_id || '(unknown)',
-          dop_status: meta.dop_status,
-          pr_url: meta.pr_url || null,
         });
       }
     } catch {
       // 无 .meta.json 或 JSON 损坏 - 跳过
     }
   }
-  return unfinalized;
+  return pendingDopCompletions;
 }
 
 main().catch((err) => {

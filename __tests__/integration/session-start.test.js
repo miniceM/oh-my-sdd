@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, chmodSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, chmodSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -275,4 +275,43 @@ test('OK state: session meta includes started_at for duration calc', async (t) =
   assert.ok(Number.isFinite(startedAtMs), 'started_at must be a valid ISO date');
   assert.ok(startedAtMs >= before && startedAtMs <= after,
     `started_at (${meta.started_at}) should be within the hook run window [${before}, ${after}]`);
+});
+
+test('OK state: reminds pending DOP completion recorded in archived change metadata', async (t) => {
+  const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-dop-'));
+  const projectCwd = mkdtempSync(path.join(tmpdir(), 'oms-ss-project-'));
+  t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
+  t.after(() => rmSync(projectCwd, { recursive: true, force: true }));
+  const iamDir = makeStubIam({
+    credentials: [
+      { username: 'dop-devops', status: 'logged', is_api_key_true: true },
+      { username: 'dop-gitee', status: 'logged', is_api_key_true: false },
+    ],
+  });
+  t.after(() => rmSync(iamDir, { recursive: true, force: true }));
+
+  const archiveDir = path.join(projectCwd, 'openspec', 'changes', 'archive', 'ARD123456');
+  mkdirSync(archiveDir, { recursive: true });
+  writeFileSync(path.join(archiveDir, '.meta.json'), JSON.stringify({
+    change_id: 'ARD123456',
+    dop_completion: { status: 'pending' },
+  }));
+
+  const result = await runHook(
+    { session_id: 'dop-retry-test-1', cwd: projectCwd, source: 'startup' },
+    {
+      HOME: tmpHome,
+      USERPROFILE: tmpHome,
+      PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
+      CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+    }
+  );
+
+  assert.equal(result.exitCode, 0);
+  const out = JSON.parse(result.stdout);
+  assert.match(out.additionalContext, /ARD123456/);
+  assert.match(out.additionalContext, /\/sdd-review --retry-dop <slug>/);
+  assert.doesNotMatch(out.additionalContext, /--finalize/);
+  assert.doesNotMatch(out.additionalContext, /merge PR/);
+  assert.doesNotMatch(out.additionalContext, /openspec\/specs\/ drift/);
 });
