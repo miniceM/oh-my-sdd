@@ -121,6 +121,7 @@ export function summarizeExecution(plan, events = []) {
   const failedEvents = terminalEvents.filter((e) => e.status === "failed");
   const unsupportedEvents = terminalEvents.filter((e) => e.status === "unsupported");
   const warningEvents = terminalEvents.filter((e) => e.status === "warning");
+  const deferredEvents = terminalEvents.filter((e) => e.status === "deferred");
   const succeededEvents = terminalEvents.filter((e) => e.status === "succeeded");
 
   let status = "succeeded";
@@ -131,7 +132,7 @@ export function summarizeExecution(plan, events = []) {
   }
 
   const nextActions = [];
-  for (const event of [...failedEvents, ...unsupportedEvents, ...warningEvents]) {
+  for (const event of [...failedEvents, ...unsupportedEvents, ...warningEvents, ...deferredEvents]) {
     if (event.next_action && !nextActions.includes(event.next_action)) {
       nextActions.push(event.next_action);
     }
@@ -159,6 +160,7 @@ export function summarizeExecution(plan, events = []) {
       succeeded: succeededEvents.length,
       failed: failedEvents.length,
       warnings: warningEvents.length,
+      deferred: deferredEvents.length,
       unsupported: unsupportedEvents.length,
       not_executed: notExecuted,
       status,
