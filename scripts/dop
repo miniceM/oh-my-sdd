@@ -195,8 +195,8 @@ change_done() {
   local id="${1:-}"
   log "change done $id (endpoint=$ENDPOINT json=$JSON_MODE)"
 
-  if [[ -z "$id" ]]; then
-    echo "❌ dop change done requires a change code" >&2
+  if [[ ! "$id" =~ ^[A-Z]{2,6}[0-9]+$ ]]; then
+    echo "❌ dop change done requires a valid change code" >&2
     exit 1
   fi
   if [[ "${OMS_MOCK_DOP_FAIL_DONE:-0}" == "1" ]]; then
@@ -307,6 +307,7 @@ Use "dop [command] --help" for more information about a command.
 环境变量:
   OMS_MOCK_DOP_USER        用户名（默认 alice）
   OMS_MOCK_DOP_FAIL_GET    =1 时 change view/list 模拟失败
+  OMS_MOCK_DOP_FAIL_UPDATE =1 时 change create 模拟失败
   OMS_MOCK_DOP_FAIL_DONE   =1 时 change done 模拟失败
   OMS_MOCK_DOP_LOG         日志路径（默认 ~/.oh-my-sdd/logs/mock-dop.log）
 

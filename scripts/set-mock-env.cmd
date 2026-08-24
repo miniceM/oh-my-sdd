@@ -20,7 +20,8 @@ echo → 环境变量控制：
 echo    OMS_MOCK_USER_DEVOPS / OMS_MOCK_USER_GITEE   用户名
 echo    OMS_MOCK_LOGGED_OUT=1                       模拟未登录
 echo    OMS_MOCK_HALF_LOGIN=1                       模拟只登 devops
-echo    OMS_MOCK_DOP_FAIL_GET=1                     dop change view 模拟失败
+echo    OMS_MOCK_DOP_FAIL_GET=1                     dop change view/list 模拟失败
+echo    OMS_MOCK_DOP_FAIL_UPDATE=1                  dop change create 模拟失败
 echo    OMS_MOCK_DOP_FAIL_DONE=1                    dop change done 模拟失败
 
 where iam >nul 2>&1 || (

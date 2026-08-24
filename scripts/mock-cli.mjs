@@ -172,7 +172,7 @@ async function runDop(argv) {
     return console.log(JSON.stringify({ id: `ARD${Math.floor(100000 + Math.random() * 899999)}`, status: 'open', type: 'feature', owner: user, created_at: new Date().toISOString() }, null, 2));
   }
   if (subcommand === 'done') {
-    if (!code) return writeError('❌ dop change done requires a change code');
+    if (!/^[A-Z]{2,6}[0-9]+$/.test(code)) return writeError('❌ dop change done requires a valid change code');
     if (env('OMS_MOCK_DOP_FAIL_DONE', '0') === '1') return writeError('❌ dop change done failed (forced)');
     return console.log(JSON.stringify({ id: code, status: 'done' }, null, 2));
   }
