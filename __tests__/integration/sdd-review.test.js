@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SKILL_PATH = path.resolve(__dirname, '..', '..', 'skills', 'sdd-review', 'SKILL.md');
+const MIRROR_SKILL_PATH = path.resolve(
+  __dirname, '..', '..', 'opencode', 'oms-skills', 'sdd-review', 'SKILL.md'
+);
 
 async function readSkill() {
   return readFile(SKILL_PATH, 'utf8');
@@ -119,4 +122,40 @@ test('OVERRIDE minimum-reason threshold (20 chars) is documented', async () => {
     /20\s*字/.test(skill),
     'OVERRIDE scan must document the ≥20-char minimum reason threshold'
   );
+});
+
+test('OpenCode mirror is byte-for-byte identical to the canonical review skill', async () => {
+  assert.equal(await readFile(MIRROR_SKILL_PATH, 'utf8'), await readSkill());
+});
+
+test('Ring 5 archives before creating the atomic PR, then completes DOP', async () => {
+  const skill = await readSkill();
+  const archiveIdx = skill.indexOf('openspec archive <slug>');
+  const prIdx = skill.indexOf('gh pr create');
+  const dopIdx = skill.indexOf('dop change done <change-id>');
+
+  assert.ok(archiveIdx !== -1, 'Ring 5 must archive before submitting its PR');
+  assert.ok(prIdx > archiveIdx, 'gh pr create must follow openspec archive');
+  assert.ok(dopIdx > prIdx, 'DOP completion must follow successful PR creation');
+  assert.match(skill, /dop_completion:\s*\{\s*status:\s*['"]pending['"]/);
+  assert.match(skill, /prepared_at/);
+  assert.match(skill, /prepared_head/);
+  assert.match(skill, /archive_done_at/);
+});
+
+test('Ring 5 has retry-only DOP recovery and excludes merge-era operations', async () => {
+  const skill = await readSkill();
+  assert.match(skill, /\/sdd-review --retry-dop <slug>/);
+  assert.match(skill, /只从 archive meta 读 change_id/);
+  assert.match(skill, /DOP done 失败绝不撤销 PR/);
+
+  for (const forbidden of [
+    '--finalize',
+    'gh pr view',
+    'git checkout main',
+    'git pull origin main',
+    'git push origin main',
+  ]) {
+    assert.equal(skill.includes(forbidden), false, `skill must not contain ${forbidden}`);
+  }
 });
