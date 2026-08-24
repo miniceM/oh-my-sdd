@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFile, writeFile, mkdir, readdir, lstat } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, opendir, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -256,56 +256,74 @@ async function checkForPluginUpdates(currentVersion) {
 async function scanPendingDopCompletions(cwd) {
   const deadline = Date.now() + PENDING_DOP_SCAN_BUDGET_MS;
   const archiveDir = path.join(cwd, 'openspec', 'changes', 'archive');
-  let entries;
+  let archive;
   try {
-    entries = await readdir(archiveDir, { withFileTypes: true });
+    archive = await opendir(archiveDir);
   } catch {
     return [];  // 不是 SDD 项目，或尚无 archive
   }
+
   const pendingDopCompletions = [];
-  const entriesToScan = entries
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .slice(0, MAX_PENDING_DOP_SCAN_ENTRIES);
-  for (const entry of entriesToScan) {
-    if (Date.now() >= deadline) break;
-    if (!entry.isDirectory()) continue;
-    const metaPath = path.join(archiveDir, entry.name, '.meta.json');
-    try {
-      const stats = await lstat(metaPath);
-      if (!stats.isFile()) continue;
-      if (stats.size > MAX_PENDING_DOP_META_BYTES) continue;
-      const remainingBudgetMs = deadline - Date.now();
-      if (remainingBudgetMs <= 0) break;
-      const meta = JSON.parse(await readArchiveMeta(
-        metaPath,
-        Math.min(ARCHIVE_META_READ_TIMEOUT_MS, remainingBudgetMs),
-      ));
-      if (isDopCompletionPending(meta)) {
-        pendingDopCompletions.push({
-          slug: sanitizeReminderValue(entry.name),
-          change_id: sanitizeReminderValue(meta.change_id),
-        });
+  let enumerated = 0;
+  try {
+    for await (const entry of archive) {
+      if (Date.now() >= deadline || enumerated >= MAX_PENDING_DOP_SCAN_ENTRIES) break;
+      enumerated += 1;
+      if (!entry.isDirectory()) continue;
+
+      const metaPath = path.join(archiveDir, entry.name, '.meta.json');
+      try {
+        const stats = await withRemainingScanBudget(() => lstat(metaPath), deadline);
+        if (!stats.isFile()) continue;
+        if (stats.size > MAX_PENDING_DOP_META_BYTES) continue;
+        const meta = JSON.parse(await readArchiveMeta(metaPath, deadline));
+        if (isDopCompletionPending(meta)) {
+          pendingDopCompletions.push({
+            slug: sanitizeReminderValue(entry.name),
+            change_id: sanitizeReminderValue(meta.change_id),
+          });
+        }
+      } catch {
+        // 无 .meta.json、超时或 JSON 损坏 - 跳过
       }
+
+      if (Date.now() >= deadline) break;
+    }
+  } catch {
+    // 目录遍历异常 - 保持 fail-open
+  } finally {
+    try {
+      await archive.close();
     } catch {
-      // 无 .meta.json 或 JSON 损坏 - 跳过
+      // for-await 已关闭目录或 close 失败 - 无需影响 hook
     }
   }
   return pendingDopCompletions;
 }
 
-async function readArchiveMeta(metaPath, timeoutMs) {
+async function withRemainingScanBudget(operation, deadline) {
+  const remainingBudgetMs = deadline - Date.now();
+  if (remainingBudgetMs <= 0) throw new Error('archive metadata scan timed out');
+
   let timer;
   try {
     return await Promise.race([
-      readFile(metaPath, 'utf8'),
+      operation(),
       new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error('archive metadata read timed out')), timeoutMs);
+        timer = setTimeout(
+          () => reject(new Error('archive metadata scan timed out')),
+          Math.min(ARCHIVE_META_READ_TIMEOUT_MS, remainingBudgetMs),
+        );
         timer.unref?.();
       }),
     ]);
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+async function readArchiveMeta(metaPath, deadline) {
+  return withRemainingScanBudget(() => readFile(metaPath, 'utf8'), deadline);
 }
 
 function sanitizeReminderValue(value) {

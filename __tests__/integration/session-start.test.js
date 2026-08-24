@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync, chmodSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
+import { opendir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -438,7 +439,7 @@ test('OK state: ignores non-pending and malformed archive metadata', async (t) =
   assert.doesNotMatch(out.additionalContext, /--retry-dop/);
 });
 
-test('OK state: caps archived DOP completion scan entries', async (t) => {
+test('OK state: caps archived DOP completion scan entries in enumeration order', async (t) => {
   const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-dop-cap-'));
   const projectCwd = mkdtempSync(path.join(tmpdir(), 'oms-ss-project-'));
   t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
@@ -452,15 +453,26 @@ test('OK state: caps archived DOP completion scan entries', async (t) => {
   t.after(() => rmSync(iamDir, { recursive: true, force: true }));
 
   const archiveRoot = path.join(projectCwd, 'openspec', 'changes', 'archive');
-  for (let index = 0; index < 55; index += 1) {
-    const slug = String(index).padStart(3, '0');
+  for (let index = 0; index < 50; index += 1) {
+    const slug = `non-pending-${String(index).padStart(2, '0')}`;
     const archiveDir = path.join(archiveRoot, slug);
     mkdirSync(archiveDir, { recursive: true });
     writeFileSync(path.join(archiveDir, '.meta.json'), JSON.stringify({
       change_id: slug,
-      dop_completion: { status: index === 0 || index === 50 ? 'pending' : 'done' },
+      dop_completion: { status: 'done' },
     }));
   }
+  const pendingAfterCap = path.join(archiveRoot, 'pending-after-cap');
+  mkdirSync(pendingAfterCap, { recursive: true });
+  const archive = await opendir(archiveRoot);
+  const enumeratedEntries = [];
+  for await (const entry of archive) enumeratedEntries.push(entry.name);
+  const pendingEntry = enumeratedEntries[50];
+  assert.ok(pendingEntry, 'fixture must contain an entry beyond the scan cap');
+  writeFileSync(path.join(archiveRoot, pendingEntry, '.meta.json'), JSON.stringify({
+    change_id: pendingEntry,
+    dop_completion: { status: 'pending' },
+  }));
 
   const startedAt = Date.now();
   const result = await runHook(
@@ -479,8 +491,42 @@ test('OK state: caps archived DOP completion scan entries', async (t) => {
   assert.ok(elapsed < 2_500, `hook took ${elapsed}ms, should return under 2.5s`);
   assert.equal(result.exitCode, 0);
   const out = JSON.parse(result.stdout);
-  assert.match(out.additionalContext, /000/);
-  assert.doesNotMatch(out.additionalContext, /050|001|002|003|004|005/);
+  assert.doesNotMatch(out.additionalContext, /--retry-dop/);
+});
+
+test('OK state: skips a non-directory archive entry', async (t) => {
+  const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-dop-file-'));
+  const projectCwd = mkdtempSync(path.join(tmpdir(), 'oms-ss-project-'));
+  t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
+  t.after(() => rmSync(projectCwd, { recursive: true, force: true }));
+  const iamDir = makeStubIam({
+    credentials: [
+      { username: 'file-devops', status: 'logged', is_api_key_true: true },
+      { username: 'file-gitee', status: 'logged', is_api_key_true: false },
+    ],
+  });
+  t.after(() => rmSync(iamDir, { recursive: true, force: true }));
+
+  const archiveRoot = path.join(projectCwd, 'openspec', 'changes', 'archive');
+  mkdirSync(archiveRoot, { recursive: true });
+  writeFileSync(path.join(archiveRoot, 'not-a-change'), JSON.stringify({
+    change_id: 'not-a-change',
+    dop_completion: { status: 'pending' },
+  }));
+
+  const result = await runHook(
+    { session_id: 'dop-file-test-1', cwd: projectCwd, source: 'startup' },
+    {
+      HOME: tmpHome,
+      USERPROFILE: tmpHome,
+      PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
+      CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+    }
+  );
+
+  assert.equal(result.exitCode, 0);
+  const out = JSON.parse(result.stdout);
+  assert.doesNotMatch(out.additionalContext, /not-a-change|--retry-dop/);
 });
 
 test('OK state: skips oversized pending archive metadata', async (t) => {
