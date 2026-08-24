@@ -205,7 +205,7 @@ export class OpenCodeAdapter extends HostAdapter {
           version: { state: 'available', value: process.version, source: 'process.version' },
         }),
         dependency('opencode', {
-          required: false,
+          required: true,
           available: cli.available,
           state: cli.state,
           source: cli.source,

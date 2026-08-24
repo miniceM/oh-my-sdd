@@ -40,6 +40,14 @@ describe('OpenCodeAdapter', () => {
     )), true);
   });
 
+  it('requires the OpenCode CLI for native plugin installation', () => {
+    const host = OpenCodeAdapter.describe({ PACKAGE_ROOT: '/package/root' });
+    const cli = host.dependencies.find((dependency) => dependency.name === 'opencode');
+
+    assert.equal(cli.required, true);
+    assert.equal(cli.classification, 'required');
+  });
+
   it('install() is an async function', () => {
     assert.equal(OpenCodeAdapter.install.constructor.name, 'AsyncFunction');
   });
