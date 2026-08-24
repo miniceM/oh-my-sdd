@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAdapter, listTools } from "../install/host-registry.js";
@@ -197,8 +197,16 @@ export async function runOmsCli(argv = process.argv.slice(2), {
 
 function isDirectExecution(moduleUrl, entryArg) {
   if (!entryArg) return false;
-  const modulePath = path.resolve(fileURLToPath(moduleUrl));
-  const entryPath = path.resolve(entryArg);
+  const resolveCanonicalPath = (filePath) => {
+    const absolutePath = path.resolve(filePath);
+    try {
+      return realpathSync(absolutePath);
+    } catch {
+      return absolutePath;
+    }
+  };
+  const modulePath = resolveCanonicalPath(fileURLToPath(moduleUrl));
+  const entryPath = resolveCanonicalPath(entryArg);
   return process.platform === "win32"
     ? modulePath.toLowerCase() === entryPath.toLowerCase()
     : modulePath === entryPath;
