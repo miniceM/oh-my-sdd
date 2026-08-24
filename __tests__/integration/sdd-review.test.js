@@ -198,6 +198,24 @@ test('Ring 5 archives before creating the atomic PR, then completes DOP', async 
   assert.match(skill, /archive_done_at/);
 });
 
+test('Ring 5 revalidates the archived change and checks submission readiness before commit or PR', async () => {
+  const skill = await readSkill();
+  const archiveIdx = skill.indexOf('openspec archive <slug>');
+  const postArchiveValidationIdx = skill.indexOf('openspec validate <slug> --strict', archiveIdx + 1);
+  const readinessIdx = skill.indexOf('checkPrSubmissionReadiness');
+  const commitIdx = skill.indexOf('git commit -m');
+  const prIdx = skill.indexOf('gh pr create');
+
+  assert.ok(postArchiveValidationIdx > archiveIdx,
+    'strict OpenSpec validation must run again after archive');
+  assert.ok(readinessIdx > postArchiveValidationIdx,
+    'PR submission readiness must be checked after post-archive validation');
+  assert.ok(readinessIdx < commitIdx,
+    'PR submission readiness must pass before committing archive artifacts');
+  assert.ok(readinessIdx < prIdx,
+    'PR submission readiness must pass before creating the PR');
+});
+
 test('Ring 5 has retry-only DOP recovery and excludes merge-era operations', async () => {
   const skill = await readSkill();
   assert.match(skill, /\/sdd-review --retry-dop <slug>/);

@@ -180,11 +180,12 @@ openspec init  # 如果还没初始化
 | 2 | `/sdd-plan <slug>` | `design.md` + `tasks.md`（`### Task N:` 格式） | brainstorming 启动；`.meta.json` 的 `dop_status: "plan-ready"` |
 | 3 | （可选）`/sdd-task <slug>` | 细化 tasks.md | `.meta.json` 的 `dop_status: "tasks-ready"` |
 | 4 | `/sdd-apply <slug>` | 每个 task 的 TDD 实现 + commit | 每 task commit 含 `[<change-id>] <type>: T<N> - <subject>`；`.meta.json` 的 `dop_status: "apply-done"` |
-| 5 | `/sdd-review <slug>` | archive + canonical specs + 原子 PR + DOP done | PR 同时含实现、`openspec/specs/`、archive 工件；archive meta 含 `archive_done_at` 和预 PR 写入的 `dop_completion.status: "pending"` |
+| 5 | `/sdd-review <slug>` | archive + canonical specs + 原子 PR + DOP done | PR 同时含实现、`openspec/specs/`、archive 工件；archive meta 含 `archive_done_at` 和预 PR 写入的 `dop_completion.status: "pending"`；提交或创建 PR 前必须再次运行 `openspec validate <slug> --strict` 并通过 `checkPrSubmissionReadiness` |
 
 **关键断言**：
 - 每个 commit 的 message **必须**以 `[<change-id>]` 开头
 - Ring 5 必须在 `gh pr create` 成功后调用 `dop change done`；archive meta 的 pending 状态不在 PR 后改写。以 `dop change done <change-id>` 的成功结果及 `dop change view <change-id>` 的外部状态核验 DOP 完成；DOP 失败时保留 PR，并用 `/sdd-review --retry-dop <slug>` 重试
+- Ring 5 archive 后必须再次通过 `openspec validate <slug> --strict`，并以 `checkPrSubmissionReadiness` 确认 archive、fresh validation 和未提交 PR 状态；任一失败不得 commit 或创建 PR
 - Ring 5 成功后，下次启动 Claude Code **不应**再有"未完成审查"提醒
 
 ---

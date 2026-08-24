@@ -35,6 +35,8 @@ Ring 5 是**单阶段**：code review → validate → archive → 验证 canoni
 3. `Bash("openspec archive <slug>")`；禁止用 `mv` 兜底。
 4. 在 `openspec/changes/archive/<slug>/.meta.json` 写入 `archive_done_at:<ISO timestamp>`，保留 `dop_completion`。
 5. 对每个 delta capability 读取 `openspec/specs/<capability>/spec.md`，确认 delta 已进入 canonical specs；任一失败即停止，不能创建 PR。
+6. **归档后重新严格验证**：`Bash("openspec validate <slug> --strict")`；失败即停止，不能提交或创建 PR。
+7. **PR 提交就绪检查**：从 `lib/sdd-validation.js` 调用 `checkPrSubmissionReadiness(archiveMeta, archiveChangeDir, cwd)`；它必须确认 review ring、`archive_done_at`、尚未记录 `pr_url`，以及前置验证仍新鲜。返回 `allowed !== true` 即停止，不能提交或创建 PR。
 
 ### 步骤 4：提交、推送与创建原子 PR
 
@@ -64,7 +66,7 @@ gh pr create --repo <owner/repo> --base main --head <issue-branch> --body-file <
 
 - ✅ 必须通过 code review（无 Critical/Important）并读 baseline HARD_RULE/SOFT_RULE 作为触发条件
 - ✅ 必须扫描 `[OVERRIDE]`；Critical、Important、Minor 的分级和 20 字理由门槛必须执行
-- ✅ 必须先 archive 并验证 canonical specs，再提交、推送 issue branch 和创建原子 PR
+- ✅ 必须先 archive、验证 canonical specs、重新执行 `openspec validate <slug> --strict` 并通过 `checkPrSubmissionReadiness`，再提交、推送 issue branch 和创建原子 PR
 - ✅ archive 前必须写 pending `dop_completion`（prepared_at、prepared_head），archive 后必须写 archive_done_at
 - ✅ 成功 PR 后才可调用 DOP done，且 change_id 仅来自 archive meta
 - ❌ 禁止跳过 code review、删除归档、用 mv 替代 archive、`git add -A`

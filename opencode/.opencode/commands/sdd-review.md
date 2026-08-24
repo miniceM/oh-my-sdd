@@ -7,7 +7,7 @@ argument-hint: "[slug 或 change-id] 或 --retry-dop <slug>"
 
 Invocation arguments (verbatim): `$ARGUMENTS`
 
-Execute the `sdd-review` skill following its full workflow. Ring 5 ends when the atomic PR is created successfully; PR review and merge are outside SDD. The default flow is review → validate → archive → canonical-spec verification → commit/push issue branch → atomic PR → `dop change done`. `--retry-dop <slug>` reads the archived change-id and only retries that DOP command.
+Execute the `sdd-review` skill following its full workflow. Ring 5 ends when the atomic PR is created successfully; PR review and merge are outside SDD. The default flow is review → validate → archive → canonical-spec verification → post-archive `openspec validate <slug> --strict` → `checkPrSubmissionReadiness` → commit/push issue branch → atomic PR → `dop change done`. Both post-archive checks must pass before any commit or PR. `--retry-dop <slug>` reads the archived change-id and only retries that DOP command.
 
 Locate and follow the first existing skill definition:
 - `skills/sdd-review/SKILL.md` (parent project source)
@@ -37,6 +37,6 @@ This contract only selects the source of skill content. It does not select who
 executes a task. Continue to obey the parent skill's execution-mode, Orchestrator,
 and subagent rules; missing content never authorizes inline task execution.
 
-The selected skill is authoritative. It requires HARD_RULE/OVERRIDE review gates, `openspec archive` (no `mv` fallback), canonical-spec verification, and an issue-branch PR containing implementation plus archive artifacts. Pass arguments unchanged: a slug/change-id, or `--retry-dop <slug>`.
+The selected skill is authoritative. It requires HARD_RULE/OVERRIDE review gates, `openspec archive` (no `mv` fallback), canonical-spec verification, post-archive strict validation, `checkPrSubmissionReadiness` before commit/PR, and an issue-branch PR containing implementation plus archive artifacts. Pass arguments unchanged: a slug/change-id, or `--retry-dop <slug>`.
 
 Commit format reminder: `[<change-id>] <type>: <subject>` (HARD_RULE).
