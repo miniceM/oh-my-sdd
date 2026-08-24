@@ -17,8 +17,9 @@ argument-hint: "[change-id 或变更描述，可选]"
 - **openspec 检查**：`Bash("openspec --version")`。未装 → **阻塞**
 - **dop 检查**：`Bash("dop change list")`。未装 → 警告（用自然语言模式）。Ring 1 只读取 DOP 数据；Ring 5 会在原子 PR 创建成功后执行 `dop change done`。
 - **gh 检查**：`Bash("gh --version")`。未装 → 警告（跳过 issue/分支）
-- **pending DOP 检查**：扫 `openspec/changes/archive/*/.meta.json` 找 `dop_completion.status` 为 `pending` 或 `failed`
-  - 有 → 警告"N 个变更的 PR 已交付但 DOP 尚未完成，建议先跑 /sdd-review --retry-dop <slug>"
+- **pending DOP 检查**：扫 `openspec/changes/archive/*/.meta.json`，当前状态为 `dop_completion.status: pending`；外部 `dop change view <change-id>` 是 DOP 完成状态的 SSOT
+  - 历史 archive metadata 若含 `dop_completion.status=failed`，仅作为向后兼容记录处理；当前流程不写该状态
+  - 有 → 警告"N 个变更的 PR 已交付但外部 DOP 尚未完成，建议先跑 /sdd-review --retry-dop <slug>"
   - 让用户确认继续或停止
 
 ### 步骤 2：确定 change-id + slug（阻断性强制）
@@ -81,7 +82,7 @@ oms-git-hooks install
 
 > **执行顺序**：先按下面 body 模板填好，再 `gh issue create` 一次成型。**禁止** create 后再 edit。
 
-issue 是整个变更的 tracking ticket（从 spec 到 review-done），**不是当前阶段汇报**。body 模板：
+issue 是整个变更的 tracking ticket（从 spec 到原子 PR 提交并完成外部 DOP 核验），**不是当前阶段汇报**。body 模板：
 
 ```markdown
 ## 变更背景

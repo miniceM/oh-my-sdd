@@ -14,6 +14,12 @@ const MIRROR_SPEC_SKILL_PATH = path.resolve(
   __dirname, '..', '..', 'opencode', 'oms-skills', 'sdd-spec', 'SKILL.md'
 );
 const RUNBOOK_PATH = path.resolve(__dirname, '..', '..', 'docs', 'release', 'runbook-internal-test-v0.2.md');
+const PUBLISHED_SKILL_PATH = path.resolve(
+  __dirname, '..', '..', 'opencode', '.opencode', 'skills', 'sdd-review', 'SKILL.md'
+);
+const COMMAND_PATH = path.resolve(
+  __dirname, '..', '..', 'opencode', '.opencode', 'commands', 'sdd-review.md'
+);
 
 async function readSkill() {
   return readFile(SKILL_PATH, 'utf8');
@@ -132,6 +138,23 @@ test('OVERRIDE minimum-reason threshold (20 chars) is documented', async () => {
 test('OpenCode mirror is byte-for-byte identical to the canonical review skill', async () => {
   assert.equal(await readFile(MIRROR_SKILL_PATH, 'utf8'), await readSkill());
   assert.equal(await readFile(MIRROR_SPEC_SKILL_PATH, 'utf8'), await readFile(SPEC_SKILL_PATH, 'utf8'));
+  assert.equal(await readFile(PUBLISHED_SKILL_PATH, 'utf8'), await readSkill());
+});
+
+test('spec handoff uses atomic PR/DOP completion and no review-done state', async () => {
+  const spec = await readFile(SPEC_SKILL_PATH, 'utf8');
+  assert.doesNotMatch(spec, /review-done/);
+  assert.match(spec, /原子 PR 创建成功后执行 `dop change done`/);
+  assert.match(spec, /当前状态.*pending.*外部.*dop change view.*SSOT/);
+});
+
+test('published review command has single-stage semantics and no legacy operations', async () => {
+  const command = await readFile(COMMAND_PATH, 'utf8');
+  assert.match(command, /单阶段|原子 PR/);
+  assert.match(command, /--retry-dop <slug>/);
+  for (const forbidden of ['--finalize', 'PR merge', 'git checkout main', 'git push origin main']) {
+    assert.equal(command.includes(forbidden), false, `command must not contain ${forbidden}`);
+  }
 });
 
 test('Ring 5 checks GitHub context and Issue acceptance before a repo-targeted PR', async () => {
