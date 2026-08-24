@@ -289,9 +289,8 @@ export class OpenCodeAdapter extends HostAdapter {
       events.push(event);
       if (event.status === 'running') ctx.announce(`→ ${event.message}`);
       else if (event.status === 'succeeded') ctx.announce(`✓ ${event.message}`);
-      else if (event.status === 'deferred') ctx.announce(`… ${event.message}`);
       else if (event.status === 'warning') ctx.announce(`⚠️  ${event.message}${event.reason ? `：${event.reason}` : ''}`);
-      else ctx.announce(`❌ ${event.message}${event.reason ? `：${event.reason}` : ''}`);
+      else if (event.status !== 'deferred') ctx.announce(`❌ ${event.message}${event.reason ? `：${event.reason}` : ''}`);
     }
     const result = summarizeExecution(plan, events);
     if (usedFallbackPlan && result.status === 'succeeded') {
