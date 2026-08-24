@@ -367,6 +367,12 @@ if (process.platform !== 'win32') {
     const projectCwd = mkdtempSync(path.join(tmpdir(), 'oms-ss-project-'));
     t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
     t.after(() => rmSync(projectCwd, { recursive: true, force: true }));
+    const stateDir = path.join(tmpHome, '.oh-my-sdd');
+    mkdirSync(stateDir, { recursive: true });
+    writeFileSync(path.join(stateDir, 'config.json'), JSON.stringify({
+      update_check_disabled: true,
+      telemetry_disabled: true,
+    }));
     const iamDir = makeStubIam({
       credentials: [
         { username: 'fifo-devops', status: 'logged', is_api_key_true: true },

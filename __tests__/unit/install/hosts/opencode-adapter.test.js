@@ -84,7 +84,7 @@ describe('OpenCodeAdapter', () => {
       assert.ok(!messages.some((message) => message.includes('HARD_RULE')));
       assert.ok(!messages.some((message) => message.includes('本地开发模式')));
       assert.deepEqual(installation.summary.next_actions, [
-        '重启 OpenCode 后完成插件加载；随后可运行 oms status --tool opencode 查看注册状态。',
+        '重启 OpenCode 后完成插件加载；随后可运行 oms doctor --tool opencode 查看注册状态。',
       ]);
       const deferredEvents = installation.events.filter((event) => event.status === 'deferred');
       assert.equal(deferredEvents.length, 4);

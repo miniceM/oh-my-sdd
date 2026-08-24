@@ -87,27 +87,35 @@ export function renderResultText(result) {
   const summary = objectOrEmpty(safeResult.summary);
   const lines = ["Installation result (status: " + (safeResult.status || "succeeded") + ")"];
 
-  const terminalEvents = events.filter((e) => e.status !== "running" && e.status !== "deferred");
+  const terminalEvents = events.filter((e) => e.status !== "running");
   if (terminalEvents.length > 0) {
     lines.push("  Steps:");
     for (const event of terminalEvents) {
-      const icon = event.status === "succeeded" ? "✓" : (event.status === "warning" ? "⚠️" : "❌");
+      const icon = event.status === "succeeded"
+        ? "✓"
+        : (event.status === "deferred" ? "↪" : (event.status === "warning" ? "⚠️" : "❌"));
       const hostLabel = event.host ? "[" + event.host + "] " : "";
       const resource = objectOrEmpty(event.resource);
       const target = resource.path || resource.id || null;
       const phase = resource.phase ? ` (${resource.phase}${resource.owner ? `, owner: ${resource.owner}` : ""})` : "";
-      lines.push("  " + icon + " " + hostLabel + (event.message || event.action || "step") + (target ? ` — ${target}${phase}` : phase));
+      const status = event.status ? `[${event.status}] ` : "";
+      lines.push("  " + icon + " " + hostLabel + status + (event.message || event.action || "step") + (target ? ` — ${target}${phase}` : phase));
       if (event.reason) {
         lines.push("      Reason: " + event.reason);
+      }
+      if (event.next_action) {
+        lines.push("      Next action: " + event.next_action);
       }
     }
   }
 
   if (summary.total_steps !== undefined) {
-    const detail = (summary.warnings || 0) > 0 || (summary.unsupported || 0) > 0
-      ? `, ${summary.warnings || 0} warnings, ${summary.unsupported || 0} unsupported`
-      : "";
-    lines.push("", "Summary: " + (summary.succeeded || 0) + " succeeded, " + (summary.failed || 0) + " failed" + detail + ", " + (summary.total_steps || 0) + " total");
+    const detail = [];
+    if ((summary.deferred || 0) > 0) detail.push(`${summary.deferred} deferred`);
+    if ((summary.warnings || 0) > 0) detail.push(`${summary.warnings} warnings`);
+    if ((summary.unsupported || 0) > 0) detail.push(`${summary.unsupported} unsupported`);
+    const detailText = detail.length > 0 ? `, ${detail.join(", ")}` : "";
+    lines.push("", "Summary: " + (summary.succeeded || 0) + " succeeded, " + (summary.failed || 0) + " failed" + detailText + ", " + (summary.total_steps || 0) + " total");
   }
 
   if (summary.not_executed?.length > 0) {
@@ -117,9 +125,15 @@ export function renderResultText(result) {
 
   if (summary.layers) {
     lines.push("Evidence:");
-    for (const layer of ["written", "registered", "loaded", "enforced"]) {
+    for (const layer of ["written", "registered", "postinstall", "loaded", "enforced"]) {
       const evidence = objectOrEmpty(summary.layers[layer]);
       lines.push(`  - ${layer}: ${evidence.state || "unknown"}${evidence.reason ? ` — ${evidence.reason}` : ""}`);
+      if (evidence.path) lines.push("      Path: " + evidence.path);
+      if (Array.isArray(evidence.paths) && evidence.paths.length > 0) {
+        lines.push("      Paths: " + evidence.paths.join(", "));
+      }
+      if (evidence.evidence) lines.push("      Evidence: " + evidence.evidence);
+      if (evidence.next_action) lines.push("      Next action: " + evidence.next_action);
     }
   }
 

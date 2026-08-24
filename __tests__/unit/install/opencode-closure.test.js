@@ -92,7 +92,8 @@ test('OpenCode installation returns structured events and postflight evidence', 
     assert.equal(installation.summary.warnings, 0);
     assert.equal(installation.summary.deferred, 4);
     assert.deepEqual(installation.summary.next_actions, [
-      '重启 OpenCode 后完成插件加载；随后可运行 oms status --tool opencode 查看注册状态。',
+      '重启 OpenCode 后完成插件加载；随后可运行 oms doctor --tool opencode 查看注册状态。',
+      'Start OpenCode to run the plugin lifecycle, then run oms doctor --tool opencode.',
     ]);
     const deferredEvents = installation.events.filter((event) => event.status === 'deferred');
     assert.equal(deferredEvents.length, 4);
@@ -100,7 +101,7 @@ test('OpenCode installation returns structured events and postflight evidence', 
       'postinstall', 'postinstall', 'postinstall', 'runtime',
     ]);
     assert.ok(deferredEvents.every((event) => event.next_action
-      === '重启 OpenCode 后完成插件加载；随后可运行 oms status --tool opencode 查看注册状态。'));
+      === '重启 OpenCode 后完成插件加载；随后可运行 oms doctor --tool opencode 查看注册状态。'));
     assert.ok(installation.events.some((event) => event.status === 'running'));
     assert.ok(installation.events.some((event) => event.status === 'succeeded'));
     assert.ok(installation.events.every((event) => event.status !== 'warning' || event.resource.phase !== 'postinstall'));

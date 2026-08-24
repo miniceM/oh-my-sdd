@@ -122,6 +122,45 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
   assert.equal(fs.existsSync(manifestPath), false, 'npm ownership manifest should be removed');
 });
 
+test('text install result closes the OpenCode pending loop in an isolated HOME', () => {
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oms-install-text-'));
+  const env = {
+    ...process.env,
+    HOME: tmpHome,
+    USERPROFILE: tmpHome,
+    XDG_HOME_DIR: tmpHome,
+    XDG_CONFIG_HOME: path.join(tmpHome, '.config'),
+    OPENCODE_CONFIG_DIR: path.join(tmpHome, '.config', 'opencode'),
+  };
+
+  try {
+    const result = spawnSync('node', ['bin/oms-install.js', '--tool', 'opencode', '--yes'], {
+      cwd: worktreeRoot,
+      env,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const output = `${result.stdout}\n${result.stderr}`;
+    assert.match(output, /Installation result \(status: succeeded\)/);
+    assert.match(output, /\[deferred\]/);
+    assert.match(output, /postinstall/);
+    assert.match(output, /pending/);
+    assert.match(output, /OpenCode managed skills directory|OpenCode managed commands directory/);
+    assert.match(output, /npm lifecycle has not completed/);
+    assert.match(output, /Checked npm lifecycle outputs/);
+    assert.match(output, /oms doctor --tool opencode/);
+    assert.match(output, /loaded: unknown/);
+    assert.match(output, /No OpenCode host launch event was observed/);
+    assert.match(output, /enforced: unknown/);
+    assert.match(output, /No active OpenCode runtime write-prevention probe was observed/);
+    assert.ok(fs.existsSync(path.join(tmpHome, '.config', 'opencode', 'opencode.json')));
+  } finally {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
 test('packed OpenCode package installs from a clean tarball and its wrapper fully uninstalls', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'oms-opencode-pack-'));
   const home = path.join(root, 'home');
