@@ -200,6 +200,23 @@ describe('checkPrSubmissionReadiness', () => {
     assert.match(result.reason, /pre-PR validation.*stale/i);
   });
 
+  test('rejects validation when its plan composite has drifted', async () => {
+    const result = await checkPrSubmissionReadiness({
+      archive_done_at: '2026-01-01',
+      sdd: {
+        ...readySdd,
+        plan: { composite: 'current-plan-hash' },
+        validation: readySdd.validation.map(record => ({
+          ...record,
+          plan_composite: 'validated-plan-hash',
+        })),
+      },
+    }, '/tmp', null);
+
+    assert.equal(result.allowed, false);
+    assert.match(result.reason, /pre-PR validation.*stale/i);
+  });
+
   test('rejects validation when Git HEAD has drifted', async () => {
     const tmpDir = await makeTmpDir();
     try {
