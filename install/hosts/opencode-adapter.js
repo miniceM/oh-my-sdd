@@ -1,8 +1,7 @@
 // install/hosts/opencode-adapter.js — OpenCode 安装/卸载入口。
 //
-// Production installs register the npm package in opencode.json. OpenCode
-// resolves and updates the package; local plugin paths are retained only for
-// backwards-compatible uninstall cleanup.
+// Production installs delegate plugin registration to the OpenCode CLI; local
+// plugin paths are retained only for backwards-compatible uninstall cleanup.
 
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -10,7 +9,7 @@ import { join } from 'node:path';
 import { HostAdapter } from '../host-adapter.js';
 import { rmIfExistsSync } from '../common/fs.js';
 import { isCliInPath } from '../common/detect.js';
-import { patchOpencodeJson, unpatchOpencodeJson } from '../common/config-patcher.js';
+import { unpatchOpencodeJson } from '../common/config-patcher.js';
 import { removeSentinelBlock } from '../common/sentinel.js';
 import { getHomeDir } from '../../lib/platform.js';
 import { main as cleanupNpmResources } from '../../opencode/scripts/uninstall.mjs';
@@ -222,10 +221,9 @@ export class OpenCodeAdapter extends HostAdapter {
         },
       },
       resources: [
-        { type: 'config', path: paths.json, action: 'patch', phase: 'install', owner: 'oms-install', scope: 'global', owned: true },
         {
-          type: 'npm-plugin', id: OPENCODE_PLUGIN_ENTRY, path: paths.json,
-          action: 'register-plugin', phase: 'install', owner: 'oms-install', scope: 'global', enforcement: 'registered', owned: true,
+          type: 'npm-plugin', id: OPENCODE_PLUGIN_ENTRY, path: paths.configDir,
+          action: 'install-plugin-native', phase: 'install', owner: 'OpenCode CLI', scope: 'global', enforcement: 'registered', owned: true,
         },
         { type: 'plugin-resources', path: paths.skillsDir, action: 'synchronize', phase: 'postinstall', owner: 'npm-plugin', scope: 'global', owned: true },
         { type: 'commands', path: paths.commandsDir, action: 'synchronize', phase: 'postinstall', owner: 'npm-plugin', scope: 'global', owned: true },
@@ -313,7 +311,7 @@ export class OpenCodeAdapter extends HostAdapter {
     return result;
   }
 
-  static async applyResource(resource) {
+  static async applyResource(resource, ctx = {}) {
     if (resource?.phase === 'postinstall') {
       return {
         status: 'deferred',
@@ -332,10 +330,27 @@ export class OpenCodeAdapter extends HostAdapter {
         next_action: DEFERRED_LOAD_ACTION,
       };
     }
-    if (resource?.action === 'patch' || resource?.action === 'register-plugin' || resource?.action === 'patch-config') {
-      const paths = getOpenCodePaths();
-      patchOpencodeJson({ configPath: paths.json });
-      return { status: 'succeeded', owned: true, message: `Wrote ${paths.json}` };
+    if (resource?.action === 'install-plugin-native') {
+      const runCommand = ctx.execFileSync || execFileSync;
+      const command = 'opencode';
+      const args = ['plugin', OPENCODE_PLUGIN_ENTRY, '--global', '--force'];
+      const retry = `Retry: ${command} ${args.join(' ')}`;
+      try {
+        runCommand(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+        return {
+          status: 'succeeded', owned: true,
+          message: `Installed ${OPENCODE_PLUGIN_ENTRY} through the OpenCode CLI.`,
+          next_action: DEFERRED_LOAD_ACTION,
+        };
+      } catch (error) {
+        const output = error?.stderr || error?.stdout || error?.message || String(error);
+        return {
+          status: 'failed', owned: true,
+          message: `Failed to install ${OPENCODE_PLUGIN_ENTRY} through the OpenCode CLI.`,
+          reason: String(output).trim(),
+          next_action: retry,
+        };
+      }
     }
     return {
       status: 'unsupported',
