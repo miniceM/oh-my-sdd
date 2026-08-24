@@ -31,15 +31,17 @@ direct push to `main` are removed.
 
 ## State and audit data
 
-The terminal Ring 5 delivery state is `pr-submitted`; it stores the PR URL,
-number, branch head SHA, and `pr_submitted_at`.  Archive completion is recorded
-before PR creation because it is part of the PR content.
+The terminal Ring 5 delivery state reported to the user is `pr-submitted`.
+Archive completion and a `dop_completion: pending` intent are recorded before
+PR creation because they are part of the PR content.  A PR URL and number are
+only known after `gh pr create`; they are returned to the user and must not be
+written back through a follow-up branch commit.  The DOP change view is the
+durable source of truth for the external completion result.
 
 DOP closure is represented separately from the SDD ring:
 
-- `dop_completion.status`: `pending`, `succeeded`, or `failed`;
-- `dop_completion.attempted_at` and, on success, `dop_completion.done_at`;
-- a sanitized failure summary when the command fails.
+- `dop_completion.status`: `pending` before the PR is created;
+- `dop_completion.prepared_at` and the branch head SHA covered by the PR.
 
 The repository's immutable artifacts prove what was submitted.  DOP is the
 source of truth for whether the delivery notification completed; no follow-up
@@ -50,10 +52,10 @@ commit is made merely to change a completion flag after the PR exists.
 Creating a PR is never rolled back because `dop change done` fails.  The user
 is told that the PR exists but DOP completion is pending, and the failure is
 observable through the session-start reconciliation path.  Reconciliation uses
-the archived metadata to identify pending changes, first checks the DOP change
-state, and retries `done` only when DOP has not already recorded completion.
-The implementation must verify the real CLI's already-done behavior before
-assuming idempotence.
+the archived completion intent to identify candidates, first checks the DOP
+change state, and offers the narrowly scoped DOP retry path only when DOP has
+not already recorded completion.  The implementation must verify the real
+CLI's already-done behavior before assuming idempotence.
 
 ## Scope and tests
 
