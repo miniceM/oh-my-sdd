@@ -1,10 +1,11 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
 
-import { addValidationRecord, checkPrePrReadiness, checkFinalizeReadiness } from '../../../lib/sdd-validation.js';
+import { addValidationRecord, checkPrePrReadiness, checkPrSubmissionReadiness } from '../../../lib/sdd-validation.js';
 import { readMeta, writeMeta } from '../../../lib/sdd-context.js';
 
 async function makeTmpDir() {
@@ -129,46 +130,128 @@ describe('checkPrePrReadiness', () => {
 });
 
 // ============================================
-// checkFinalizeReadiness
+// checkPrSubmissionReadiness
 // ============================================
 
-describe('checkFinalizeReadiness', () => {
-  test('requires pr_url', async () => {
-    const result = await checkFinalizeReadiness({ sdd: { ring: 'review' } });
-    assert.equal(result.allowed, false);
-    assert.match(result.reason, /PR URL/);
-  });
+describe('checkPrSubmissionReadiness', () => {
+  const readySdd = {
+    ring: 'review',
+    spec: { composite: 'spec-hash' },
+    plan: { composite: 'plan-hash' },
+    validation: [
+      { type: 'test', result: 'pass', spec_composite: 'spec-hash', plan_composite: 'plan-hash' },
+      { type: 'review', result: 'pass', spec_composite: 'spec-hash', plan_composite: 'plan-hash' },
+      { type: 'constitution', result: 'pass', spec_composite: 'spec-hash', plan_composite: 'plan-hash' },
+      { type: 'openspec-validate', result: 'pass', spec_composite: 'spec-hash', plan_composite: 'plan-hash' },
+    ],
+  };
 
-  test('requires sdd context', async () => {
-    const result = await checkFinalizeReadiness({ pr_url: 'https://...' });
+  test('requires SDD context', async () => {
+    const result = await checkPrSubmissionReadiness({}, '/tmp', null);
     assert.equal(result.allowed, false);
     assert.match(result.reason, /SDD context/);
   });
 
   test('requires review ring', async () => {
-    const result = await checkFinalizeReadiness({
-      pr_url: 'https://...',
-      sdd: { ring: 'apply' },
-    });
+    const result = await checkPrSubmissionReadiness({ sdd: { ring: 'apply' } }, '/tmp', null);
     assert.equal(result.allowed, false);
     assert.match(result.reason, /review/);
   });
 
-  test('rejects already archived', async () => {
-    const result = await checkFinalizeReadiness({
-      pr_url: 'https://...',
-      sdd: { ring: 'review' },
-      archive_done_at: '2026-01-01',
-    });
+  test('requires archive completion', async () => {
+    const result = await checkPrSubmissionReadiness({ sdd: readySdd }, '/tmp', null);
     assert.equal(result.allowed, false);
-    assert.match(result.reason, /archived/i);
+    assert.match(result.reason, /archive/i);
   });
 
-  test('allows when all conditions met', async () => {
-    const result = await checkFinalizeReadiness({
+  test('rejects existing PR URL', async () => {
+    const result = await checkPrSubmissionReadiness({
+      archive_done_at: '2026-01-01',
       pr_url: 'https://...',
+      sdd: readySdd,
+    }, '/tmp', null);
+    assert.equal(result.allowed, false);
+    assert.match(result.reason, /PR URL.*already/i);
+  });
+
+  test('requires fresh pre-PR validation', async () => {
+    const result = await checkPrSubmissionReadiness({
+      archive_done_at: '2026-01-01',
       sdd: { ring: 'review' },
-    });
+    }, '/tmp', null);
+    assert.equal(result.allowed, false);
+    assert.match(result.reason, /validation/i);
+  });
+
+  test('rejects validation when its spec composite has drifted', async () => {
+    const result = await checkPrSubmissionReadiness({
+      archive_done_at: '2026-01-01',
+      sdd: {
+        ...readySdd,
+        spec: { composite: 'current-spec-hash' },
+        validation: readySdd.validation.map(record => ({
+          ...record,
+          spec_composite: 'validated-spec-hash',
+        })),
+      },
+    }, '/tmp', null);
+
+    assert.equal(result.allowed, false);
+    assert.match(result.reason, /pre-PR validation.*stale/i);
+  });
+
+  test('rejects validation when its plan composite has drifted', async () => {
+    const result = await checkPrSubmissionReadiness({
+      archive_done_at: '2026-01-01',
+      sdd: {
+        ...readySdd,
+        plan: { composite: 'current-plan-hash' },
+        validation: readySdd.validation.map(record => ({
+          ...record,
+          plan_composite: 'validated-plan-hash',
+        })),
+      },
+    }, '/tmp', null);
+
+    assert.equal(result.allowed, false);
+    assert.match(result.reason, /pre-PR validation.*stale/i);
+  });
+
+  test('rejects validation when Git HEAD has drifted', async () => {
+    const tmpDir = await makeTmpDir();
+    try {
+      execFileSync('git', ['init'], { cwd: tmpDir });
+      execFileSync('git', ['config', 'user.name', 'Test User'], { cwd: tmpDir });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: tmpDir });
+      await writeFile(path.join(tmpDir, 'README.md'), '# test\n');
+      execFileSync('git', ['add', 'README.md'], { cwd: tmpDir });
+      execFileSync('git', ['commit', '-m', 'initial commit'], { cwd: tmpDir });
+      const currentHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).trim();
+      const staleHead = currentHead === '0'.repeat(40) ? '1'.repeat(40) : '0'.repeat(40);
+
+      const result = await checkPrSubmissionReadiness({
+        archive_done_at: '2026-01-01',
+        sdd: {
+          ...readySdd,
+          validation: readySdd.validation.map(record => ({
+            ...record,
+            head: staleHead,
+          })),
+        },
+      }, '/tmp', tmpDir);
+
+      assert.equal(result.allowed, false);
+      assert.match(result.reason, /pre-PR validation.*stale/i);
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('allows archive delivery before PR creation with fresh validation', async () => {
+    const result = await checkPrSubmissionReadiness({
+      archive_done_at: '2026-01-01',
+      sdd: readySdd,
+    }, '/tmp', null);
     assert.equal(result.allowed, true);
   });
 });

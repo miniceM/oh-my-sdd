@@ -1236,6 +1236,40 @@ test('resource sync retries after a transient Windows lock metadata error', () =
   }
 });
 
+test('resource sync treats Windows EPERM for an existing lock directory as contention', () => {
+  const root = fixture();
+  try {
+    const lock = join(root, 'target.oh-my-sdd-sync.lock');
+    mkdirSync(lock, { recursive: true });
+    writeFileSync(join(lock, 'owner.json'), JSON.stringify({
+      ownerPid: 2_147_483_647,
+      createdAt: Date.now(),
+      token: 'stale-owner',
+    }));
+
+    let firstAcquire = true;
+    let ran = false;
+    withSyncLock(lock, () => { ran = true; }, {
+      timeoutMs: 100,
+      pollMs: 1,
+      mkdirSync: (target) => {
+        if (firstAcquire) {
+          firstAcquire = false;
+          const error = new Error('Windows reports lock contention as EPERM');
+          error.code = 'EPERM';
+          throw error;
+        }
+        return mkdirSync(target);
+      },
+    });
+
+    assert.equal(ran, true);
+    assert.equal(existsSync(lock), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('resource sync reclaims a lock whose owner process is dead', () => {
   const root = fixture();
   try {

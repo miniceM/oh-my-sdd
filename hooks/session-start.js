@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, opendir, lstat } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,6 +11,7 @@ import { loadConfig } from '../lib/config.js';
 import { debug, warn, error } from '../lib/log.js';
 import { getStateDir, sessionMetaPath, isIamInPath } from '../lib/platform.js';
 import { checkForUpdates, buildUpdateNotification } from '../lib/update-check.js';
+import { isDopCompletionPending } from '../lib/sdd-context.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT ?? path.resolve(__dirname, '..');
@@ -20,7 +22,13 @@ const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT ?? path.resolve(__dirname, '.
 const IAM_AUTH_TIMEOUT_MS = 5_000;   // getAuthStatus spawn + parse budget
 const DOP_FLUSH_TIMEOUT_MS = 3_000;  // drain leftover queue at start
 const DOP_REPORT_TIMEOUT_MS = 3_000; // session.start report
+const DOP_CHANGE_VIEW_TIMEOUT_MS = 2_000; // archived DOP completion reconciliation
+const DOP_CHANGE_ID_PATTERN = /^[A-Z]{2,6}\d+$/;
 const STDIN_TIMEOUT_MS = 1_000;      // stdin read safety
+const ARCHIVE_META_READ_TIMEOUT_MS = 250;
+const MAX_PENDING_DOP_SCAN_ENTRIES = 50;
+const MAX_PENDING_DOP_META_BYTES = 64 * 1024;
+const PENDING_DOP_SCAN_BUDGET_MS = 500;
 
 async function readContent(name) {
   const p = path.join(PLUGIN_ROOT, 'content', name);
@@ -193,25 +201,30 @@ async function main() {
     }
   }
 
-  // 扫描 unfinalized SDD changes（PR 已创建但 /sdd-review --finalize 未跑）
-  // 防止用户 merge PR 后忘记 finalize，导致 openspec/specs/ drift
-  let unfinalizedReminder = '';
+  // Archive-before-PR can leave a local completion intent behind when the
+  // read/write DOP completion step failed. Reconcile it with a bounded,
+  // read-only view before asking the user to retry.
+  let pendingDopReminder = '';
   if (authState.state === 'OK') {
     try {
-      const unfinalized = await scanUnfinalizedReviews(stdin.cwd);
-      if (unfinalized.length > 0) {
-        const lines = unfinalized.map(c =>
-          `  • ${c.slug} (change-id: ${c.change_id}, status: ${c.dop_status})`
+      const pendingCompletions = await scanPendingDopCompletions(stdin.cwd);
+      const incompleteCompletions = (await Promise.all(pendingCompletions.map(async (change) => {
+        const status = await getDopChangeStatus(change.change_id);
+        return status === 'done' ? null : change;
+      }))).filter(Boolean);
+      if (incompleteCompletions.length > 0) {
+        const lines = incompleteCompletions.map(c =>
+          `  • ${c.slug} (change-id: ${c.change_id})`
         );
-        const header = `⚠️ oh-my-sdd: ${unfinalized.length} 个变更未完成 /sdd-review --finalize\n` +
-                       `   openspec/specs/ 可能 drift。请尽快 finalize：\n`;
-        const footer = `\n   命令：/sdd-review --finalize <slug>\n`;
+        const header = `⚠️ oh-my-sdd: ${incompleteCompletions.length} 个变更的 DOP 完成状态待补偿\n` +
+                       `   请在确认后重试：\n`;
+        const footer = `\n   命令：/sdd-review --retry-dop <slug>\n`;
         const msg = header + lines.join('\n') + footer;
         process.stderr.write(msg + '\n');
-        unfinalizedReminder = msg;
+        pendingDopReminder = msg;
       }
     } catch (err) {
-      debug(`扫描 unfinalized 失败（非阻塞）: ${err.message}`);
+      debug(`扫描 pending DOP completion 失败（非阻塞）: ${err.message}`);
     }
   }
 
@@ -220,8 +233,8 @@ async function main() {
   if (updateInfo?.hasUpdate) {
     finalContext += updateInfo.additionalContext;
   }
-  if (unfinalizedReminder) {
-    finalContext += `\n\n---\n${unfinalizedReminder}`;
+  if (pendingDopReminder) {
+    finalContext += `\n\n---\n${pendingDopReminder}`;
   }
 
   const output = {
@@ -248,36 +261,119 @@ async function checkForPluginUpdates(currentVersion) {
   return null;
 }
 
-// 扫描 cwd/openspec/changes/ 找出 dop_status=pr-created 且未 archive 的变更
-async function scanUnfinalizedReviews(cwd) {
-  const changesDir = path.join(cwd, 'openspec', 'changes');
-  let entries;
-  try {
-    entries = await readdir(changesDir, { withFileTypes: true });
-  } catch {
-    return [];  // 不是 SDD 项目（无 openspec/changes/）
-  }
-  const unfinalized = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name === 'archive') continue;
-    const metaPath = path.join(changesDir, entry.name, '.meta.json');
-    try {
-      const meta = JSON.parse(await readFile(metaPath, 'utf8'));
-      // 阶段 1 完成的标志：dop_status=pr-created 或 review-done-pr 但没有 archive_done_at
-      if ((meta.dop_status === 'pr-created' || meta.dop_status === 'pr-ready-to-finalize')
-          && !meta.archive_done_at) {
-        unfinalized.push({
-          slug: entry.name,
-          change_id: meta.change_id || '(unknown)',
-          dop_status: meta.dop_status,
-          pr_url: meta.pr_url || null,
-        });
+// Runs only `dop change view <id> -j`, which is a read-only reconciliation
+// probe. Never invoke a DOP completion command from SessionStart.
+async function getDopChangeStatus(changeId) {
+  // Metadata is local and may be malformed. Keep the value constrained before
+  // constructing the Windows cmd.exe command below.
+  if (!DOP_CHANGE_ID_PATTERN.test(changeId)) return null;
+
+  const executable = process.platform === 'win32' ? (process.env.ComSpec || 'cmd.exe') : 'dop';
+  const args = process.platform === 'win32'
+    ? ['/d', '/s', '/c', `dop change view ${changeId} -j`]
+    : ['change', 'view', changeId, '-j'];
+  return new Promise((resolve) => {
+    // .cmd/.bat entrypoints cannot be launched with execFile directly on
+    // Windows. Invoke the command interpreter only after strict ID validation;
+    // POSIX continues to exec dop directly.
+    execFile(executable, args, {
+      timeout: DOP_CHANGE_VIEW_TIMEOUT_MS,
+      maxBuffer: 64 * 1024,
+      windowsHide: true,
+    }, (err, stdout) => {
+      if (err) {
+        debug(`DOP change view ${changeId} 失败（将提示重试）: ${err.message}`);
+        resolve(null);
+        return;
       }
+      try {
+        const result = JSON.parse(stdout);
+        resolve(typeof result.status === 'string' ? result.status.toLowerCase() : null);
+      } catch {
+        debug(`DOP change view ${changeId} 返回无效 JSON（将提示重试）`);
+        resolve(null);
+      }
+    });
+  });
+}
+
+// Scan archived changes because the local intent survives an archive when the
+// post-PR DOP completion call needs compensation.
+async function scanPendingDopCompletions(cwd) {
+  const deadline = Date.now() + PENDING_DOP_SCAN_BUDGET_MS;
+  const archiveDir = path.join(cwd, 'openspec', 'changes', 'archive');
+  let archive;
+  try {
+    archive = await opendir(archiveDir);
+  } catch {
+    return [];  // 不是 SDD 项目，或尚无 archive
+  }
+  const pendingDopCompletions = [];
+  let enumerated = 0;
+  try {
+    for await (const entry of archive) {
+      if (Date.now() >= deadline || enumerated >= MAX_PENDING_DOP_SCAN_ENTRIES) break;
+      enumerated += 1;
+      if (!entry.isDirectory()) continue;
+
+      const metaPath = path.join(archiveDir, entry.name, '.meta.json');
+      try {
+        const stats = await withRemainingScanBudget(() => lstat(metaPath), deadline);
+        if (!stats.isFile()) continue;
+        if (stats.size > MAX_PENDING_DOP_META_BYTES) continue;
+        const meta = JSON.parse(await readArchiveMeta(metaPath, deadline));
+        if (isDopCompletionPending(meta)) {
+          pendingDopCompletions.push({
+            slug: sanitizeReminderValue(entry.name),
+            change_id: sanitizeReminderValue(meta.change_id),
+          });
+        }
+      } catch {
+        // 无 .meta.json、超时或 JSON 损坏 - 跳过
+      }
+
+      if (Date.now() >= deadline) break;
+    }
+  } catch {
+    // 目录遍历异常 - 保持 fail-open
+  } finally {
+    try {
+      await archive.close();
     } catch {
-      // 无 .meta.json 或 JSON 损坏 - 跳过
+      // for-await 已关闭目录或 close 失败 - 无需影响 hook
     }
   }
-  return unfinalized;
+  return pendingDopCompletions;
+}
+
+async function withRemainingScanBudget(operation, deadline) {
+  const remainingBudgetMs = deadline - Date.now();
+  if (remainingBudgetMs <= 0) throw new Error('archive metadata scan timed out');
+
+  let timer;
+  try {
+    return await Promise.race([
+      operation(),
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('archive metadata scan timed out')),
+          Math.min(ARCHIVE_META_READ_TIMEOUT_MS, remainingBudgetMs),
+        );
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function readArchiveMeta(metaPath, deadline) {
+  return withRemainingScanBudget(() => readFile(metaPath, 'utf8'), deadline);
+}
+
+function sanitizeReminderValue(value) {
+  const sanitized = String(value ?? '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 80);
+  return sanitized || '(unknown)';
 }
 
 main().catch((err) => {

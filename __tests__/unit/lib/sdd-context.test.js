@@ -16,9 +16,22 @@ import {
   verifyUpstreamFingerprints,
   listActiveChanges,
   resolveChange,
+  isDopCompletionPending,
   RINGS,
   RING_ORDINAL,
 } from '../../../lib/sdd-context.js';
+
+// ============================================
+// DOP completion intent
+// ============================================
+
+describe('isDopCompletionPending', () => {
+  test('returns true only for pending completion intent', () => {
+    assert.equal(isDopCompletionPending({ dop_completion: { status: 'pending' } }), true);
+    assert.equal(isDopCompletionPending({ dop_completion: { status: 'succeeded' } }), false);
+    assert.equal(isDopCompletionPending({}), false);
+  });
+});
 
 // ============================================
 // Helpers

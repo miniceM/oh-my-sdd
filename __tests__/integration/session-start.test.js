@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, chmodSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, chmodSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
+import { opendir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -77,7 +78,40 @@ function makeHangingIam() {
   return dir;
 }
 
-function runHook(stdinPayload, env = {}) {
+function makeStubDop({ output, exitCode = 0, logPath }) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'dop-stub-'));
+  if (process.platform === 'win32') {
+    // Keep the output in a file: cmd's echo can alter JSON quoting.  The
+    // command is deliberately limited to the reconciliation probe so this
+    // fixture cannot accidentally mask a different DOP invocation.
+    if (exitCode === 0) {
+      writeFileSync(path.join(dir, 'dop.json'), JSON.stringify(output) + '\n');
+    }
+    const cmdPath = path.join(dir, 'dop.cmd');
+    const body = exitCode === 0
+      ? 'type "%~dp0dop.json"\r\n'
+      : 'echo forced DOP failure 1>&2\r\n';
+    const log = logPath ? `echo %* > "${logPath}"\r\n` : '';
+    writeFileSync(cmdPath,
+      '@echo off\r\n' +
+      `${log}` +
+      'if not "%~1"=="change" exit /b 0\r\n' +
+      'if not "%~2"=="view" exit /b 0\r\n' +
+      'if not "%~3"=="ARD123456" exit /b 0\r\n' +
+      'if not "%~4"=="-j" exit /b 0\r\n' +
+      `${body}` +
+      `exit /b ${exitCode}\r\n`);
+  } else {
+    const cmdPath = path.join(dir, 'dop');
+    const body = exitCode === 0 ? `echo '${JSON.stringify(output)}'` : 'echo "forced DOP failure" >&2';
+    const log = logPath ? `printf '%s' "$*" > '${logPath}'\n` : '';
+    writeFileSync(cmdPath, `#!/bin/bash\n${log}${body}\nexit ${exitCode}\n`);
+    chmodSync(cmdPath, 0o755);
+  }
+  return dir;
+}
+
+function runHook(stdinPayload, env = {}, timeoutMs) {
   return new Promise((resolve) => {
     // Always ensure node is findable even if the test clobbered PATH.
     const finalEnv = { ...process.env, ...env };
@@ -91,10 +125,21 @@ function runHook(stdinPayload, env = {}) {
     });
     let stdout = '';
     let stderr = '';
+    let timedOut = false;
+    const timeout = timeoutMs === undefined ? null : setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGKILL');
+    }, timeoutMs);
     child.stdout.on('data', (c) => { stdout += c; });
     child.stderr.on('data', (c) => { stderr += c; });
-    child.on('error', (err) => resolve({ exitCode: -1, stdout, stderr, spawnError: err }));
-    child.on('close', (exitCode) => resolve({ exitCode, stdout, stderr }));
+    child.on('error', (err) => {
+      if (timeout) clearTimeout(timeout);
+      resolve({ exitCode: -1, stdout, stderr, spawnError: err, timedOut });
+    });
+    child.on('close', (exitCode) => {
+      if (timeout) clearTimeout(timeout);
+      resolve({ exitCode, stdout, stderr, timedOut });
+    });
     if (stdinPayload === null || stdinPayload === undefined) {
       child.stdin.end();
     } else {
@@ -275,4 +320,347 @@ test('OK state: session meta includes started_at for duration calc', async (t) =
   assert.ok(Number.isFinite(startedAtMs), 'started_at must be a valid ISO date');
   assert.ok(startedAtMs >= before && startedAtMs <= after,
     `started_at (${meta.started_at}) should be within the hook run window [${before}, ${after}]`);
+});
+
+test('OK state: reminds pending DOP completion recorded in archived change metadata', async (t) => {
+  const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-dop-'));
+  const projectCwd = mkdtempSync(path.join(tmpdir(), 'oms-ss-project-'));
+  t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
+  t.after(() => rmSync(projectCwd, { recursive: true, force: true }));
+  const iamDir = makeStubIam({
+    credentials: [
+      { username: 'dop-devops', status: 'logged', is_api_key_true: true },
+      { username: 'dop-gitee', status: 'logged', is_api_key_true: false },
+    ],
+  });
+  t.after(() => rmSync(iamDir, { recursive: true, force: true }));
+
+  const archiveDir = path.join(projectCwd, 'openspec', 'changes', 'archive', 'ARD123456');
+  mkdirSync(archiveDir, { recursive: true });
+  writeFileSync(path.join(archiveDir, '.meta.json'), JSON.stringify({
+    change_id: 'ARD123456',
+    dop_completion: { status: 'pending' },
+  }));
+
+  const result = await runHook(
+    { session_id: 'dop-retry-test-1', cwd: projectCwd, source: 'startup' },
+    {
+      HOME: tmpHome,
+      USERPROFILE: tmpHome,
+      PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
+      CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+    }
+  );
+
+  assert.equal(result.exitCode, 0);
+  const out = JSON.parse(result.stdout);
+  assert.match(out.additionalContext, /ARD123456/);
+  assert.match(out.additionalContext, /\/sdd-review --retry-dop <slug>/);
+  assert.doesNotMatch(out.additionalContext, /--finalize/);
+  assert.doesNotMatch(out.additionalContext, /merge PR/);
+  assert.doesNotMatch(out.additionalContext, /openspec\/specs\/ drift/);
+});
+
+if (process.platform !== 'win32') {
+  test('OK state: skips FIFO archive metadata without blocking the hook', async (t) => {
+    const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-fifo-'));
+    const projectCwd = mkdtempSync(path.join(tmpdir(), 'oms-ss-project-'));
+    t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
+    t.after(() => rmSync(projectCwd, { recursive: true, force: true }));
+    const iamDir = makeStubIam({
+      credentials: [
+        { username: 'fifo-devops', status: 'logged', is_api_key_true: true },
+        { username: 'fifo-gitee', status: 'logged', is_api_key_true: false },
+      ],
+    });
+    t.after(() => rmSync(iamDir, { recursive: true, force: true }));
+
+    const archiveDir = path.join(projectCwd, 'openspec', 'changes', 'archive', 'fifo-change');
+    mkdirSync(archiveDir, { recursive: true });
+    execFileSync('mkfifo', [path.join(archiveDir, '.meta.json')]);
+
+    const result = await runHook(
+      { session_id: 'fifo-test-1', cwd: projectCwd, source: 'startup' },
+      {
+        HOME: tmpHome,
+        USERPROFILE: tmpHome,
+        PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
+        CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+      },
+      3_000,
+    );
+
+    assert.equal(result.timedOut, false, 'FIFO metadata must not block session-start');
+    assert.equal(result.exitCode, 0);
+    const out = JSON.parse(result.stdout);
+    assert.doesNotMatch(out.additionalContext, /fifo-change/);
+  });
+}
+
+test('OK state: sanitizes archived pending metadata before rendering it', async (t) => {
+  const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-sanitize-'));
+  const projectCwd = mkdtempSync(path.join(tmpdir(), 'oms-ss-project-'));
+  t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
+  t.after(() => rmSync(projectCwd, { recursive: true, force: true }));
+  const iamDir = makeStubIam({
+    credentials: [
+      { username: 'sanitize-devops', status: 'logged', is_api_key_true: true },
+      { username: 'sanitize-gitee', status: 'logged', is_api_key_true: false },
+    ],
+  });
+  t.after(() => rmSync(iamDir, { recursive: true, force: true }));
+
+  // Windows does not permit a newline in a directory name. The archived
+  // metadata is still adversarial: session-start must sanitize change_id
+  // before rendering it in the user-facing reminder.
+  const archiveDir = path.join(projectCwd, 'openspec', 'changes', 'archive', 'ARD_SAFE_DIR');
+  mkdirSync(archiveDir, { recursive: true });
+  writeFileSync(path.join(archiveDir, '.meta.json'), JSON.stringify({
+    change_id: 'CID_SAFE\nINJECTED-CHANGE',
+    dop_completion: { status: 'pending' },
+  }));
+
+  const result = await runHook(
+    { session_id: 'sanitize-test-1', cwd: projectCwd, source: 'startup' },
+    {
+      HOME: tmpHome,
+      USERPROFILE: tmpHome,
+      PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
+      CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+    }
+  );
+
+  assert.equal(result.exitCode, 0);
+  const out = JSON.parse(result.stdout);
+  assert.match(out.additionalContext, /CID_SAFEINJECTED-CHANGE/);
+  assert.doesNotMatch(out.additionalContext, /\nINJECTED-CHANGE/);
+});
+
+test('OK state: ignores non-pending and malformed archive metadata', async (t) => {
+  const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-ignore-'));
+  const projectCwd = mkdtempSync(path.join(tmpdir(), 'oms-ss-project-'));
+  t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
+  t.after(() => rmSync(projectCwd, { recursive: true, force: true }));
+  const iamDir = makeStubIam({
+    credentials: [
+      { username: 'ignore-devops', status: 'logged', is_api_key_true: true },
+      { username: 'ignore-gitee', status: 'logged', is_api_key_true: false },
+    ],
+  });
+  t.after(() => rmSync(iamDir, { recursive: true, force: true }));
+
+  const archiveRoot = path.join(projectCwd, 'openspec', 'changes', 'archive');
+  mkdirSync(path.join(archiveRoot, 'not-pending'), { recursive: true });
+  writeFileSync(path.join(archiveRoot, 'not-pending', '.meta.json'), JSON.stringify({
+    change_id: 'not-pending',
+    dop_completion: { status: 'done' },
+  }));
+  mkdirSync(path.join(archiveRoot, 'malformed'), { recursive: true });
+  writeFileSync(path.join(archiveRoot, 'malformed', '.meta.json'), '{invalid JSON');
+
+  const result = await runHook(
+    { session_id: 'ignore-test-1', cwd: projectCwd, source: 'startup' },
+    {
+      HOME: tmpHome,
+      USERPROFILE: tmpHome,
+      PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
+      CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+    }
+  );
+
+  assert.equal(result.exitCode, 0);
+  const out = JSON.parse(result.stdout);
+  assert.doesNotMatch(out.additionalContext, /--retry-dop/);
+});
+
+test('OK state: caps archived DOP completion scan entries in enumeration order', async (t) => {
+  const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-dop-cap-'));
+  const projectCwd = mkdtempSync(path.join(tmpdir(), 'oms-ss-project-'));
+  t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
+  t.after(() => rmSync(projectCwd, { recursive: true, force: true }));
+  const iamDir = makeStubIam({
+    credentials: [
+      { username: 'cap-devops', status: 'logged', is_api_key_true: true },
+      { username: 'cap-gitee', status: 'logged', is_api_key_true: false },
+    ],
+  });
+  t.after(() => rmSync(iamDir, { recursive: true, force: true }));
+
+  const archiveRoot = path.join(projectCwd, 'openspec', 'changes', 'archive');
+  for (let index = 0; index < 50; index += 1) {
+    const slug = `non-pending-${String(index).padStart(2, '0')}`;
+    const archiveDir = path.join(archiveRoot, slug);
+    mkdirSync(archiveDir, { recursive: true });
+    writeFileSync(path.join(archiveDir, '.meta.json'), JSON.stringify({
+      change_id: slug,
+      dop_completion: { status: 'done' },
+    }));
+  }
+  const pendingAfterCap = path.join(archiveRoot, 'pending-after-cap');
+  mkdirSync(pendingAfterCap, { recursive: true });
+  const archive = await opendir(archiveRoot);
+  const enumeratedEntries = [];
+  for await (const entry of archive) enumeratedEntries.push(entry.name);
+  const pendingEntry = enumeratedEntries[50];
+  assert.ok(pendingEntry, 'fixture must contain an entry beyond the scan cap');
+  writeFileSync(path.join(archiveRoot, pendingEntry, '.meta.json'), JSON.stringify({
+    change_id: pendingEntry,
+    dop_completion: { status: 'pending' },
+  }));
+
+  const startedAt = Date.now();
+  const result = await runHook(
+    { session_id: 'dop-cap-test-1', cwd: projectCwd, source: 'startup' },
+    {
+      HOME: tmpHome,
+      USERPROFILE: tmpHome,
+      PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
+      CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+    },
+    3_500,
+  );
+  const elapsed = Date.now() - startedAt;
+
+  assert.equal(result.timedOut, false, 'entry-capped scan must not block session-start');
+  assert.ok(elapsed < 3_500, `hook took ${elapsed}ms, should return under 3.5s`);
+  assert.equal(result.exitCode, 0);
+  const out = JSON.parse(result.stdout);
+  assert.doesNotMatch(out.additionalContext, /--retry-dop/);
+});
+
+test('OK state: skips a non-directory archive entry', async (t) => {
+  const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-dop-file-'));
+  const projectCwd = mkdtempSync(path.join(tmpdir(), 'oms-ss-project-'));
+  t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
+  t.after(() => rmSync(projectCwd, { recursive: true, force: true }));
+  const iamDir = makeStubIam({
+    credentials: [
+      { username: 'file-devops', status: 'logged', is_api_key_true: true },
+      { username: 'file-gitee', status: 'logged', is_api_key_true: false },
+    ],
+  });
+  t.after(() => rmSync(iamDir, { recursive: true, force: true }));
+
+  const archiveRoot = path.join(projectCwd, 'openspec', 'changes', 'archive');
+  mkdirSync(archiveRoot, { recursive: true });
+  writeFileSync(path.join(archiveRoot, 'not-a-change'), JSON.stringify({
+    change_id: 'not-a-change',
+    dop_completion: { status: 'pending' },
+  }));
+
+  const result = await runHook(
+    { session_id: 'dop-file-test-1', cwd: projectCwd, source: 'startup' },
+    {
+      HOME: tmpHome,
+      USERPROFILE: tmpHome,
+      PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
+      CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+    }
+  );
+
+  assert.equal(result.exitCode, 0);
+  const out = JSON.parse(result.stdout);
+  assert.doesNotMatch(out.additionalContext, /not-a-change|--retry-dop/);
+});
+
+test('OK state: skips oversized pending archive metadata', async (t) => {
+  const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-dop-size-'));
+  const projectCwd = mkdtempSync(path.join(tmpdir(), 'oms-ss-project-'));
+  t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
+  t.after(() => rmSync(projectCwd, { recursive: true, force: true }));
+  const iamDir = makeStubIam({
+    credentials: [
+      { username: 'size-devops', status: 'logged', is_api_key_true: true },
+      { username: 'size-gitee', status: 'logged', is_api_key_true: false },
+    ],
+  });
+  t.after(() => rmSync(iamDir, { recursive: true, force: true }));
+
+  const archiveDir = path.join(projectCwd, 'openspec', 'changes', 'archive', 'oversized');
+  mkdirSync(archiveDir, { recursive: true });
+  writeFileSync(path.join(archiveDir, '.meta.json'), JSON.stringify({
+    change_id: 'oversized',
+    dop_completion: { status: 'pending' },
+    padding: 'x'.repeat(64 * 1024),
+  }));
+
+  const startedAt = Date.now();
+  const result = await runHook(
+    { session_id: 'dop-size-test-1', cwd: projectCwd, source: 'startup' },
+    {
+      HOME: tmpHome,
+      USERPROFILE: tmpHome,
+      PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
+      CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+    },
+    2_500,
+  );
+  const elapsed = Date.now() - startedAt;
+
+  assert.equal(result.timedOut, false, 'oversized metadata must not block session-start');
+  assert.ok(elapsed < 2_500, `hook took ${elapsed}ms, should return under 2.5s`);
+  assert.equal(result.exitCode, 0);
+  const out = JSON.parse(result.stdout);
+  assert.doesNotMatch(out.additionalContext, /oversized|--retry-dop/);
+});
+
+test('archived pending DOP intent does not remind when DOP already reports done', async (t) => {
+  const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-'));
+  const projectDir = mkdtempSync(path.join(tmpdir(), 'oms-project-'));
+  const iamDir = makeStubIam({ credentials: [
+    { username: 'carol-devops', status: 'logged', is_api_key_true: true },
+    { username: 'carol-gitee', status: 'logged', is_api_key_true: false },
+  ] });
+  const dopLogPath = path.join(tmpHome, 'dop-view.args');
+  const dopDir = makeStubDop({ output: { id: 'ARD123456', status: 'done' }, logPath: dopLogPath });
+  t.after(() => [tmpHome, projectDir, iamDir, dopDir].forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+  const metaDir = path.join(projectDir, 'openspec', 'changes', 'archive', 'ARD123456');
+  writeFileSync(path.join(projectDir, '.sdd-no-telemetry'), '');
+  mkdirSync(metaDir, { recursive: true });
+  writeFileSync(path.join(metaDir, '.meta.json'), JSON.stringify({
+    change_id: 'ARD123456',
+    dop_completion: { status: 'pending', prepared_at: '2026-08-24T00:00:00Z' },
+  }));
+
+  const result = await runHook({ session_id: 'dop-done', cwd: projectDir }, {
+    HOME: tmpHome,
+    USERPROFILE: tmpHome,
+    PATH: `${iamDir}${path.delimiter}${dopDir}${path.delimiter}${process.env.PATH}`,
+    CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.doesNotMatch(JSON.parse(result.stdout).additionalContext, /--retry-dop/);
+  assert.match(readFileSync(dopLogPath, 'utf8'), /change view ARD123456 -j/);
+});
+
+test('archived pending DOP intent reminds retry when DOP view fails', async (t) => {
+  const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-'));
+  const projectDir = mkdtempSync(path.join(tmpdir(), 'oms-project-'));
+  const iamDir = makeStubIam({ credentials: [
+    { username: 'carol-devops', status: 'logged', is_api_key_true: true },
+    { username: 'carol-gitee', status: 'logged', is_api_key_true: false },
+  ] });
+  const dopDir = makeStubDop({ exitCode: 1 });
+  t.after(() => [tmpHome, projectDir, iamDir, dopDir].forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+  const metaDir = path.join(projectDir, 'openspec', 'changes', 'archive', 'ARD123456');
+  writeFileSync(path.join(projectDir, '.sdd-no-telemetry'), '');
+  mkdirSync(metaDir, { recursive: true });
+  writeFileSync(path.join(metaDir, '.meta.json'), JSON.stringify({
+    change_id: 'ARD123456',
+    dop_completion: { status: 'pending', prepared_at: '2026-08-24T00:00:00Z' },
+  }));
+
+  const result = await runHook({ session_id: 'dop-view-failed', cwd: projectDir }, {
+    HOME: tmpHome,
+    USERPROFILE: tmpHome,
+    PATH: `${iamDir}${path.delimiter}${dopDir}${path.delimiter}${process.env.PATH}`,
+    CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+  });
+
+  assert.equal(result.exitCode, 0);
+  const context = JSON.parse(result.stdout).additionalContext;
+  assert.match(context, /ARD123456/);
+  assert.match(context, /--retry-dop/);
+  assert.doesNotMatch(context, /--finalize|merge PR|openspec\/specs\/ drift/);
 });

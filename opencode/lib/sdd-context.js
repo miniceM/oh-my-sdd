@@ -115,6 +115,16 @@ export async function readSddContext(changeDir) {
 }
 
 /**
+ * Whether archive metadata records an outstanding DOP completion intent.
+ *
+ * @param {object} meta - Full .meta.json content.
+ * @returns {boolean}
+ */
+export function isDopCompletionPending(meta) {
+  return meta?.dop_completion?.status === 'pending';
+}
+
+/**
  * Shape of the sdd context stored in .meta.json:
  *
  * {

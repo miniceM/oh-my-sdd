@@ -6,6 +6,20 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SKILL_PATH = path.resolve(__dirname, '..', '..', 'skills', 'sdd-review', 'SKILL.md');
+const MIRROR_SKILL_PATH = path.resolve(
+  __dirname, '..', '..', 'opencode', 'oms-skills', 'sdd-review', 'SKILL.md'
+);
+const SPEC_SKILL_PATH = path.resolve(__dirname, '..', '..', 'skills', 'sdd-spec', 'SKILL.md');
+const MIRROR_SPEC_SKILL_PATH = path.resolve(
+  __dirname, '..', '..', 'opencode', 'oms-skills', 'sdd-spec', 'SKILL.md'
+);
+const RUNBOOK_PATH = path.resolve(__dirname, '..', '..', 'docs', 'release', 'runbook-internal-test-v0.2.md');
+const PUBLISHED_SKILL_PATH = path.resolve(
+  __dirname, '..', '..', 'opencode', '.opencode', 'skills', 'sdd-review', 'SKILL.md'
+);
+const COMMAND_PATH = path.resolve(
+  __dirname, '..', '..', 'opencode', '.opencode', 'commands', 'sdd-review.md'
+);
 
 async function readSkill() {
   return readFile(SKILL_PATH, 'utf8');
@@ -119,4 +133,102 @@ test('OVERRIDE minimum-reason threshold (20 chars) is documented', async () => {
     /20\s*字/.test(skill),
     'OVERRIDE scan must document the ≥20-char minimum reason threshold'
   );
+});
+
+test('OpenCode mirror is byte-for-byte identical to the canonical review skill', async () => {
+  assert.equal(await readFile(MIRROR_SKILL_PATH, 'utf8'), await readSkill());
+  assert.equal(await readFile(MIRROR_SPEC_SKILL_PATH, 'utf8'), await readFile(SPEC_SKILL_PATH, 'utf8'));
+  assert.equal(await readFile(PUBLISHED_SKILL_PATH, 'utf8'), await readSkill());
+});
+
+test('spec handoff uses atomic PR/DOP completion and no review-done state', async () => {
+  const spec = await readFile(SPEC_SKILL_PATH, 'utf8');
+  assert.doesNotMatch(spec, /review-done/);
+  assert.match(spec, /原子 PR 创建成功后执行 `dop change done`/);
+  assert.match(spec, /当前状态.*pending.*外部.*dop change view.*SSOT/);
+});
+
+test('published review command has single-stage semantics and no legacy operations', async () => {
+  const command = await readFile(COMMAND_PATH, 'utf8');
+  assert.match(command, /单阶段|原子 PR/);
+  assert.match(command, /--retry-dop <slug>/);
+  for (const forbidden of ['--finalize', 'PR merge', 'git checkout main', 'git push origin main']) {
+    assert.equal(command.includes(forbidden), false, `command must not contain ${forbidden}`);
+  }
+});
+
+test('Ring 5 checks GitHub context and Issue acceptance before a repo-targeted PR', async () => {
+  const skill = await readSkill();
+  assert.match(skill, /gh auth status/);
+  assert.match(skill, /仓库上下文/);
+  assert.match(skill, /state.*OPEN|OPEN.*state/);
+  assert.match(skill, /验收标准.*checklist|checklist.*验收标准/);
+  assert.match(skill, /证据/);
+  assert.match(skill, /gh pr create --repo <owner\/repo>/);
+});
+
+test('Post-PR DOP handling leaves archive metadata pending and retry only calls done', async () => {
+  const skill = await readSkill();
+  const postPr = skill.slice(skill.indexOf('### 步骤 5：PR 创建成功后完成 DOP'));
+  const retry = skill.slice(skill.indexOf('## `--retry-dop <slug>`'));
+  assert.doesNotMatch(postPr, /dop_completion\.status.*(?:done|failed)/);
+  assert.match(postPr, /保持.*pending/);
+  assert.match(retry, /只.*dop change done <change-id>/);
+  assert.doesNotMatch(retry, /openspec archive|gh pr create|git push/);
+});
+
+test('runbook documents only the single Ring 5 delivery phase', async () => {
+  const runbook = await readFile(RUNBOOK_PATH, 'utf8');
+  assert.equal(runbook.includes('--finalize'), false);
+  assert.doesNotMatch(runbook, /\| 6 \|/);
+});
+
+test('Ring 5 archives before creating the atomic PR, then completes DOP', async () => {
+  const skill = await readSkill();
+  const archiveIdx = skill.indexOf('openspec archive <slug>');
+  const prIdx = skill.indexOf('gh pr create');
+  const dopIdx = skill.indexOf('dop change done <change-id>');
+
+  assert.ok(archiveIdx !== -1, 'Ring 5 must archive before submitting its PR');
+  assert.ok(prIdx > archiveIdx, 'gh pr create must follow openspec archive');
+  assert.ok(dopIdx > prIdx, 'DOP completion must follow successful PR creation');
+  assert.match(skill, /dop_completion:\s*\{\s*status:\s*['"]pending['"]/);
+  assert.match(skill, /prepared_at/);
+  assert.match(skill, /prepared_head/);
+  assert.match(skill, /archive_done_at/);
+});
+
+test('Ring 5 revalidates the archived change and checks submission readiness before commit or PR', async () => {
+  const skill = await readSkill();
+  const archiveIdx = skill.indexOf('openspec archive <slug>');
+  const postArchiveValidationIdx = skill.indexOf('openspec validate <slug> --strict', archiveIdx + 1);
+  const readinessIdx = skill.indexOf('checkPrSubmissionReadiness');
+  const commitIdx = skill.indexOf('git commit -m');
+  const prIdx = skill.indexOf('gh pr create');
+
+  assert.ok(postArchiveValidationIdx > archiveIdx,
+    'strict OpenSpec validation must run again after archive');
+  assert.ok(readinessIdx > postArchiveValidationIdx,
+    'PR submission readiness must be checked after post-archive validation');
+  assert.ok(readinessIdx < commitIdx,
+    'PR submission readiness must pass before committing archive artifacts');
+  assert.ok(readinessIdx < prIdx,
+    'PR submission readiness must pass before creating the PR');
+});
+
+test('Ring 5 has retry-only DOP recovery and excludes merge-era operations', async () => {
+  const skill = await readSkill();
+  assert.match(skill, /\/sdd-review --retry-dop <slug>/);
+  assert.match(skill, /只从 archive meta 读 change_id/);
+  assert.match(skill, /DOP done 失败绝不撤销 PR/);
+
+  for (const forbidden of [
+    '--finalize',
+    'gh pr view',
+    'git checkout main',
+    'git pull origin main',
+    'git push origin main',
+  ]) {
+    assert.equal(skill.includes(forbidden), false, `skill must not contain ${forbidden}`);
+  }
 });

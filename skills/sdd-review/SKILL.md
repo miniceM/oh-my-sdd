@@ -1,160 +1,77 @@
 ---
 name: sdd-review
-description: 本 skill 在已完成实现、用户说"创建 PR"/"code review"/"归档"/"跑测试"/"finalize"或调用 /sdd-review 时使用。SDD Ring 5——两阶段：默认创建 PR，--finalize 在 PR merge 后做 openspec archive。委托 superpowers:requesting-code-review。
-argument-hint: "[slug 或 change-id] 或 --finalize [slug 或 change-id]"
+description: 本 skill 在已完成实现、用户说"创建 PR"/"code review"/"归档"/"跑测试"或调用 /sdd-review 时使用。SDD Ring 5 在原子 PR 成功创建时结束，并完成 DOP。
+argument-hint: "[slug 或 change-id] 或 --retry-dop <slug>"
 ---
 
-# /sdd-review —— SDD 第 5 环：验证 + PR + 归档（两阶段）
+# /sdd-review —— SDD 第 5 环：审查、归档与原子 PR 交付
 
-> **两阶段流程**（archive 在 PR merge 后，符合 GitFlow + 避免 PR reject 时回滚 archive）：
-> - **阶段 1（默认 `/sdd-review <slug>`）**：code review → validate → gh pr create → 写 review.md → 告诉用户 merge PR
-> - **阶段 2（PR merge 后 `/sdd-review --finalize <slug>`）**：切回 main + pull → openspec archive → 验证 merge → DOP 完成 → commit
+Ring 5 是**单阶段**：code review → validate → archive → 验证 canonical specs → commit/push issue branch → 创建含实现、`openspec/specs/` 和 archive 工件的 PR → DOP done。PR 审核和合并不属于 SDD。
 
----
+## 默认流程
 
-## 阶段 1：默认调用（PR merge 前）
-
-**前置检查**：tasks.md 所有 `- [ ]` 已勾选。
+**前置检查**：tasks.md 所有 `- [ ]` 已勾选；iam 校验；读 change `.meta.json` 的 change_id 和当前 issue branch；工作树仅含本 change 待提交工件；测试覆盖率 ≥ 80%。执行 `gh auth status`，确认仓库上下文为 `<owner/repo>`；用 `gh issue view <issue-number> --repo <owner/repo> --json title,body,state,url` 确认 Issue 为 OPEN、含验收标准 checklist，并逐项保留测试命令输出或人工检查证据。任一不满足即停止。
 
 ### 步骤 1：前置检查
 
-- iam 校验；读 tasks.md（全勾选）+ .meta.json（change_id、分支名）
-- git status 干净；测试覆盖率 ≥ 80%
+确认上述前置检查通过；不通过即停止。
 
 ### 步骤 1.5：Constitution Authority（委托 review 前置）
 
-**baseline 在本次 review 范围内不可协商。**违反 HARD_RULE 自动 CRITICAL，违反 SOFT_RULE 自动 Important。
-
-读 `content/enterprise-baseline.md`（可用 `lib/constitution.js` 的 `loadBaseline()` 解析 frontmatter/body/syncReport）。把每条规则翻译成 reviewer 的触发条件：
-
-- **HARD_RULE 清单**（自动 CRITICAL 触发条件）：
-  - 身份声明——代码/commit/PR 自称 "Claude"/"Claude Code"/"通用 AI 助手" 或仅以模型名（如 glm-5）作身份 → CRITICAL
-  - 安全与合规底线——硬编码 AK/SK/token/密码/`.env`/私钥；`.gitignore` 未排除 `*.key`/`*.pem`；日志/错误/DOP 输出敏感值未脱敏；跳过 `/sdd-review`；禁用 DOP 埋点；`rm -rf /`、`git push --force` 到 main、`drop database` 等破坏性操作未先确认范围 → CRITICAL
-  - 提交规范——commit 缺 change-id；type 不属 `feat`/`fix`/`docs`/`refactor`/`test`/`chore`/`spec`/`plan`/`task`/`review` → CRITICAL
-- **SOFT_RULE 清单**（自动 Important 触发条件）：
-  - 工具使用规范——进入 SDD 阶段未用对应斜杠命令（`/sdd-spec` → `/sdd-plan` → `/sdd-task` → `/sdd-apply` → `/sdd-review`）；用户说"开始做 X"未先 `/sdd-spec`；单次回复跑两个阶段命令 → Important
-  - 推荐架构实践——同步阻塞 I/O 误用；循环内 I/O；公共 API 缺文档注释；README 缺项目简介/快速开始/配置说明/使用示例 → Important
-
-把这些触发条件连同派给 code-reviewer 的范围一并传递。**Constitution 冲突 always CRITICAL**，不得降级、重新解释或静默忽略——若原则本身需要变更，须在独立的 baseline 更新 PR 处理，不在本 change 内协商。
+读 `content/enterprise-baseline.md`，将每条规则作为 reviewer 的触发条件：违反 **HARD_RULE** 自动 **CRITICAL**；违反 **SOFT_RULE** 自动 **Important**。HARD_RULE 包括身份声明、安全/合规底线和提交规范；SOFT_RULE 包括 SDD 工具使用与推荐架构实践。Constitution 冲突 always CRITICAL，不得重新解释或静默忽略。
 
 ### 步骤 2：委托 superpowers:requesting-code-review
 
-派 code-reviewer 审整支分支（main → 当前分支）。收集 findings（Critical/Important/Minor）。**Critical/Important 未修 → 停止，提示先 `/sdd-apply` 继续**。
+派 reviewer 审整支 issue branch（main → 当前分支），收集 Critical/Important/Minor。Critical 或 Important 未修则停止并提示 `/sdd-apply`；不得进入归档或 PR 创建。
 
-### 步骤 2.5：OVERRIDE 扫描（委托 review 之后）
+### 步骤 2.5：OVERRIDE 扫描
 
-读本 change 关联的 PR 描述与所有 commit message（PR 通常由步骤 4 创建；若尚未创建，扫分支上 `git log main..HEAD --format=%B%n%b` 的 commit body + PR template 草稿）。查找 `[OVERRIDE] <规则名>: <理由>` 标记。规则：
+扫描 commit message 和 PR body 草稿中的 `[OVERRIDE] <规则名>: <理由>`：无标记的 HARD_RULE 违反为 **Critical**；理由少于 20 字或模糊为 **Important**；理由清晰（至少 20 字且说明场景与权衡）为 **Minor**。OVERRIDE 只形成审计留痕，不豁免 baseline；将结果合并入 findings 后决定是否阻断。
 
-- **有 HARD_RULE 违反，但 PR/commit 无对应 `[OVERRIDE]` 标记** → 直接 **Critical**（不得降级，不得合并）
-- **有 `[OVERRIDE]` 标记但理由模糊（< 20 字或泛泛如"业务需要"/"临时方案"）** → 降为 **Important**，要求补全理由或撤回违反
-- **有 `[OVERRIDE]` 标记且理由清晰（≥ 20 字，含具体场景与权衡）** → 降为 **Minor**，在 review 报告中记录"已留痕"，仍需 maintainer 知情
+### 步骤 3：validate 与归档
 
-**严重级别优先级**：Constitution violations always CRITICAL（与 spec-kit `analyze.md:248` 对齐），除非有合规的 OVERRIDE 留痕。OVERRIDE 不豁免规则——只是把级别降档并写入审计轨迹；baseline 本身的更新仍须独立 PR。
+1. `Bash("openspec validate <slug> --strict")`；失败即停止。
+2. 在归档**之前**，向 `openspec/changes/<slug>/.meta.json` 写入：`dop_completion:{status:'pending',prepared_at:<ISO timestamp>,prepared_head:<git rev-parse HEAD>}`。
+3. `Bash("openspec archive <slug>")`；禁止用 `mv` 兜底。
+4. 在 `openspec/changes/archive/<slug>/.meta.json` 写入 `archive_done_at:<ISO timestamp>`，保留 `dop_completion`。
+5. 对每个 delta capability 读取 `openspec/specs/<capability>/spec.md`，确认 delta 已进入 canonical specs；任一失败即停止，不能创建 PR。
+6. **归档后重新严格验证**：`Bash("openspec validate <slug> --strict")`；失败即停止，不能提交或创建 PR。
+7. **PR 提交就绪检查**：从 `lib/sdd-validation.js` 调用 `checkPrSubmissionReadiness(archiveMeta, archiveChangeDir, cwd)`；它必须确认 review ring、`archive_done_at`、尚未记录 `pr_url`，以及前置验证仍新鲜。返回 `allowed !== true` 即停止，不能提交或创建 PR。
 
-将扫描结果合并进步骤 2 的 findings 列表后再决定是否阻断。
+### 步骤 4：提交、推送与创建原子 PR
 
-### 步骤 3：openspec validate
-
-`Bash("openspec validate <slug> --strict")`。失败 → 提示修 spec/code。
-
-### 步骤 4：gh 创建 PR（仅实现内容，**不含 archive**）
-
-PR body 必须含：change-id（如 `Closes: ARD123456`）、proposal 摘要、测试结果、review findings 摘要。
-**PR diff 应只含实现 + openspec/changes/<slug>/ 工件，不含 openspec/specs/ 改动或 archive 目录**。
-
-### 步骤 5：本地进度标记（不调 dop CLI）
-
-真实 dop 没有 `change update`——进度记录到 `.meta.json`：
-
-`Edit("openspec/changes/<slug>/.meta.json")`：把 `dop_status` 设为 `"pr-created"`，加 `dop_status_at: <ISO timestamp>` 和 `pr_url: <PR_URL>`。
-
-### 步骤 6：写 review.md（pre-merge 版，**不写 merge 结果**）
-
-`Write("openspec/changes/<slug>/review.md")`：工作量 vs 预估、偏离 spec/design、review findings 摘要、follow-up。
-
-### 步骤 6.5：commit + push
+PR 必须同时含实现、`openspec/specs/`、`openspec/changes/archive/<slug>/` 及其 archive meta。PR body 含 change-id、proposal 摘要、测试结果、review findings 和 archive/canonical-spec 验证结果。
 
 ```bash
-git add openspec/changes/<slug>/review.md openspec/changes/<slug>/RETRO.md openspec/changes/<slug>/.meta.json 2>/dev/null || true
-git commit -m '[<change-id>] review: ring 5 freeze - review + PR created'
-git push origin <branch>
+git add <本 change 的实现文件> openspec/specs/ openspec/changes/archive/<slug>/
+git commit -m '[<change-id>] review: ring 5 archive and atomic PR delivery'
+git push origin <issue-branch>
+gh pr create --repo <owner/repo> --base main --head <issue-branch> --body-file <pr-body-file>
 ```
 
-### 步骤 7：告诉用户下一步
+`gh pr create` 失败时停止并报告错误；不得调用 DOP done。
 
-> ✓ 变更 `<slug>` PR 已创建：<PR_URL>
-> ✓ DOP 状态：pr-created
->
-> **下一步（人工）**：GitHub review + merge PR，然后运行 `/sdd-review --finalize <slug>` 完成 openspec archive。
+### 步骤 5：PR 创建成功后完成 DOP
 
-**阶段 1 结束。不调用 openspec archive。**
+仅在 `gh pr create` 成功返回 PR URL 后调用 `dop change done <change-id>`；change_id 仅从 archive meta 读取。
 
----
+- 成功：保持 archive meta 中预 PR 写入的 `dop_completion.status:'pending'` 不变；输出 PR URL 和 Ring 5 完成。
+- 失败：保持 archive meta 中预 PR 写入的 pending 状态不变；**DOP done 失败绝不撤销 PR，也不报告五环完成**。输出 PR URL、错误摘要和 `/sdd-review --retry-dop <slug>`。
 
-## 阶段 2：PR merge 后调用（`--finalize`）
+## `--retry-dop <slug>`：仅重试 DOP 完成
 
-**前置检查**：用户已 merge PR（`gh pr view <PR编号> --json state` 验证 state=MERGED）。
-
-### F1：切回 main + pull
-
-```bash
-git checkout main && git pull origin main
-```
-
-### F2：openspec archive（保鲜核心）
-
-`Bash("openspec archive <slug>")`——openspec 自动 merge delta 到 openspec/specs/。**禁止 mv 兜底**。
-
-### F3：验证 merge
-
-对每个 delta_capability：`Read("openspec/specs/<capability>/spec.md")` 确认 delta 已应用。未 merge → 提示检查 validate 输出。
-
-### F4：更新 review.md（追加 merge 摘要）
-
-`Write("openspec/changes/archive/<slug>/review.md")`：追加"merge 结果摘要"（哪些 capability ADDED/MODIFIED/REMOVED）。
-
-### F5：本地进度标记 + 写 archive_done_at（不调 dop CLI）
-
-真实 dop 没有 `change update`——进度记录到 `.meta.json`：
-
-`Edit("openspec/changes/archive/<slug>/.meta.json")`（archive 已移动）：把 `dop_status` 设为 `"review-done"`，加 `dop_status_at: <ISO timestamp>` 和 `archive_done_at: <ISO timestamp>`。**关键**——否则 SessionStart hook 未完成提醒不消失。
-
-### F6：commit + push（在 main 上）
-
-```bash
-git add openspec/changes/archive/<slug>/ openspec/specs/ openspec/changes/<slug>/.meta.json 2>/dev/null || true
-git commit -m '[<change-id>] review: archive merge - specs updated'
-git push origin main
-```
-
-### F7：告诉用户完成
-
-> ✓ 变更 `<slug>` 已 archive
-> ✓ openspec/specs/ 已 merge delta（保鲜生效）
-> ✓ DOP 状态：review-done
->
-> 可以开始下一个 SDD 循环。运行 `/sdd-spec <new-change>`。
-
----
+只从 archive meta 读 change_id，然后只调用 `dop change done <change-id>`。不得 archive、审核、合并、创建或修改 PR，也不得编辑 archive meta。
 
 ## 强制规则
 
-- ✅ 必须 code review 通过（无 Critical/Important）
-- ✅ PR body 含 change-id 关联
-- ✅ DOP 标记（change-id 模式）
-- ✅ 测试覆盖率 ≥ 80%
-- ✅ review 必须读 baseline 的 HARD_RULE/SOFT_RULE 清单作为额外 Critical/Important 触发条件
-- ✅ review 必须扫描 PR 描述与 commit message 的 `[OVERRIDE]` 标记，无标记的 HARD_RULE 违反直接 Critical
-- ✅ 阶段 1 不做 archive；阶段 2 验证 PR merged 才 archive
-- ✅ archive 用 openspec archive（merge delta，保鲜生效）
-- ✅ 阶段 2 写 archive_done_at
-- ❌ 禁止跳过 code review
-- ❌ 禁止删除归档（审计依据）
-- ❌ 禁止 mv 替代 archive
-- ❌ 禁止把 archive 放进 PR diff
-- ❌ 禁止未归档开新 change 的 Ring 4
-- ❌ 禁止 `git add -A`
+- ✅ 必须通过 code review（无 Critical/Important）并读 baseline HARD_RULE/SOFT_RULE 作为触发条件
+- ✅ 必须扫描 `[OVERRIDE]`；Critical、Important、Minor 的分级和 20 字理由门槛必须执行
+- ✅ 必须先 archive、验证 canonical specs、重新执行 `openspec validate <slug> --strict` 并通过 `checkPrSubmissionReadiness`，再提交、推送 issue branch 和创建原子 PR
+- ✅ archive 前必须写 pending `dop_completion`（prepared_at、prepared_head），archive 后必须写 archive_done_at
+- ✅ 成功 PR 后才可调用 DOP done，且 change_id 仅来自 archive meta
+- ❌ 禁止跳过 code review、删除归档、用 mv 替代 archive、`git add -A`
+- ❌ 禁止在 Ring 5 审核、合并或操作默认分支
 
 ## 何时不应使用
 
-- tasks 还有未完成项 / 测试红 / Critical findings 未修 / 覆盖率 < 80% / 阶段 2 时 PR 未 merge
+- tasks 未完成、测试红、Critical/Important findings 未修、覆盖率不足，或 canonical specs 验证失败。
