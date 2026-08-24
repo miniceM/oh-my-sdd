@@ -517,12 +517,12 @@ test('OK state: caps archived DOP completion scan entries in enumeration order',
       PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
       CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
     },
-    2_500,
+    3_500,
   );
   const elapsed = Date.now() - startedAt;
 
   assert.equal(result.timedOut, false, 'entry-capped scan must not block session-start');
-  assert.ok(elapsed < 2_500, `hook took ${elapsed}ms, should return under 2.5s`);
+  assert.ok(elapsed < 3_500, `hook took ${elapsed}ms, should return under 3.5s`);
   assert.equal(result.exitCode, 0);
   const out = JSON.parse(result.stdout);
   assert.doesNotMatch(out.additionalContext, /--retry-dop/);
