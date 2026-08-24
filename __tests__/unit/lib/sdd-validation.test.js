@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 
-import { addValidationRecord, checkPrePrReadiness, checkFinalizeReadiness } from '../../../lib/sdd-validation.js';
+import { addValidationRecord, checkPrePrReadiness, checkPrSubmissionReadiness } from '../../../lib/sdd-validation.js';
 import { readMeta, writeMeta } from '../../../lib/sdd-context.js';
 
 async function makeTmpDir() {
@@ -129,46 +129,64 @@ describe('checkPrePrReadiness', () => {
 });
 
 // ============================================
-// checkFinalizeReadiness
+// checkPrSubmissionReadiness
 // ============================================
 
-describe('checkFinalizeReadiness', () => {
-  test('requires pr_url', async () => {
-    const result = await checkFinalizeReadiness({ sdd: { ring: 'review' } });
-    assert.equal(result.allowed, false);
-    assert.match(result.reason, /PR URL/);
-  });
+describe('checkPrSubmissionReadiness', () => {
+  const readySdd = {
+    ring: 'review',
+    spec: { composite: 'spec-hash' },
+    plan: { composite: 'plan-hash' },
+    validation: [
+      { type: 'test', result: 'pass', spec_composite: 'spec-hash', plan_composite: 'plan-hash' },
+      { type: 'review', result: 'pass', spec_composite: 'spec-hash', plan_composite: 'plan-hash' },
+      { type: 'constitution', result: 'pass', spec_composite: 'spec-hash', plan_composite: 'plan-hash' },
+      { type: 'openspec-validate', result: 'pass', spec_composite: 'spec-hash', plan_composite: 'plan-hash' },
+    ],
+  };
 
-  test('requires sdd context', async () => {
-    const result = await checkFinalizeReadiness({ pr_url: 'https://...' });
+  test('requires SDD context', async () => {
+    const result = await checkPrSubmissionReadiness({}, '/tmp', null);
     assert.equal(result.allowed, false);
     assert.match(result.reason, /SDD context/);
   });
 
   test('requires review ring', async () => {
-    const result = await checkFinalizeReadiness({
-      pr_url: 'https://...',
-      sdd: { ring: 'apply' },
-    });
+    const result = await checkPrSubmissionReadiness({ sdd: { ring: 'apply' } }, '/tmp', null);
     assert.equal(result.allowed, false);
     assert.match(result.reason, /review/);
   });
 
-  test('rejects already archived', async () => {
-    const result = await checkFinalizeReadiness({
-      pr_url: 'https://...',
-      sdd: { ring: 'review' },
-      archive_done_at: '2026-01-01',
-    });
+  test('requires archive completion', async () => {
+    const result = await checkPrSubmissionReadiness({ sdd: readySdd }, '/tmp', null);
     assert.equal(result.allowed, false);
-    assert.match(result.reason, /archived/i);
+    assert.match(result.reason, /archive/i);
   });
 
-  test('allows when all conditions met', async () => {
-    const result = await checkFinalizeReadiness({
+  test('rejects existing PR URL', async () => {
+    const result = await checkPrSubmissionReadiness({
+      archive_done_at: '2026-01-01',
       pr_url: 'https://...',
+      sdd: readySdd,
+    }, '/tmp', null);
+    assert.equal(result.allowed, false);
+    assert.match(result.reason, /PR URL.*already/i);
+  });
+
+  test('requires fresh pre-PR validation', async () => {
+    const result = await checkPrSubmissionReadiness({
+      archive_done_at: '2026-01-01',
       sdd: { ring: 'review' },
-    });
+    }, '/tmp', null);
+    assert.equal(result.allowed, false);
+    assert.match(result.reason, /validation/i);
+  });
+
+  test('allows archive delivery before PR creation with fresh validation', async () => {
+    const result = await checkPrSubmissionReadiness({
+      archive_done_at: '2026-01-01',
+      sdd: readySdd,
+    }, '/tmp', null);
     assert.equal(result.allowed, true);
   });
 });

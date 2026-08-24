@@ -129,17 +129,15 @@ export async function checkPrePrReadiness(changeDir, sdd, cwd) {
 }
 
 /**
- * Check whether finalize is allowed: PR must be merged, and all
- * validations must be current.
+ * Check whether archive delivery is ready for PR submission. Archive must
+ * have completed, no PR may be recorded yet, and validations must be fresh.
  *
  * @param {object} meta - Full .meta.json content.
+ * @param {string} changeDir - Absolute path to the change directory.
  * @param {string} [cwd] - Project root.
  * @returns {{ allowed: boolean, reason?: string }}
  */
-export async function checkFinalizeReadiness(meta, cwd) {
-  if (!meta?.pr_url) {
-    return { allowed: false, reason: 'No PR URL recorded. Run /sdd-review first.' };
-  }
+export async function checkPrSubmissionReadiness(meta, changeDir, cwd) {
   if (!meta?.sdd) {
     return { allowed: false, reason: 'No SDD context. Run /sdd-review first.' };
   }
@@ -147,8 +145,15 @@ export async function checkFinalizeReadiness(meta, cwd) {
   if (ring !== 'review') {
     return { allowed: false, reason: `Current ring is '${ring}', expected 'review'.` };
   }
-  if (meta.archive_done_at) {
-    return { allowed: false, reason: 'Already archived.' };
+  if (!meta.archive_done_at) {
+    return { allowed: false, reason: 'Archive is not complete.' };
+  }
+  if (meta.pr_url) {
+    return { allowed: false, reason: 'PR URL is already recorded.' };
+  }
+  const validation = await checkPrePrReadiness(changeDir, meta.sdd, cwd);
+  if (!validation.ready) {
+    return { allowed: false, reason: 'Pre-PR validation is missing or stale.' };
   }
   return { allowed: true };
 }
