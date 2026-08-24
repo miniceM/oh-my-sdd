@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -22,6 +22,7 @@ const IAM_AUTH_TIMEOUT_MS = 5_000;   // getAuthStatus spawn + parse budget
 const DOP_FLUSH_TIMEOUT_MS = 3_000;  // drain leftover queue at start
 const DOP_REPORT_TIMEOUT_MS = 3_000; // session.start report
 const STDIN_TIMEOUT_MS = 1_000;      // stdin read safety
+const ARCHIVE_META_READ_TIMEOUT_MS = 250;
 
 async function readContent(name) {
   const p = path.join(PLUGIN_ROOT, 'content', name);
@@ -262,11 +263,13 @@ async function scanPendingDopCompletions(cwd) {
     if (!entry.isDirectory()) continue;
     const metaPath = path.join(archiveDir, entry.name, '.meta.json');
     try {
-      const meta = JSON.parse(await readFile(metaPath, 'utf8'));
+      const stats = await lstat(metaPath);
+      if (!stats.isFile()) continue;
+      const meta = JSON.parse(await readArchiveMeta(metaPath));
       if (isDopCompletionPending(meta)) {
         pendingDopCompletions.push({
-          slug: entry.name,
-          change_id: meta.change_id || '(unknown)',
+          slug: sanitizeReminderValue(entry.name),
+          change_id: sanitizeReminderValue(meta.change_id),
         });
       }
     } catch {
@@ -274,6 +277,26 @@ async function scanPendingDopCompletions(cwd) {
     }
   }
   return pendingDopCompletions;
+}
+
+async function readArchiveMeta(metaPath) {
+  let timer;
+  try {
+    return await Promise.race([
+      readFile(metaPath, 'utf8'),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('archive metadata read timed out')), ARCHIVE_META_READ_TIMEOUT_MS);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function sanitizeReminderValue(value) {
+  const sanitized = String(value ?? '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 80);
+  return sanitized || '(unknown)';
 }
 
 main().catch((err) => {
