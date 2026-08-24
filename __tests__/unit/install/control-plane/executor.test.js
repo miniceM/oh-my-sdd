@@ -108,3 +108,26 @@ test('deferred steps do not count as warnings and retain one next action', () =>
   assert.equal(result.summary.deferred, 2);
   assert.deepEqual(result.summary.next_actions, ['Restart OpenCode to complete plugin loading.']);
 });
+
+test('deferred steps preserve failed execution semantics', () => {
+  const result = summarizeExecution({ schema_version: 1, hosts: [] }, [
+    { id: 'opencode:a', status: 'failed' },
+    { id: 'opencode:b', status: 'deferred' },
+  ]);
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.summary.failed, 1);
+  assert.equal(result.summary.deferred, 1);
+});
+
+test('deferred steps preserve partial failure semantics for unsupported steps', () => {
+  const result = summarizeExecution({ schema_version: 1, hosts: [] }, [
+    { id: 'opencode:a', status: 'succeeded' },
+    { id: 'opencode:b', status: 'unsupported' },
+    { id: 'opencode:c', status: 'deferred' },
+  ]);
+
+  assert.equal(result.status, 'partial-failure');
+  assert.equal(result.summary.unsupported, 1);
+  assert.equal(result.summary.deferred, 1);
+});
