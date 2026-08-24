@@ -87,7 +87,7 @@ export function renderResultText(result) {
   const summary = objectOrEmpty(safeResult.summary);
   const lines = ["Installation result (status: " + (safeResult.status || "succeeded") + ")"];
 
-  const terminalEvents = events.filter((e) => e.status !== "running");
+  const terminalEvents = events.filter((e) => e.status !== "running" && e.status !== "deferred");
   if (terminalEvents.length > 0) {
     lines.push("  Steps:");
     for (const event of terminalEvents) {
