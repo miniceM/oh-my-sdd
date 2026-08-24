@@ -1,6 +1,7 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
 
@@ -180,6 +181,53 @@ describe('checkPrSubmissionReadiness', () => {
     }, '/tmp', null);
     assert.equal(result.allowed, false);
     assert.match(result.reason, /validation/i);
+  });
+
+  test('rejects validation when its spec composite has drifted', async () => {
+    const result = await checkPrSubmissionReadiness({
+      archive_done_at: '2026-01-01',
+      sdd: {
+        ...readySdd,
+        spec: { composite: 'current-spec-hash' },
+        validation: readySdd.validation.map(record => ({
+          ...record,
+          spec_composite: 'validated-spec-hash',
+        })),
+      },
+    }, '/tmp', null);
+
+    assert.equal(result.allowed, false);
+    assert.match(result.reason, /pre-PR validation.*stale/i);
+  });
+
+  test('rejects validation when Git HEAD has drifted', async () => {
+    const tmpDir = await makeTmpDir();
+    try {
+      execFileSync('git', ['init'], { cwd: tmpDir });
+      execFileSync('git', ['config', 'user.name', 'Test User'], { cwd: tmpDir });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: tmpDir });
+      await writeFile(path.join(tmpDir, 'README.md'), '# test\n');
+      execFileSync('git', ['add', 'README.md'], { cwd: tmpDir });
+      execFileSync('git', ['commit', '-m', 'initial commit'], { cwd: tmpDir });
+      const currentHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).trim();
+      const staleHead = currentHead === '0'.repeat(40) ? '1'.repeat(40) : '0'.repeat(40);
+
+      const result = await checkPrSubmissionReadiness({
+        archive_done_at: '2026-01-01',
+        sdd: {
+          ...readySdd,
+          validation: readySdd.validation.map(record => ({
+            ...record,
+            head: staleHead,
+          })),
+        },
+      }, '/tmp', tmpDir);
+
+      assert.equal(result.allowed, false);
+      assert.match(result.reason, /pre-PR validation.*stale/i);
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
   });
 
   test('allows archive delivery before PR creation with fresh validation', async () => {
