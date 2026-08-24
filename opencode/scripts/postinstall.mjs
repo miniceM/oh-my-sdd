@@ -59,6 +59,7 @@ import {
   upsertManagedAgentsBlock,
 } from './agents-md.mjs';
 import { getBodyForInjection } from '../lib/constitution.js';
+import { bootstrapOpenCodeResources } from './resource-bootstrap.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = resolve(__dirname, '..');
@@ -354,6 +355,9 @@ function findMissingDelegatedSkills() {
 }
 
 export function main() {
+  // Compatibility entrypoint for npm installs. Native `opencode plugin` installs
+  // do not run postinstall; the plugin calls this same bootstrap on load.
+  bootstrapOpenCodeResources();
   const results = [];
   const records = readOwnershipManifest(OWNERSHIP_MANIFEST);
   const ownership = new Map(records.map((record) => [record.target, record]));
