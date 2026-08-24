@@ -18,7 +18,24 @@ Locate and follow the first existing skill definition:
 - `.claude/skills/sdd-review/SKILL.md`
 - `~/.claude/skills/sdd-review/SKILL.md`
 
-For delegated skills, strip the namespace and colon, then read the first available `SKILL.md` from the configured OpenCode, project, agents, or Claude skill locations. If none exists, resolve the parent skill's goals, constraints, checklists, and expected outputs inline; missing content never authorizes inline task execution.
+Use the first existing path above. For every delegated skill, apply this mandatory
+content-resolution contract:
+
+1. Strip the namespace and colon to obtain `name-without-namespace`.
+2. Read the first existing `SKILL.md` from
+   `~/.config/opencode/skills/<name-without-namespace>/`,
+   `.opencode/skills/<name-without-namespace>/`,
+   `skills/<name-without-namespace>/`, `.agents/skills/<name-without-namespace>/`,
+   `~/.agents/skills/<name-without-namespace>/`,
+   `.claude/skills/<name-without-namespace>/`, then
+   `~/.claude/skills/<name-without-namespace>/`.
+3. If no file exists, do not stop or require a separate installation. Perform
+   **inline-content-resolution** from the parent skill's goals, constraints,
+   checklists, and expected outputs, and state that this fallback was used.
+
+This contract only selects the source of skill content. It does not select who
+executes a task. Continue to obey the parent skill's execution-mode, Orchestrator,
+and subagent rules; missing content never authorizes inline task execution.
 
 The selected skill is authoritative. It requires HARD_RULE/OVERRIDE review gates, `openspec archive` (no `mv` fallback), canonical-spec verification, and an issue-branch PR containing implementation plus archive artifacts. Pass arguments unchanged: a slug/change-id, or `--retry-dop <slug>`.
 
