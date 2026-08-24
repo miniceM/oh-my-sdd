@@ -78,6 +78,23 @@ function makeHangingIam() {
   return dir;
 }
 
+function makeStubDop({ output, exitCode = 0, logPath }) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'dop-stub-'));
+  if (process.platform === 'win32') {
+    const cmdPath = path.join(dir, 'dop.cmd');
+    const body = exitCode === 0 ? `echo ${JSON.stringify(output)}\r\n` : 'echo forced DOP failure 1>&2\r\n';
+    const log = logPath ? `echo %* > "${logPath}"\r\n` : '';
+    writeFileSync(cmdPath, `@echo off\r\n${log}${body}exit /b ${exitCode}\r\n`);
+  } else {
+    const cmdPath = path.join(dir, 'dop');
+    const body = exitCode === 0 ? `echo '${JSON.stringify(output)}'` : 'echo "forced DOP failure" >&2';
+    const log = logPath ? `printf '%s' "$*" > '${logPath}'\n` : '';
+    writeFileSync(cmdPath, `#!/bin/bash\n${log}${body}\nexit ${exitCode}\n`);
+    chmodSync(cmdPath, 0o755);
+  }
+  return dir;
+}
+
 function runHook(stdinPayload, env = {}, timeoutMs) {
   return new Promise((resolve) => {
     // Always ensure node is findable even if the test clobbered PATH.
@@ -568,4 +585,65 @@ test('OK state: skips oversized pending archive metadata', async (t) => {
   assert.equal(result.exitCode, 0);
   const out = JSON.parse(result.stdout);
   assert.doesNotMatch(out.additionalContext, /oversized|--retry-dop/);
+});
+
+test('archived pending DOP intent does not remind when DOP already reports done', async (t) => {
+  const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-'));
+  const projectDir = mkdtempSync(path.join(tmpdir(), 'oms-project-'));
+  const iamDir = makeStubIam({ credentials: [
+    { username: 'carol-devops', status: 'logged', is_api_key_true: true },
+    { username: 'carol-gitee', status: 'logged', is_api_key_true: false },
+  ] });
+  const dopLogPath = path.join(tmpHome, 'dop-view.args');
+  const dopDir = makeStubDop({ output: { id: 'ARD123456', status: 'done' }, logPath: dopLogPath });
+  t.after(() => [tmpHome, projectDir, iamDir, dopDir].forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+  const metaDir = path.join(projectDir, 'openspec', 'changes', 'archive', 'ARD123456');
+  writeFileSync(path.join(projectDir, '.sdd-no-telemetry'), '');
+  mkdirSync(metaDir, { recursive: true });
+  writeFileSync(path.join(metaDir, '.meta.json'), JSON.stringify({
+    change_id: 'ARD123456',
+    dop_completion: { status: 'pending', prepared_at: '2026-08-24T00:00:00Z' },
+  }));
+
+  const result = await runHook({ session_id: 'dop-done', cwd: projectDir }, {
+    HOME: tmpHome,
+    USERPROFILE: tmpHome,
+    PATH: `${iamDir}${path.delimiter}${dopDir}${path.delimiter}${process.env.PATH}`,
+    CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.doesNotMatch(JSON.parse(result.stdout).additionalContext, /--retry-dop/);
+  assert.match(readFileSync(dopLogPath, 'utf8'), /change view ARD123456 -j/);
+});
+
+test('archived pending DOP intent reminds retry when DOP view fails', async (t) => {
+  const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-'));
+  const projectDir = mkdtempSync(path.join(tmpdir(), 'oms-project-'));
+  const iamDir = makeStubIam({ credentials: [
+    { username: 'carol-devops', status: 'logged', is_api_key_true: true },
+    { username: 'carol-gitee', status: 'logged', is_api_key_true: false },
+  ] });
+  const dopDir = makeStubDop({ exitCode: 1 });
+  t.after(() => [tmpHome, projectDir, iamDir, dopDir].forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+  const metaDir = path.join(projectDir, 'openspec', 'changes', 'archive', 'ARD123456');
+  writeFileSync(path.join(projectDir, '.sdd-no-telemetry'), '');
+  mkdirSync(metaDir, { recursive: true });
+  writeFileSync(path.join(metaDir, '.meta.json'), JSON.stringify({
+    change_id: 'ARD123456',
+    dop_completion: { status: 'pending', prepared_at: '2026-08-24T00:00:00Z' },
+  }));
+
+  const result = await runHook({ session_id: 'dop-view-failed', cwd: projectDir }, {
+    HOME: tmpHome,
+    USERPROFILE: tmpHome,
+    PATH: `${iamDir}${path.delimiter}${dopDir}${path.delimiter}${process.env.PATH}`,
+    CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+  });
+
+  assert.equal(result.exitCode, 0);
+  const context = JSON.parse(result.stdout).additionalContext;
+  assert.match(context, /ARD123456/);
+  assert.match(context, /--retry-dop/);
+  assert.doesNotMatch(context, /--finalize|merge PR|openspec\/specs\/ drift/);
 });

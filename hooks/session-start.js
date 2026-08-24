@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFile, writeFile, mkdir, opendir, lstat } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,6 +22,7 @@ const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT ?? path.resolve(__dirname, '.
 const IAM_AUTH_TIMEOUT_MS = 5_000;   // getAuthStatus spawn + parse budget
 const DOP_FLUSH_TIMEOUT_MS = 3_000;  // drain leftover queue at start
 const DOP_REPORT_TIMEOUT_MS = 3_000; // session.start report
+const DOP_CHANGE_VIEW_TIMEOUT_MS = 2_000; // archived DOP completion reconciliation
 const STDIN_TIMEOUT_MS = 1_000;      // stdin read safety
 const ARCHIVE_META_READ_TIMEOUT_MS = 250;
 const MAX_PENDING_DOP_SCAN_ENTRIES = 50;
@@ -198,24 +200,30 @@ async function main() {
     }
   }
 
-  // 扫描已归档变更中 PR 已提交后的 DOP 完成待补偿意图。
-  let pendingDopCompletionReminder = '';
+  // Archive-before-PR can leave a local completion intent behind when the
+  // read/write DOP completion step failed. Reconcile it with a bounded,
+  // read-only view before asking the user to retry.
+  let pendingDopReminder = '';
   if (authState.state === 'OK') {
     try {
-      const pendingDopCompletions = await scanPendingDopCompletions(stdin.cwd);
-      if (pendingDopCompletions.length > 0) {
-        const lines = pendingDopCompletions.map(c =>
-          `  • ${c.slug} (change-id: ${c.change_id}, DOP completion: pending)`
+      const pendingCompletions = await scanPendingDopCompletions(stdin.cwd);
+      const incompleteCompletions = (await Promise.all(pendingCompletions.map(async (change) => {
+        const status = await getDopChangeStatus(change.change_id);
+        return status === 'done' ? null : change;
+      }))).filter(Boolean);
+      if (incompleteCompletions.length > 0) {
+        const lines = incompleteCompletions.map(c =>
+          `  • ${c.slug} (change-id: ${c.change_id})`
         );
-        const header = `⚠️ oh-my-sdd: ${pendingDopCompletions.length} 个归档变更的 PR 已提交后的 DOP 完成待补偿\n` +
-                       `   请尽快重试 DOP 完成上报：\n`;
+        const header = `⚠️ oh-my-sdd: ${incompleteCompletions.length} 个变更的 DOP 完成状态待补偿\n` +
+                       `   请在确认后重试：\n`;
         const footer = `\n   命令：/sdd-review --retry-dop <slug>\n`;
         const msg = header + lines.join('\n') + footer;
         process.stderr.write(msg + '\n');
-        pendingDopCompletionReminder = msg;
+        pendingDopReminder = msg;
       }
     } catch (err) {
-      debug(`扫描待补偿 DOP 完成意图失败（非阻塞）: ${err.message}`);
+      debug(`扫描 pending DOP completion 失败（非阻塞）: ${err.message}`);
     }
   }
 
@@ -224,8 +232,8 @@ async function main() {
   if (updateInfo?.hasUpdate) {
     finalContext += updateInfo.additionalContext;
   }
-  if (pendingDopCompletionReminder) {
-    finalContext += `\n\n---\n${pendingDopCompletionReminder}`;
+  if (pendingDopReminder) {
+    finalContext += `\n\n---\n${pendingDopReminder}`;
   }
 
   const output = {
@@ -252,7 +260,33 @@ async function checkForPluginUpdates(currentVersion) {
   return null;
 }
 
-// 扫描 cwd/openspec/changes/archive/ 中 DOP 完成待补偿的归档变更。
+// Runs only `dop change view <id> -j`, which is a read-only reconciliation
+// probe. Never invoke a DOP completion command from SessionStart.
+async function getDopChangeStatus(changeId) {
+  return new Promise((resolve) => {
+    execFile('dop', ['change', 'view', changeId, '-j'], {
+      timeout: DOP_CHANGE_VIEW_TIMEOUT_MS,
+      maxBuffer: 64 * 1024,
+      windowsHide: true,
+    }, (err, stdout) => {
+      if (err) {
+        debug(`DOP change view ${changeId} 失败（将提示重试）: ${err.message}`);
+        resolve(null);
+        return;
+      }
+      try {
+        const result = JSON.parse(stdout);
+        resolve(typeof result.status === 'string' ? result.status.toLowerCase() : null);
+      } catch {
+        debug(`DOP change view ${changeId} 返回无效 JSON（将提示重试）`);
+        resolve(null);
+      }
+    });
+  });
+}
+
+// Scan archived changes because the local intent survives an archive when the
+// post-PR DOP completion call needs compensation.
 async function scanPendingDopCompletions(cwd) {
   const deadline = Date.now() + PENDING_DOP_SCAN_BUDGET_MS;
   const archiveDir = path.join(cwd, 'openspec', 'changes', 'archive');
@@ -262,7 +296,6 @@ async function scanPendingDopCompletions(cwd) {
   } catch {
     return [];  // 不是 SDD 项目，或尚无 archive
   }
-
   const pendingDopCompletions = [];
   let enumerated = 0;
   try {
