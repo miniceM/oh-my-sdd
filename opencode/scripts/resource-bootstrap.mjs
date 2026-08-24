@@ -22,6 +22,8 @@ function atomicJson(path, value) {
   mkdirSync(dirname(path), { recursive: true });
   const temp = `${path}.tmp-${process.pid}-${Date.now()}`;
   writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+  // `rename` replaces in-place on supported Windows/Unix filesystems. Do not
+  // delete the old record first: a crash must leave either complete version.
   renameSync(temp, path);
 }
 function packageVersion(root) {
@@ -52,12 +54,17 @@ export function bootstrapOpenCodeResources(options = {}) {
           drifted_resources.push(label);
           return;
         }
-        const backup = prior?.backup ?? `${destination}.oh-my-sdd-backup-${Date.now()}`;
-        mkdirSync(dirname(backup), { recursive: true });
-        cpSync(destination, backup, { recursive: true, force: false, errorOnExist: true });
+        // A resource created by OMS has no user original to back up. Preserve
+        // that ownership across upgrades so uninstall removes it, rather than
+        // restoring a previous OMS version as if it belonged to the user.
+        const backup = prior ? prior.backup : `${destination}.oh-my-sdd-backup-${Date.now()}`;
+        if (backup) {
+          mkdirSync(dirname(backup), { recursive: true });
+          cpSync(destination, backup, { recursive: true, force: false, errorOnExist: true });
+        }
         rmSync(destination, { recursive: true, force: true });
         cpSync(source, destination, { recursive: true });
-        ownership.set(destination, { target: destination, backup, created: false, installed_digest: resourceDigest(destination), resource_kind: kind, resource_name: name });
+        ownership.set(destination, { target: destination, backup, created: prior?.created ?? false, installed_digest: resourceDigest(destination), resource_kind: kind, resource_name: name });
       } else if (!existsSync(destination)) {
         mkdirSync(dirname(destination), { recursive: true });
         cpSync(source, destination, { recursive: true });
@@ -69,6 +76,11 @@ export function bootstrapOpenCodeResources(options = {}) {
   const skills = join(pluginRoot, 'oms-skills');
   const commands = join(pluginRoot, '.opencode', 'commands');
   const delegatedRoot = join(pluginRoot, 'delegated-skills');
+  for (const name of ['dist', 'hooks', 'lib', 'content']) {
+    if (!existsSync(join(pluginRoot, name)) || !statSync(join(pluginRoot, name)).isDirectory()) {
+      failed_resources.push(`runtime:${name}`);
+    }
+  }
   if (!existsSync(skills) || !statSync(skills).isDirectory()) failed_resources.push('oms-skills:<source>');
   else for (const name of readdirSync(skills)) if (ownedSkill(name)) project(join(skills, name), join(configDir, 'skills', name), 'oms-skill', name);
   if (!existsSync(commands) || !statSync(commands).isDirectory()) failed_resources.push('oms-command:<source>');
@@ -77,7 +89,7 @@ export function bootstrapOpenCodeResources(options = {}) {
   try { writeOwnershipManifest(manifestPath, [...ownership.values()]); } catch { failed_resources.push('ownership-manifest'); }
   const resource_digest = resourceDigest(pluginRoot);
   const result = {
-    schema: 1, plugin_version: packageVersion(pluginRoot), resource_digest, activated_at: new Date().toISOString(),
+    schema_version: 1, plugin_version: packageVersion(pluginRoot), resource_digest, activated_at: new Date().toISOString(),
     registered_hooks: options.registeredHooks ?? [],
     state: failed_resources.length ? 'failed' : drifted_resources.length ? 'degraded' : 'verified',
     drifted_resources, failed_resources,

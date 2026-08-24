@@ -354,10 +354,7 @@ function findMissingDelegatedSkills() {
   ));
 }
 
-export function main() {
-  // Compatibility entrypoint for npm installs. Native `opencode plugin` installs
-  // do not run postinstall; the plugin calls this same bootstrap on load.
-  bootstrapOpenCodeResources();
+function legacyPostinstall() {
   const results = [];
   const records = readOwnershipManifest(OWNERSHIP_MANIFEST);
   const ownership = new Map(records.map((record) => [record.target, record]));
@@ -476,6 +473,11 @@ export function main() {
 
   console.log(`[postinstall] resource changes this run: ${results.join(', ')}`);
   console.log('[postinstall] uninstall: run oms-opencode-uninstall (npm does not run uninstall lifecycle scripts)');
+}
+
+/** Compatibility entrypoint: native OpenCode installs use this same shared API at load time. */
+export function main() {
+  return bootstrapOpenCodeResources();
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
