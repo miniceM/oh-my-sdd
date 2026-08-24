@@ -16,6 +16,53 @@ import { resolveNpmCli } from '../../helpers/resolve-npm-cli.js';
 
 const worktreeRoot = process.cwd();
 
+function createFakeOpenCode(tmpHome) {
+  const binDir = path.join(tmpHome, 'fake-bin');
+  const invocationLog = path.join(tmpHome, 'opencode-invocations.jsonl');
+  const scriptPath = path.join(binDir, 'opencode.mjs');
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.writeFileSync(scriptPath, `
+import fs from 'node:fs';
+import path from 'node:path';
+
+const args = process.argv.slice(2);
+if (args.length === 1 && args[0] === '--version') {
+  process.stdout.write('fake-opencode 1.0.0\\n');
+  process.exit(0);
+}
+const expected = ['plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'];
+if (JSON.stringify(args) !== JSON.stringify(expected)) {
+  process.stderr.write('unexpected fake opencode command: ' + JSON.stringify(args));
+  process.exit(64);
+}
+fs.appendFileSync(process.env.OPENCODE_FAKE_INVOCATION_LOG, JSON.stringify(args) + '\\n');
+const configDir = process.env.OPENCODE_CONFIG_DIR;
+fs.mkdirSync(configDir, { recursive: true });
+const configPath = path.join(configDir, 'opencode.json');
+const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {};
+const plugins = Array.isArray(config.plugin) ? config.plugin : [];
+if (!plugins.includes('@cli-tools/oh-my-sdd-opencode')) plugins.push('@cli-tools/oh-my-sdd-opencode');
+fs.writeFileSync(configPath, JSON.stringify({ ...config, plugin: plugins }));
+`);
+
+  if (process.platform === 'win32') {
+    fs.writeFileSync(path.join(binDir, 'opencode.cmd'), `@echo off\n"${process.execPath}" "%~dp0opencode.mjs" %*\n`);
+  } else {
+    const executable = path.join(binDir, 'opencode');
+    fs.writeFileSync(executable, `#!${process.execPath}\nimport '${scriptPath.replaceAll('\\', '\\\\')}';\n`);
+    fs.chmodSync(executable, 0o755);
+  }
+
+  return {
+    invocationLog,
+    path: `${binDir}${path.delimiter}${process.env.PATH || ''}`,
+  };
+}
+
+function readFakeOpenCodeInvocations(invocationLog) {
+  return fs.readFileSync(invocationLog, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+}
+
 function runNpm(args, options) {
   return execFileSync(process.execPath, [resolveNpmCli(), ...args], options);
 }
@@ -32,6 +79,7 @@ function runNpmWithOutput(args, options) {
 
 test('install + uninstall: oms-install/uninstall --tool opencode round-trip', () => {
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oms-install-'));
+  const fakeOpenCode = createFakeOpenCode(tmpHome);
   const env = {
     ...process.env,
     HOME: tmpHome,
@@ -39,6 +87,8 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
     XDG_HOME_DIR: tmpHome,
     XDG_CONFIG_HOME: path.join(tmpHome, '.config'),
     OPENCODE_CONFIG_DIR: path.join(tmpHome, '.config', 'opencode'),
+    OPENCODE_FAKE_INVOCATION_LOG: fakeOpenCode.invocationLog,
+    PATH: fakeOpenCode.path,
   };
 
   // Step 1: install (use CLI wrapper which parses --tool)
@@ -55,6 +105,9 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
     cfgAfterInstall.plugin.includes('@cli-tools/oh-my-sdd-opencode'),
     `opencode.json 应包含 npm 插件，实际: ${JSON.stringify(cfgAfterInstall.plugin)}`
   );
+  assert.deepEqual(readFakeOpenCodeInvocations(fakeOpenCode.invocationLog), [
+    ['plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'],
+  ]);
 
   // Simulate resources created by the npm package's postinstall lifecycle.
   const npmCommand = path.join(tmpHome, '.config', 'opencode', 'commands', 'sdd-doc.md');
@@ -124,6 +177,7 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
 
 test('text install result closes the OpenCode pending loop in an isolated HOME', () => {
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oms-install-text-'));
+  const fakeOpenCode = createFakeOpenCode(tmpHome);
   const env = {
     ...process.env,
     HOME: tmpHome,
@@ -131,6 +185,8 @@ test('text install result closes the OpenCode pending loop in an isolated HOME',
     XDG_HOME_DIR: tmpHome,
     XDG_CONFIG_HOME: path.join(tmpHome, '.config'),
     OPENCODE_CONFIG_DIR: path.join(tmpHome, '.config', 'opencode'),
+    OPENCODE_FAKE_INVOCATION_LOG: fakeOpenCode.invocationLog,
+    PATH: fakeOpenCode.path,
   };
 
   try {
@@ -144,6 +200,8 @@ test('text install result closes the OpenCode pending loop in an isolated HOME',
     assert.equal(result.status, 0, result.stderr);
     const output = `${result.stdout}\n${result.stderr}`;
     assert.match(output, /Installation result \(status: succeeded\)/);
+    assert.match(output, /action: install-plugin-native/);
+    assert.match(output, /Installed @cli-tools\/oh-my-sdd-opencode through the OpenCode CLI/);
     assert.match(output, /\[deferred\]/);
     assert.match(output, /postinstall/);
     assert.match(output, /pending/);
@@ -156,6 +214,9 @@ test('text install result closes the OpenCode pending loop in an isolated HOME',
     assert.match(output, /enforced: unknown/);
     assert.match(output, /No active OpenCode runtime write-prevention probe was observed/);
     assert.ok(fs.existsSync(path.join(tmpHome, '.config', 'opencode', 'opencode.json')));
+    assert.deepEqual(readFakeOpenCodeInvocations(fakeOpenCode.invocationLog), [
+      ['plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'],
+    ]);
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
