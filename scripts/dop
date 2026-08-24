@@ -267,7 +267,7 @@ case "$cmd" in
       *)
         # 兼容已废弃的 update：明确告知用户
         if [[ "$subcmd" == "update" ]]; then
-          cat >&2 <<EOF
+          cat >&2 <<'EOF'
 ❌ dop change update 不存在。
 
 `dop change update` 不受支持；请使用 `dop change done <code>` 完成变更。
