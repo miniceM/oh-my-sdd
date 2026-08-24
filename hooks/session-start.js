@@ -23,6 +23,7 @@ const IAM_AUTH_TIMEOUT_MS = 5_000;   // getAuthStatus spawn + parse budget
 const DOP_FLUSH_TIMEOUT_MS = 3_000;  // drain leftover queue at start
 const DOP_REPORT_TIMEOUT_MS = 3_000; // session.start report
 const DOP_CHANGE_VIEW_TIMEOUT_MS = 2_000; // archived DOP completion reconciliation
+const DOP_CHANGE_ID_PATTERN = /^[A-Z]{2,6}\d+$/;
 const STDIN_TIMEOUT_MS = 1_000;      // stdin read safety
 const ARCHIVE_META_READ_TIMEOUT_MS = 250;
 const MAX_PENDING_DOP_SCAN_ENTRIES = 50;
@@ -263,8 +264,19 @@ async function checkForPluginUpdates(currentVersion) {
 // Runs only `dop change view <id> -j`, which is a read-only reconciliation
 // probe. Never invoke a DOP completion command from SessionStart.
 async function getDopChangeStatus(changeId) {
+  // Metadata is local and may be malformed. Keep the value constrained before
+  // constructing the Windows cmd.exe command below.
+  if (!DOP_CHANGE_ID_PATTERN.test(changeId)) return null;
+
+  const executable = process.platform === 'win32' ? (process.env.ComSpec || 'cmd.exe') : 'dop';
+  const args = process.platform === 'win32'
+    ? ['/d', '/s', '/c', `dop change view ${changeId} -j`]
+    : ['change', 'view', changeId, '-j'];
   return new Promise((resolve) => {
-    execFile('dop', ['change', 'view', changeId, '-j'], {
+    // .cmd/.bat entrypoints cannot be launched with execFile directly on
+    // Windows. Invoke the command interpreter only after strict ID validation;
+    // POSIX continues to exec dop directly.
+    execFile(executable, args, {
       timeout: DOP_CHANGE_VIEW_TIMEOUT_MS,
       maxBuffer: 64 * 1024,
       windowsHide: true,
