@@ -212,9 +212,11 @@ describe('OpenCodeAdapter', () => {
       },
     });
 
+    const invocation = process.platform === 'win32'
+      ? { command: process.env.ComSpec ?? process.env.COMSPEC ?? 'cmd.exe', args: ['/d', '/s', '/c', 'opencode', 'plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'] }
+      : { command: 'opencode', args: ['plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'] };
     assert.deepEqual(calls, [{
-      command: 'opencode',
-      args: ['plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'],
+      ...invocation,
       options: { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
     }]);
     assert.equal(installation.status, 'succeeded');

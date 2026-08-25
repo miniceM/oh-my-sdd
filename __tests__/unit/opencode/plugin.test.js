@@ -23,13 +23,22 @@ test('plugin: OhMySddPlugin is a function (plugin factory)', () => {
 test('plugin: resource activation completes before hooks are returned', async () => {
   const home = mkdtempSync(join(tmpdir(), 'oms-plugin-load-'));
   const oldHome = process.env.HOME;
+  const oldUserProfile = process.env.USERPROFILE;
+  const oldXdgConfigHome = process.env.XDG_CONFIG_HOME;
   try {
     process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    process.env.XDG_CONFIG_HOME = join(home, '.config');
     const hooks = await OhMySddPlugin({});
     assert.equal(typeof hooks.event, 'function');
     assert.equal(existsSync(join(home, '.oh-my-sdd', 'opencode-activation.json')), true);
   } finally {
-    process.env.HOME = oldHome;
+    if (oldHome === undefined) delete process.env.HOME;
+    else process.env.HOME = oldHome;
+    if (oldUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = oldUserProfile;
+    if (oldXdgConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = oldXdgConfigHome;
     rmSync(home, { recursive: true, force: true });
   }
 });

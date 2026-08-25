@@ -253,9 +253,11 @@ test('OpenCode native install accepts an injected runner without writing configu
     assert.equal(result.status, 0, result.stderr);
     const { installation, calls, plan } = JSON.parse(result.stdout);
     assert.equal(installation.status, 'succeeded');
+    const invocation = process.platform === 'win32'
+      ? { command: process.env.ComSpec ?? process.env.COMSPEC ?? 'cmd.exe', args: ['/d', '/s', '/c', 'opencode', 'plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'] }
+      : { command: 'opencode', args: ['plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'] };
     assert.deepEqual(calls, [{
-      command: 'opencode',
-      args: ['plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'],
+      ...invocation,
       options: { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
     }]);
     assert.equal(plan.resources.find((resource) => resource.type === 'npm-plugin').path, configDir);

@@ -173,7 +173,11 @@ export function writePluginLoader({ configDir, packageRoot }) {
   if (!existsSync(entry)) throw new Error(`Installed plugin entry missing: ${entry}`);
   const pluginsDir = join(configDir, 'plugins');
   mkdirSync(pluginsDir, { recursive: true });
-  const loader = join(pluginsDir, 'oh-my-sdd-e2e.mjs');
+  // OpenCode discovers `.js` plugins in this directory. Mark the directory
+  // as ESM instead of changing the extension, which keeps discovery working
+  // on Node 18 as well.
+  writeFileSync(join(pluginsDir, 'package.json'), '{"type":"module"}\n');
+  const loader = join(pluginsDir, 'oh-my-sdd-e2e.js');
   writeFileSync(loader, `export { OhMySddPlugin } from '${pathToFileURL(entry).href}';\n`);
   return loader;
 }
