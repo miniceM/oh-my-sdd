@@ -258,23 +258,8 @@ test('native install activates the packed plugin lifecycle and doctor verifies e
 });
 
 test('packed OpenCode package installs from a clean tarball and its wrapper fully uninstalls', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'oms-opencode-pack-'));
-  const home = path.join(root, 'home');
-  const prefix = path.join(root, 'prefix');
-  const cache = path.join(root, 'cache');
-  const packDir = path.join(root, 'pack');
-  fs.mkdirSync(home, { recursive: true });
-  fs.mkdirSync(packDir, { recursive: true });
-
-  const env = {
-    ...process.env,
-    HOME: home,
-    USERPROFILE: home,
-    npm_config_prefix: prefix,
-    npm_config_cache: cache,
-  };
-  delete env.OPENCODE_CONFIG_DIR;
-  delete env.XDG_CONFIG_HOME;
+  const sandbox = createOpenCodeTestSandbox(worktreeRoot);
+  const { home, prefix, packDir, env } = sandbox;
 
   try {
     const packResult = runNpmWithOutput([
@@ -312,12 +297,12 @@ test('packed OpenCode package installs from a clean tarball and its wrapper full
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    assert.ok(fs.existsSync(path.join(home, '.config', 'opencode', 'skills', 'sdd-plan', 'SKILL.md')));
-    assert.ok(fs.existsSync(path.join(home, '.config', 'opencode', 'skills', 'brainstorming', 'SKILL.md')));
-    assert.ok(fs.existsSync(path.join(home, '.config', 'opencode', 'skills', 'test-driven-development', 'SKILL.md')));
-    assert.ok(fs.existsSync(path.join(home, '.config', 'opencode', 'commands', 'sdd-plan.md')));
+    assert.ok(fs.existsSync(path.join(sandbox.configDir, 'skills', 'sdd-plan', 'SKILL.md')));
+    assert.ok(fs.existsSync(path.join(sandbox.configDir, 'skills', 'brainstorming', 'SKILL.md')));
+    assert.ok(fs.existsSync(path.join(sandbox.configDir, 'skills', 'test-driven-development', 'SKILL.md')));
+    assert.ok(fs.existsSync(path.join(sandbox.configDir, 'commands', 'sdd-plan.md')));
 
-    const opencodeJson = path.join(home, '.config', 'opencode', 'opencode.json');
+    const opencodeJson = sandbox.env.OPENCODE_CONFIG;
     fs.writeFileSync(opencodeJson, JSON.stringify({
       plugin: ['other-plugin', '@cli-tools/oh-my-sdd-opencode'],
       theme: 'user-theme',
@@ -345,7 +330,7 @@ test('packed OpenCode package installs from a clean tarball and its wrapper full
       theme: 'user-theme',
     });
     assert.equal(
-      fs.existsSync(path.join(home, '.config', 'opencode', 'skills', 'brainstorming')),
+      fs.existsSync(path.join(sandbox.configDir, 'skills', 'brainstorming')),
       false,
       'uninstall wrapper should remove owned delegated resources first',
     );
@@ -355,6 +340,6 @@ test('packed OpenCode package installs from a clean tarball and its wrapper full
       'uninstall wrapper should remove the ownership manifest',
     );
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    sandbox.cleanup();
   }
 });

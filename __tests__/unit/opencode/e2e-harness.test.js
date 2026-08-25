@@ -48,9 +48,12 @@ test('fake OpenCode CLI records the native installation command and updates sand
   const sandbox = createOpenCodeTestSandbox(process.cwd());
   try {
     const fake = createFakeOpenCodeCli(sandbox);
-    const result = spawnSync(fake.launcherPath, [
-      'plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force',
-    ], { env: fake.env, encoding: 'utf8' });
+    const args = ['plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'];
+    const result = process.platform === 'win32'
+      ? spawnSync(process.env.ComSpec ?? process.env.COMSPEC ?? 'cmd.exe', [
+        '/d', '/s', '/c', fake.launcherPath, ...args,
+      ], { env: fake.env, encoding: 'utf8' })
+      : spawnSync(fake.launcherPath, args, { env: fake.env, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(fake.readInvocations(), [[
       'plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force',
