@@ -27,12 +27,13 @@ function createFakeOpenCode(root) {
 
 test('fake OpenCode launcher delegates to its .mjs entrypoint instead of parsing ESM itself', () => {
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oms-fake-opencode-'));
+  const fakeOpenCode = createFakeOpenCode(tmpHome);
   try {
-    const fakeOpenCode = createFakeOpenCode(tmpHome);
     const launcher = fs.readFileSync(fakeOpenCode.launcherPath, 'utf8');
     assert.match(launcher, /opencode\.mjs/);
     assert.doesNotMatch(launcher, /^import\s/m);
   } finally {
+    fakeOpenCode.sandbox.cleanupArtifacts();
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
@@ -143,6 +144,7 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
     assert.equal(fs.existsSync(manifestPath), false, 'npm ownership manifest should be removed');
   } finally {
     fakeOpenCode.sandbox.cleanup();
+    fakeOpenCode.sandbox.cleanupArtifacts();
   }
 });
 
@@ -180,6 +182,7 @@ test('text install result closes the OpenCode pending loop in an isolated HOME',
       ['plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'],
     ]);
   } finally {
+    fakeOpenCode.sandbox.cleanupArtifacts();
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
@@ -257,6 +260,7 @@ test('native install activates the packed plugin lifecycle and doctor verifies e
     assert.equal(host.evidence.loaded.state, 'verified');
     assert.equal(host.evidence.enforced.state, 'verified');
   } finally {
+    fakeOpenCode.sandbox.cleanupArtifacts();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
@@ -345,5 +349,6 @@ test('packed OpenCode package installs from a clean tarball and its wrapper full
     );
   } finally {
     sandbox.cleanup();
+    sandbox.cleanupArtifacts();
   }
 });

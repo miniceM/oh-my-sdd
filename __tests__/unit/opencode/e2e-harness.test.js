@@ -224,6 +224,8 @@ test('OpenCode E2E sandbox cleanup preserves failure artifacts for upload', () =
     writeFileSync(evidence, 'hook failure evidence');
     sandbox.cleanup();
     assert.equal(existsSync(evidence), true);
+    sandbox.cleanupArtifacts();
+    assert.equal(existsSync(sandbox.artifactsDir), false);
   } finally {
     rmSync(sandbox.artifactsDir, { recursive: true, force: true });
   }

@@ -59,6 +59,7 @@ export function createOpenCodeTestSandbox(repoRoot, { root = mkdtempSync(join(tm
       PATH: [join(repoRoot, 'scripts'), process.env.PATH].filter(Boolean).join(delimiter),
     },
     cleanup: () => rmSync(root, { recursive: true, force: true }),
+    cleanupArtifacts: () => rmSync(join(repoRoot, '.e2e-artifacts', basename(root)), { recursive: true, force: true }),
   };
   for (const directory of [
     home, xdgConfigHome, configDir, prefix, cache, temp, sandbox.packDir,
