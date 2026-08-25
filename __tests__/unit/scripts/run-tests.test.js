@@ -1,9 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 
 import {
   buildNodeArgs,
+  OPENCODE_RESOURCE_SYNC_SCRIPT,
   parseLineCoverage,
+  syncOpenCodeResources,
   validateCoverage,
 } from '../../../scripts/run-tests.js';
 
@@ -31,4 +34,32 @@ test('coverage gate rejects missing or sub-80 percent reports', () => {
     () => validateCoverage('all files | 79.99 | 90.00 | 95.00 |', 80),
     /79\.99%.*80%/,
   );
+});
+
+test('OpenCode resource synchronization runs the project script with inherited stdio', async () => {
+  const child = new EventEmitter();
+  let received;
+  const spawnFn = (...args) => {
+    received = args;
+    queueMicrotask(() => child.emit('close', 0));
+    return child;
+  };
+
+  await syncOpenCodeResources({ spawnFn });
+
+  assert.deepEqual(received, [
+    process.execPath,
+    [OPENCODE_RESOURCE_SYNC_SCRIPT],
+    { cwd: new URL('../../../', import.meta.url).pathname.slice(0, -1), stdio: 'inherit' },
+  ]);
+});
+
+test('OpenCode resource synchronization rejects a nonzero child exit', async () => {
+  const child = new EventEmitter();
+  const spawnFn = () => {
+    queueMicrotask(() => child.emit('close', 17));
+    return child;
+  };
+
+  await assert.rejects(syncOpenCodeResources({ spawnFn }), /synchronization failed with code 17/i);
 });
