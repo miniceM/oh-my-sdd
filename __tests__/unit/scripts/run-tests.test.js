@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   buildNodeArgs,
+  main,
   OPENCODE_RESOURCE_SYNC_SCRIPT,
   parseLineCoverage,
   syncOpenCodeResources,
@@ -64,4 +65,41 @@ test('OpenCode resource synchronization rejects a nonzero child exit', async () 
   };
 
   await assert.rejects(syncOpenCodeResources({ spawnFn }), /synchronization failed with code 17/i);
+});
+
+test('OpenCode resource synchronization rejects a child process error', async () => {
+  const child = new EventEmitter();
+  const spawnFn = () => {
+    queueMicrotask(() => child.emit('error', new Error('sync launcher unavailable')));
+    return child;
+  };
+
+  await assert.rejects(syncOpenCodeResources({ spawnFn }), /sync launcher unavailable/);
+});
+
+test('main waits for OpenCode resources before starting the Node test child', async () => {
+  const events = [];
+  const testChild = new EventEmitter();
+  const syncResources = async () => {
+    events.push('sync-start');
+    await new Promise((resolve) => {
+      queueMicrotask(() => {
+        events.push('sync-resolved');
+        resolve();
+      });
+    });
+  };
+  const spawnFn = () => {
+    events.push('test-spawn');
+    queueMicrotask(() => testChild.emit('close', 0));
+    return testChild;
+  };
+
+  await main({
+    findTestsFn: async () => ['/tmp/example.test.js'],
+    spawnFn,
+    syncResources,
+  });
+
+  assert.deepEqual(events, ['sync-start', 'sync-resolved', 'test-spawn']);
 });

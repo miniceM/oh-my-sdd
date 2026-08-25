@@ -78,18 +78,23 @@ function syncOpenCodeResources({ spawnFn = spawn } = {}) {
 }
 
 /** Discover test files, run them, and optionally enforce native line coverage. */
-async function main({ coverage = process.argv.includes('--coverage') } = {}) {
-  const files = await findTests(TESTS_DIR);
+async function main({
+  coverage = process.argv.includes('--coverage'),
+  findTestsFn = findTests,
+  spawnFn = spawn,
+  syncResources = syncOpenCodeResources,
+} = {}) {
+  const files = await findTestsFn(TESTS_DIR);
   if (files.length === 0) {
     process.stderr.write('No test files found under __tests__/\n');
     process.exit(1);
   }
 
-  await syncOpenCodeResources();
+  await syncResources();
 
   process.stderr.write(`Running ${files.length} test file(s)...\n`);
 
-  const child = spawn(process.execPath, buildNodeArgs(files, { coverage }), {
+  const child = spawnFn(process.execPath, buildNodeArgs(files, { coverage }), {
     stdio: coverage ? ['inherit', 'pipe', 'pipe'] : 'inherit',
   });
 
