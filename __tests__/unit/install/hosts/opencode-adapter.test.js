@@ -116,6 +116,22 @@ describe('OpenCodeAdapter', () => {
     }
   });
 
+  it('treats semantically inconsistent activation records as unknown runtime evidence', () => {
+    const inconsistent = [
+      activation({ state: 'verified', drifted_resources: ['oms-skill:security-check'] }),
+      activation({ state: 'degraded' }),
+      activation({ state: 'failed' }),
+      activation({ state: 'verified', failed_resources: ['runtime:hooks'] }),
+      activation({ registered_hooks: [''] }),
+    ];
+
+    for (const record of inconsistent) {
+      const { runtime } = inspectDoctorWithActivation(record);
+      assert.equal(runtime.loaded.state, 'unknown');
+      assert.equal(runtime.enforced.state, 'unknown');
+    }
+  });
+
   it('does not infer write enforcement when activation has no write-before hook', () => {
     const { runtime } = inspectDoctorWithActivation(activation({ registered_hooks: ['tool.execute.after'] }));
 

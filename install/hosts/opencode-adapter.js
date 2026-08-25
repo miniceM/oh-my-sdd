@@ -93,13 +93,18 @@ function readActivation() {
   if (!existsSync(path)) return { state: 'missing', path, reason: 'OpenCode activation record is missing.' };
   try {
     const value = JSON.parse(readFileSync(path, 'utf8'));
+    const stringList = (list) => Array.isArray(list)
+      && list.every((item) => typeof item === 'string' && item.length > 0);
+    const expectedState = value?.failed_resources?.length > 0
+      ? 'failed'
+      : value?.drifted_resources?.length > 0 ? 'degraded' : 'verified';
     const valid = value && value.schema_version === 1
       && typeof value.plugin_version === 'string' && value.plugin_version.length > 0
       && typeof value.resource_digest === 'string' && value.resource_digest.length > 0
       && typeof value.activated_at === 'string' && !Number.isNaN(Date.parse(value.activated_at))
-      && Array.isArray(value.registered_hooks) && value.registered_hooks.every((hook) => typeof hook === 'string')
-      && ['verified', 'degraded', 'failed'].includes(value.state)
-      && Array.isArray(value.drifted_resources) && Array.isArray(value.failed_resources);
+      && stringList(value.registered_hooks)
+      && stringList(value.drifted_resources) && stringList(value.failed_resources)
+      && value.state === expectedState;
     return valid
       ? { state: 'valid', path, value }
       : { state: 'invalid', path, reason: 'OpenCode activation record does not match schema_version 1.' };
