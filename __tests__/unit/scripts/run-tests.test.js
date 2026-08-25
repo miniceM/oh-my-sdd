@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   buildNodeArgs,
@@ -50,7 +52,7 @@ test('OpenCode resource synchronization runs the project script with inherited s
   assert.deepEqual(received, [
     process.execPath,
     [OPENCODE_RESOURCE_SYNC_SCRIPT],
-    { cwd: new URL('../../../', import.meta.url).pathname.slice(0, -1), stdio: 'inherit' },
+    { cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..'), stdio: 'inherit' },
   ]);
 });
 
