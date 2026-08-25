@@ -84,6 +84,38 @@ function getOpenCodePaths() {
     skillsDir: join(configDir, 'skills'),
     agents: getAgentsPath(home),
     manifest: join(home, '.oh-my-sdd', 'opencode-npm-resources.json'),
+    activation: join(home, '.oh-my-sdd', 'opencode-activation.json'),
+  };
+}
+
+function readActivation() {
+  const { activation: path } = getOpenCodePaths();
+  if (!existsSync(path)) return { state: 'missing', path, reason: 'OpenCode activation record is missing.' };
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'));
+    const valid = value && value.schema_version === 1
+      && typeof value.plugin_version === 'string' && value.plugin_version.length > 0
+      && typeof value.resource_digest === 'string' && value.resource_digest.length > 0
+      && typeof value.activated_at === 'string' && !Number.isNaN(Date.parse(value.activated_at))
+      && Array.isArray(value.registered_hooks) && value.registered_hooks.every((hook) => typeof hook === 'string')
+      && ['verified', 'degraded', 'failed'].includes(value.state)
+      && Array.isArray(value.drifted_resources) && Array.isArray(value.failed_resources);
+    return valid
+      ? { state: 'valid', path, value }
+      : { state: 'invalid', path, reason: 'OpenCode activation record does not match schema_version 1.' };
+  } catch (error) {
+    return { state: 'invalid', path, reason: `Invalid JSON in ${path}: ${error.message}` };
+  }
+}
+
+function activationDriftEvidence(activation) {
+  if (activation.state !== 'valid' || activation.value.drifted_resources.length === 0) return null;
+  return {
+    state: 'drifted',
+    path: activation.path,
+    evidence: `OpenCode activation recorded drift: ${activation.value.drifted_resources.join(', ')}`,
+    reason: `User modification detected in ${activation.value.drifted_resources.join(', ')}; OMS will not overwrite it.`,
+    next_action: 'Review the user change and handle it manually; repair preserves modified resources.',
   };
 }
 
@@ -273,10 +305,14 @@ export class OpenCodeAdapter extends HostAdapter {
   static async inspectRuntime(ctx = {}) {
     const paths = getOpenCodePaths();
     const runtimeConfig = readRuntimeConfig();
+    const activation = readActivation();
     const isRegistered = runtimeConfig.state === 'valid'
       && Array.isArray(runtimeConfig.config.plugin)
       && runtimeConfig.config.plugin.includes(OPENCODE_PLUGIN_ENTRY);
     const invalid = runtimeConfig.state === 'invalid';
+    const active = activation.state === 'valid' && ['verified', 'degraded'].includes(activation.value.state);
+    const writeBeforeRegistered = active && activation.value.registered_hooks.includes('tool.execute.before');
+    const activationDrift = activationDriftEvidence(activation);
     return {
       written: {
         state: runtimeConfig.state === 'valid' ? 'verified' : (invalid ? 'unknown' : 'missing'),
@@ -290,16 +326,18 @@ export class OpenCodeAdapter extends HostAdapter {
         evidence: isRegistered ? "Plugin " + OPENCODE_PLUGIN_ENTRY + " registered in config" : null,
         reason: invalid ? runtimeConfig.reason : (isRegistered ? null : "Plugin entry missing from config"),
       },
-      postinstall: postinstallEvidence(),
+      postinstall: activationDrift || postinstallEvidence(),
       loaded: {
-        state: "unknown",
-        evidence: "No OpenCode host launch event was observed by oms-install",
-        reason: "OpenCode host launch evidence unavailable",
+        state: active ? 'verified' : 'unknown',
+        evidence: active ? `OpenCode activation recorded at ${activation.value.activated_at}` : null,
+        reason: active ? null : (activation.reason || 'OpenCode host launch evidence unavailable'),
       },
       enforced: {
-        state: "unknown",
-        evidence: "No active OpenCode runtime write-prevention probe was observed by oms-install",
-        reason: "Write prevention evidence requires active runtime",
+        state: writeBeforeRegistered ? 'verified' : 'unknown',
+        evidence: writeBeforeRegistered ? 'OpenCode activation registered tool.execute.before' : null,
+        reason: active
+          ? 'OpenCode activation does not include tool.execute.before.'
+          : (activation.reason || 'Write prevention evidence requires active runtime'),
       },
     };
   }
