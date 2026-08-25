@@ -1,16 +1,23 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { OpenCodeAdapter } from '../../../../install/hosts/opencode-adapter.js';
 import { HostAdapter } from '../../../../install/host-adapter.js';
 import { SDD_COMMANDS } from '../../../../lib/command-generator.js';
+import { resourceDigest } from '../../../../opencode/scripts/resource-ownership.mjs';
+
+const PLUGIN_ROOT = fileURLToPath(new URL('../../../../opencode/', import.meta.url));
 
 function inspectDoctorWithActivation(activation) {
   const home = mkdtempSync(join(tmpdir(), 'oms-opencode-activation-'));
   const configDir = join(home, '.config', 'opencode');
+  const npmRoot = join(home, 'npm-root');
+  const npmBin = join(home, 'bin');
+  const installedPlugin = join(npmRoot, '@cli-tools', 'oh-my-sdd-opencode');
   const adapterUrl = new URL('../../../../install/hosts/opencode-adapter.js', import.meta.url).href;
   const healthUrl = new URL('../../../../install/control-plane/health.js', import.meta.url).href;
   const script = `
@@ -22,6 +29,12 @@ function inspectDoctorWithActivation(activation) {
   `;
   try {
     mkdirSync(configDir, { recursive: true });
+    mkdirSync(join(npmRoot, '@cli-tools'), { recursive: true });
+    mkdirSync(npmBin, { recursive: true });
+    symlinkSync(PLUGIN_ROOT, installedPlugin, 'dir');
+    const npm = join(npmBin, 'npm');
+    writeFileSync(npm, '#!/bin/sh\nprintf "%s\\n" "$OMS_TEST_NPM_ROOT"\n');
+    chmodSync(npm, 0o755);
     writeFileSync(join(configDir, 'opencode.json'), JSON.stringify({ plugin: ['@cli-tools/oh-my-sdd-opencode'] }));
     if (activation !== undefined) {
       mkdirSync(join(home, '.oh-my-sdd'), { recursive: true });
@@ -31,7 +44,10 @@ function inspectDoctorWithActivation(activation) {
       );
     }
     const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
-      env: { ...process.env, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config') },
+      env: {
+        ...process.env, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'),
+        OMS_TEST_NPM_ROOT: npmRoot, PATH: `${npmBin}:${process.env.PATH}`,
+      },
       encoding: 'utf8',
     });
     assert.equal(result.status, 0, result.stderr);
@@ -45,8 +61,8 @@ function activation(overrides = {}) {
   return {
     schema_version: 1,
     plugin_version: '1.0.0',
-    resource_digest: 'abc123',
-    activated_at: '2026-08-25T00:00:00.000Z',
+    resource_digest: resourceDigest(PLUGIN_ROOT),
+    activated_at: new Date().toISOString(),
     registered_hooks: ['tool.execute.before'],
     state: 'verified',
     drifted_resources: [],
@@ -106,6 +122,18 @@ describe('OpenCodeAdapter', () => {
     assert.equal(runtime.enforced.state, 'verified');
     assert.equal(report.hosts[0].protection.level, 'enforced');
     assert.equal(report.findings.some((finding) => finding.code.startsWith('runtime-')), false);
+  });
+
+  it('treats expired or resource-digest-mismatched activation records as unknown runtime evidence', () => {
+    for (const record of [
+      activation({ resource_digest: 'not-the-installed-plugin' }),
+      activation({ activated_at: new Date(Date.now() - (48 * 60 * 60 * 1000)).toISOString() }),
+    ]) {
+      const { runtime } = inspectDoctorWithActivation(record);
+      assert.equal(runtime.loaded.state, 'unknown');
+      assert.equal(runtime.enforced.state, 'unknown');
+      assert.match(runtime.loaded.reason, /rerun|restart|activation/i);
+    }
   });
 
   it('treats missing or invalid activation records as unknown runtime evidence', () => {

@@ -3,7 +3,7 @@
 // Production installs delegate plugin registration to the OpenCode CLI; local
 // plugin paths are retained only for backwards-compatible uninstall cleanup.
 
-import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { HostAdapter } from '../host-adapter.js';
@@ -21,6 +21,7 @@ import {
 } from '../../lib/paths.js';
 
 const DEFERRED_LOAD_ACTION = '重启 OpenCode 后完成插件加载；随后可运行 oms doctor --tool opencode 查看注册状态。';
+const ACTIVATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 export function buildOpenCodeInvocation(
   args,
@@ -105,9 +106,24 @@ function readActivation() {
       && stringList(value.registered_hooks)
       && stringList(value.drifted_resources) && stringList(value.failed_resources)
       && value.state === expectedState;
-    return valid
+    if (!valid) return { state: 'invalid', path, reason: 'OpenCode activation record does not match schema_version 1.' };
+    const age = Date.now() - Date.parse(value.activated_at);
+    if (age > ACTIVATION_TTL_MS) {
+      return { state: 'invalid', path, reason: 'OpenCode activation has expired; restart OpenCode to refresh activation evidence.' };
+    }
+    let expectedDigest;
+    try {
+      const npmRoot = execFileSync('npm', ['root', '--global'], {
+        encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 2000,
+      }).trim();
+      const packageRoot = join(npmRoot, ...OPENCODE_PLUGIN_ENTRY.split('/'));
+      expectedDigest = resourceDigest(realpathSync(packageRoot));
+    } catch {
+      return { state: 'invalid', path, reason: 'Cannot verify the installed OpenCode plugin resources; reinstall or restart OpenCode, then rerun doctor.' };
+    }
+    return value.resource_digest === expectedDigest
       ? { state: 'valid', path, value }
-      : { state: 'invalid', path, reason: 'OpenCode activation record does not match schema_version 1.' };
+      : { state: 'invalid', path, reason: 'OpenCode activation resource digest does not match the installed plugin; restart OpenCode to refresh activation evidence.' };
   } catch (error) {
     return { state: 'invalid', path, reason: `Invalid JSON in ${path}: ${error.message}` };
   }
