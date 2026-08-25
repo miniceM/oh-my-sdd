@@ -11,8 +11,9 @@ import { resourceDigest } from '../../../../opencode/scripts/resource-ownership.
 import { createOpenCodeTestSandbox, prepareDoctorInstalledPackage } from '../../../helpers/opencode-test-env.js';
 
 const PLUGIN_ROOT = fileURLToPath(new URL('../../../../opencode/', import.meta.url));
+const FIXED_NOW = Date.parse('2026-08-25T12:00:00.000Z');
 
-function inspectDoctorWithActivation(activation) {
+function inspectDoctorWithActivation(activation, now = FIXED_NOW) {
   const sandbox = createOpenCodeTestSandbox(process.cwd());
   const { home, configDir } = sandbox;
   const adapterUrl = new URL('../../../../install/hosts/opencode-adapter.js', import.meta.url).href;
@@ -20,8 +21,9 @@ function inspectDoctorWithActivation(activation) {
   const script = `
     const { OpenCodeAdapter } = await import(${JSON.stringify(adapterUrl)});
     const { doctor } = await import(${JSON.stringify(healthUrl)});
-    const runtime = await OpenCodeAdapter.inspectRuntime();
-    const report = await doctor({ adapters: [OpenCodeAdapter] });
+    const ctx = { now: () => ${JSON.stringify(now)} };
+    const runtime = await OpenCodeAdapter.inspectRuntime(ctx);
+    const report = await doctor({ adapters: [OpenCodeAdapter], ctx });
     process.stdout.write(JSON.stringify({ runtime, report }));
   `;
   try {
@@ -53,9 +55,7 @@ function activation(overrides = {}) {
     schema_version: 1,
     plugin_version: '1.0.0',
     resource_digest: resourceDigest(PLUGIN_ROOT),
-    // The doctor runs in a child process. Keep the fixture safely inside the
-    // 24-hour TTL instead of relying on cross-process clock granularity.
-    activated_at: new Date(Date.now() - 60_000).toISOString(),
+    activated_at: new Date(FIXED_NOW - 60_000).toISOString(),
     registered_hooks: ['tool.execute.before'],
     state: 'verified',
     drifted_resources: [],
@@ -120,8 +120,8 @@ describe('OpenCodeAdapter', () => {
   it('treats expired or resource-digest-mismatched activation records as unknown runtime evidence', () => {
     for (const record of [
       activation({ resource_digest: 'not-the-installed-plugin' }),
-      activation({ activated_at: new Date(Date.now() - (48 * 60 * 60 * 1000)).toISOString() }),
-      activation({ activated_at: new Date(Date.now() + (60 * 60 * 1000)).toISOString() }),
+      activation({ activated_at: new Date(FIXED_NOW - (48 * 60 * 60 * 1000)).toISOString() }),
+      activation({ activated_at: new Date(FIXED_NOW + (60 * 60 * 1000)).toISOString() }),
     ]) {
       const { runtime } = inspectDoctorWithActivation(record);
       assert.equal(runtime.loaded.state, 'unknown');

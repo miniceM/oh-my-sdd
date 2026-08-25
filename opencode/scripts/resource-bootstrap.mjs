@@ -41,6 +41,7 @@ export function bootstrapOpenCodeResources(options = {}) {
   const manifestPath = options.manifestPath ?? join(home, '.oh-my-sdd', 'opencode-npm-resources.json');
   const delegated = options.delegatedSkillNames ?? DELEGATED_SKILL_NAMES;
   const copy = options.copySync ?? cpSync;
+  const now = options.now ?? Date.now;
   const ownership = new Map(readOwnershipManifest(manifestPath).map((item) => [item.target, item]));
   const drifted_resources = [];
   const failed_resources = [];
@@ -95,7 +96,7 @@ export function bootstrapOpenCodeResources(options = {}) {
   try { writeOwnershipManifest(manifestPath, [...ownership.values()]); } catch { failed_resources.push('ownership-manifest'); }
   const resource_digest = resourceDigest(pluginRoot);
   const result = {
-    schema_version: 1, plugin_version: packageVersion(pluginRoot), resource_digest, activated_at: new Date().toISOString(),
+    schema_version: 1, plugin_version: packageVersion(pluginRoot), resource_digest, activated_at: new Date(now()).toISOString(),
     registered_hooks: options.registeredHooks ?? [],
     state: failed_resources.length ? 'failed' : drifted_resources.length ? 'degraded' : 'verified',
     drifted_resources, failed_resources,

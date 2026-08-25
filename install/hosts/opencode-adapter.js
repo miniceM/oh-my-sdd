@@ -103,6 +103,7 @@ function readActivation({
   platform = process.platform,
   comspec = process.env.ComSpec ?? process.env.COMSPEC,
   execFileSync: runCommand = execFileSync,
+  now = Date.now,
 } = {}) {
   const { activation: path } = getOpenCodePaths();
   if (!existsSync(path)) return { state: 'missing', path, reason: 'OpenCode activation record is missing.' };
@@ -121,7 +122,7 @@ function readActivation({
       && stringList(value.drifted_resources) && stringList(value.failed_resources)
       && value.state === expectedState;
     if (!valid) return { state: 'invalid', path, reason: 'OpenCode activation record does not match schema_version 1.' };
-    const age = Date.now() - Date.parse(value.activated_at);
+    const age = now() - Date.parse(value.activated_at);
     if (age < 0 || age > ACTIVATION_TTL_MS) {
       return { state: 'invalid', path, reason: 'OpenCode activation is expired or has a future timestamp; restart OpenCode to refresh activation evidence.' };
     }
