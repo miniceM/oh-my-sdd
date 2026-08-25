@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import {
   resourceDigest,
   writeOwnershipManifest,
@@ -11,6 +12,7 @@ import {
 import {
   firstNpmPackEntry,
   parseNpmPackJson,
+  writePluginLoader,
 } from '../../helpers/opencode-e2e-harness.js';
 import { resolveNpmCli } from '../../helpers/resolve-npm-cli.js';
 
@@ -210,15 +212,97 @@ test('text install result closes the OpenCode pending loop in an isolated HOME',
     assert.match(output, /Checked npm lifecycle outputs/);
     assert.match(output, /oms doctor --tool opencode/);
     assert.match(output, /loaded: unknown/);
-    assert.match(output, /No OpenCode host launch event was observed/);
+    assert.match(output, /OpenCode activation record is missing/);
     assert.match(output, /enforced: unknown/);
-    assert.match(output, /No active OpenCode runtime write-prevention probe was observed/);
+    assert.match(output, /OpenCode activation record is missing/);
     assert.ok(fs.existsSync(path.join(tmpHome, '.config', 'opencode', 'opencode.json')));
     assert.deepEqual(readFakeOpenCodeInvocations(fakeOpenCode.invocationLog), [
       ['plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'],
     ]);
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test('native install activates the packed plugin lifecycle and doctor verifies enforcement', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'oms-opencode-native-lifecycle-'));
+  const home = path.join(root, 'home');
+  const prefix = path.join(root, 'prefix');
+  const packDir = path.join(root, 'pack');
+  fs.mkdirSync(home, { recursive: true });
+  fs.mkdirSync(packDir, { recursive: true });
+  const fakeOpenCode = createFakeOpenCode(root);
+  const configDir = path.join(home, '.config', 'opencode');
+  const env = {
+    ...process.env,
+    HOME: home,
+    USERPROFILE: home,
+    XDG_HOME_DIR: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    OPENCODE_CONFIG_DIR: configDir,
+    OPENCODE_FAKE_INVOCATION_LOG: fakeOpenCode.invocationLog,
+    npm_config_prefix: prefix,
+    npm_config_cache: path.join(root, 'cache'),
+    PATH: fakeOpenCode.path,
+  };
+
+  try {
+    const packResult = runNpmWithOutput(['pack', '--json', '--pack-destination', packDir], {
+      cwd: path.join(worktreeRoot, 'opencode'), env,
+    });
+    const packEntry = firstNpmPackEntry(parseNpmPackJson(packResult.stdout, packResult.stderr), packResult);
+    const tarballFiles = new Set(packEntry.files.map((file) => file.path));
+    for (const requiredFile of [
+      'dist/index.js', 'hooks/pre-tool-use.js', 'lib/rules.js', 'content/enterprise-baseline.md',
+      'oms-skills/sdd-review/SKILL.md', '.opencode/commands/sdd-review.md', 'scripts/resource-bootstrap.mjs',
+    ]) {
+      assert.ok(tarballFiles.has(requiredFile), `packed plugin must include ${requiredFile}`);
+    }
+
+    execFileSync('node', ['bin/oms-install.js', '--tool', 'opencode', '--yes'], {
+      cwd: worktreeRoot, env, stdio: 'pipe',
+    });
+    assert.deepEqual(readFakeOpenCodeInvocations(fakeOpenCode.invocationLog), [
+      ['plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'],
+    ]);
+    assert.ok(JSON.parse(fs.readFileSync(path.join(configDir, 'opencode.json'), 'utf8')).plugin
+      .includes('@cli-tools/oh-my-sdd-opencode'));
+
+    // An old command must be replaced by the package lifecycle on the next host load.
+    const commandPath = path.join(configDir, 'commands', 'sdd-review.md');
+    fs.mkdirSync(path.dirname(commandPath), { recursive: true });
+    fs.writeFileSync(commandPath, '# legacy two-stage review\n');
+    runNpm(['install', '--global', '--legacy-peer-deps', '--foreground-scripts', '--dangerously-allow-all-scripts',
+      path.join(packDir, packEntry.filename)], { env, stdio: 'pipe' });
+
+    const npmRoot = runNpm(['root', '--global'], { env, encoding: 'utf8' }).toString().trim();
+    const packageRoot = path.join(npmRoot, '@cli-tools', 'oh-my-sdd-opencode');
+    const loader = writePluginLoader({ configDir, packageRoot });
+    // A new Node process models the OpenCode restart, including its isolated HOME.
+    const restart = execFileSync(process.execPath, [
+      '--input-type=module', '--eval',
+      "const { OhMySddPlugin } = await import(process.argv[1]); const hooks = await OhMySddPlugin({}); process.stdout.write(JSON.stringify(Object.keys(hooks)));",
+      `${pathToFileURL(loader).href}?restart=${Date.now()}`,
+    ], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    assert.ok(JSON.parse(restart).includes('tool.execute.before'));
+
+    const reviewCommand = fs.readFileSync(commandPath, 'utf8');
+    assert.match(reviewCommand, /原子 PR/);
+    assert.doesNotMatch(reviewCommand, /legacy two-stage review/);
+    assert.match(fs.readFileSync(path.join(configDir, 'skills', 'sdd-review', 'SKILL.md'), 'utf8'), /原子 PR/);
+
+    const activation = JSON.parse(fs.readFileSync(path.join(home, '.oh-my-sdd', 'opencode-activation.json'), 'utf8'));
+    assert.equal(activation.state, 'verified');
+    assert.ok(activation.registered_hooks.includes('tool.execute.before'));
+
+    const doctor = JSON.parse(execFileSync('node', ['bin/oms.js', 'doctor', '--tool', 'opencode', '--json'], {
+      cwd: worktreeRoot, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    }));
+    const host = doctor.hosts.find((entry) => entry.id === 'opencode');
+    assert.equal(host.evidence.loaded.state, 'verified');
+    assert.equal(host.evidence.enforced.state, 'verified');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
