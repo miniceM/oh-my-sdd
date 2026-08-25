@@ -56,6 +56,9 @@ function normalizeEdits(edits) {
 }
 export function normalizeArgs(args) {
     const out = { ...args };
+    if ('file_path' in out && !('filePath' in out)) {
+        out.filePath = out.file_path;
+    }
     if ('new_string' in out && !('newString' in out)) {
         out.newString = out.new_string;
     }

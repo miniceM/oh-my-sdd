@@ -281,10 +281,13 @@ test('native install activates the packed plugin lifecycle and doctor verifies e
     // A new Node process models the OpenCode restart, including its isolated HOME.
     const restart = execFileSync(process.execPath, [
       '--input-type=module', '--eval',
-      "const { OhMySddPlugin } = await import(process.argv[1]); const hooks = await OhMySddPlugin({}); process.stdout.write(JSON.stringify(Object.keys(hooks)));",
+      "const { OhMySddPlugin } = await import(process.argv[1]); const hooks = await OhMySddPlugin({}); let dangerDenied = false; let dangerReason = ''; try { await hooks['tool.execute.before']({ tool: 'write', sessionID: 'e2e' }, { args: { file_path: '/tmp/credentials.js', content: 'AKIAABCDEFGHIJKLMNOP' } }); } catch (error) { dangerDenied = true; dangerReason = String(error.message); } process.stdout.write(JSON.stringify({ hookKeys: Object.keys(hooks), dangerDenied, dangerReason }));",
       `${pathToFileURL(loader).href}?restart=${Date.now()}`,
     ], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-    assert.ok(JSON.parse(restart).includes('tool.execute.before'));
+    const restarted = JSON.parse(restart);
+    assert.ok(restarted.hookKeys.includes('tool.execute.before'));
+    assert.equal(restarted.dangerDenied, true, 'loaded plugin must reject dangerous writes through PreToolUse');
+    assert.match(restarted.dangerReason, /HARD_RULE|hardcoded-aws-access-key/);
 
     const reviewCommand = fs.readFileSync(commandPath, 'utf8');
     assert.match(reviewCommand, /原子 PR/);
