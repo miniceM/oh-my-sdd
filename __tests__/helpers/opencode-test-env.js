@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, join } from 'node:path';
 
@@ -111,14 +111,16 @@ fs.writeFileSync(configPath, JSON.stringify({ ...config, plugin }));
 export function prepareDoctorInstalledPackage({ sandbox, packageRoot }) {
   const npmRoot = join(sandbox.root, 'npm-root');
   const npmBin = join(sandbox.root, 'npm-bin');
+  const packageSnapshot = join(sandbox.root, 'package-snapshot');
   const installedPlugin = join(npmRoot, '@cli-tools', 'oh-my-sdd-opencode');
   mkdirSync(join(npmRoot, '@cli-tools'), { recursive: true });
   mkdirSync(npmBin, { recursive: true });
-  symlinkSync(packageRoot, installedPlugin, process.platform === 'win32' ? 'junction' : 'dir');
+  cpSync(packageRoot, packageSnapshot, { recursive: true });
+  symlinkSync(packageSnapshot, installedPlugin, process.platform === 'win32' ? 'junction' : 'dir');
   writeFileSync(join(npmBin, 'npm.mjs'), `process.stdout.write(process.env.OMS_TEST_NPM_ROOT + '\\n');\n`);
   makeLauncher({ binDir: npmBin, name: 'npm', entry: 'npm.mjs' });
   return {
-    npmRoot,
+    npmRoot, packageSnapshot,
     installedPlugin,
     env: {
       ...sandbox.env,

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -147,6 +147,22 @@ describe('OpenCodeAdapter', () => {
       command: 'C:\\Windows\\System32\\cmd.exe',
       args: ['/d', '/s', '/c', 'npm', 'root', '--global'],
     });
+  });
+
+  it('doctor fixture keeps a stable package snapshot when the source changes', () => {
+    const sandbox = createOpenCodeTestSandbox(process.cwd());
+    const source = join(sandbox.root, 'source-plugin');
+    try {
+      mkdirSync(source, { recursive: true });
+      writeFileSync(join(source, 'version.txt'), 'before');
+      const fixture = prepareDoctorInstalledPackage({ sandbox, packageRoot: source });
+      writeFileSync(join(source, 'version.txt'), 'after');
+      assert.equal(existsSync(fixture.installedPlugin), true);
+      assert.equal(readFileSync(join(fixture.installedPlugin, 'version.txt'), 'utf8'), 'before');
+    } finally {
+      sandbox.cleanup();
+      sandbox.cleanupArtifacts();
+    }
   });
 
   it('treats missing or invalid activation records as unknown runtime evidence', () => {
