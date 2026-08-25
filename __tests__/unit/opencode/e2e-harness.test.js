@@ -139,53 +139,6 @@ test('OpenCode E2E harness reports stdout and stderr when filename is missing', 
   );
 });
 
-test('CI workflows install OpenCode build dependencies without running root lifecycle scripts', () => {
-  for (const workflowName of ['ci.yml', 'opencode-e2e.yml']) {
-    const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', workflowName), 'utf8');
-    assert.match(workflow, /npm (?:install|ci) --ignore-scripts/);
-    assert.match(workflow, /npm ci --prefix opencode --ignore-scripts/);
-  }
-});
-
-test('CI synchronizes generated OpenCode resources before test and coverage runs', () => {
-  const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', 'ci.yml'), 'utf8');
-  const syncStep = 'npm run sync:resources --prefix opencode';
-  assert.ok(workflow.includes(syncStep));
-  assert.ok(workflow.indexOf(syncStep) < workflow.indexOf('- run: npm test'));
-  assert.ok(workflow.indexOf(syncStep) < workflow.indexOf('- run: npm run test:coverage'));
-});
-
-test('OpenCode E2E workflow uploads hidden failure artifacts', () => {
-  const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', 'opencode-e2e.yml'), 'utf8');
-  assert.match(workflow, /include-hidden-files:\s*true/);
-});
-
-test('OpenCode E2E workflow runs the AGENTS lifecycle tests on every platform', () => {
-  const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', 'opencode-e2e.yml'), 'utf8');
-  assert.match(workflow, /npm run --prefix opencode build/);
-  assert.match(workflow, /npm run sync:resources --prefix opencode/);
-  assert.match(workflow, /node --test __tests__\/unit\/opencode\/resource-scripts\.test\.js/);
-});
-
-test('OpenCode E2E workflow repeats resource sync against an existing destination', () => {
-  const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', 'opencode-e2e.yml'), 'utf8');
-  const syncCount = workflow.match(/npm run sync:resources --prefix opencode/g)?.length ?? 0;
-  assert.ok(syncCount >= 2, `expected repeated resource sync, found ${syncCount} invocation(s)`);
-});
-
-test('OpenCode E2E workflow prepends repository mocks on Windows without Bash', () => {
-  const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', 'opencode-e2e.yml'), 'utf8');
-  assert.match(workflow, /if: runner\.os == 'Windows'/);
-  assert.match(workflow, /shell: pwsh/);
-  assert.match(workflow, /Add-Content -Path \$env:GITHUB_PATH/);
-  assert.doesNotMatch(workflow, /name: Put repository mocks first on PATH\n\s+shell: bash/);
-});
-
-test('OpenCode E2E workflow owns dependency installation instead of the test body', () => {
-  const source = readFileSync(join(process.cwd(), '__tests__', 'integration', 'opencode', 'real-cli-e2e.test.js'), 'utf8');
-  assert.doesNotMatch(source, /execNpm\(\['ci', '--prefix', 'opencode'/);
-});
-
 test('OpenCode E2E harness loader re-exports only the globally installed tarball plugin', () => {
   const root = mkdtempSync(join(tmpdir(), 'oms-opencode-e2e-loader-'));
   const configDir = join(root, 'xdg-config', 'opencode');

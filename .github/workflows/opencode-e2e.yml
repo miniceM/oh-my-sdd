@@ -8,12 +8,13 @@ on:
 
 jobs:
   opencode-e2e:
-    name: OpenCode E2E (${{ matrix.os }})
+    name: OpenCode E2E (${{ matrix.os }}, Node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [18, 22]
     env:
       OMS_OPENCODE_E2E: '1'
       OMS_MOCK_USER: ci
@@ -23,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ matrix.node }}
           registry-url: https://registry.npmjs.org
       - name: Put repository mocks first on PATH (POSIX)
         if: runner.os != 'Windows'
@@ -45,7 +46,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: opencode-e2e-${{ matrix.os }}
+          name: opencode-e2e-${{ matrix.os }}-node${{ matrix.node }}
           path: .e2e-artifacts
           include-hidden-files: true
           if-no-files-found: warn

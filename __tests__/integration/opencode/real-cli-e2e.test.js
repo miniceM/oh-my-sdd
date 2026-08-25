@@ -16,13 +16,27 @@ import {
 } from '../../helpers/opencode-e2e-harness.js';
 
 const nodeMajor = Number(process.versions.node.split('.')[0]);
-const enabled = process.env.OMS_OPENCODE_E2E === '1' && nodeMajor === 22;
+export const supportedE2eNodeMajors = [18, 22];
+const enabled = process.env.OMS_OPENCODE_E2E === '1' && supportedE2eNodeMajors.includes(nodeMajor);
 const packageName = process.env.OPENCODE_PACKAGE ?? 'opencode-ai';
 const version = process.env.OPENCODE_VERSION;
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const commandTimeoutMs = process.platform === 'win32' ? 120_000 : 30_000;
+const defaultCommandTimeoutMs = process.platform === 'win32' ? 120_000 : 30_000;
+export const commandTimeoutByNodeMajor = Object.freeze({
+  18: 120_000,
+  22: defaultCommandTimeoutMs,
+});
+const commandTimeoutMs = commandTimeoutByNodeMajor[nodeMajor] ?? defaultCommandTimeoutMs;
 const cliInstallTimeoutMs = 120_000;
 const managedAgentsMarker = '<!-- OH-MY-SDD:BEGIN (do not edit between these markers) -->';
+
+test('real OpenCode E2E is eligible on every supported Node runtime', () => {
+  assert.deepEqual(supportedE2eNodeMajors, [18, 22]);
+});
+
+test('real OpenCode E2E leaves Node 18 enough time to initialize the real CLI', () => {
+  assert.equal(commandTimeoutByNodeMajor[18], 120_000);
+});
 
 export function requestMessages(body) {
   try {
@@ -234,7 +248,7 @@ async function startProvider(transcript, projectDir) {
 }
 
 test('real OpenCode CLI loads commands and the globally installed tarball plugin', {
-  skip: !enabled && 'requires OMS_OPENCODE_E2E=1 on the pinned Node 22 runtime',
+  skip: !enabled && 'requires OMS_OPENCODE_E2E=1 on supported Node 18 or 22',
 }, async () => {
   assert.ok(version, 'OPENCODE_VERSION is required when OMS_OPENCODE_E2E=1');
   const sandbox = createE2eSandbox(process.cwd());
