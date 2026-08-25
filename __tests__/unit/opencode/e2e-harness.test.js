@@ -41,6 +41,7 @@ test('OpenCode test sandbox isolates every mutable OpenCode, npm, and temporary 
     if (previousSentinel === undefined) delete process.env.OMS_E2E_TEST_SECRET;
     else process.env.OMS_E2E_TEST_SECRET = previousSentinel;
     sandbox.cleanup();
+    sandbox.cleanupArtifacts();
   }
 });
 
@@ -63,6 +64,7 @@ test('fake OpenCode CLI records the native installation command and updates sand
     if (process.platform === 'win32') assert.match(fake.launcherPath, /\.cmd$/i);
   } finally {
     sandbox.cleanup();
+    sandbox.cleanupArtifacts();
   }
 });
 
