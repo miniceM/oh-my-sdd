@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
 import {
@@ -37,6 +38,43 @@ test('real OpenCode E2E is eligible on every supported Node runtime', () => {
 test('real OpenCode E2E leaves Node 18 enough time to initialize the real CLI', () => {
   assert.equal(commandTimeoutByNodeMajor[18], 120_000);
 });
+
+test('real OpenCode E2E verifies write outcomes on disk, not only hook output', () => {
+  const projectDir = mkdtempSync(join(tmpdir(), 'oms-opencode-write-outcome-'));
+  try {
+    const safePath = join(projectDir, 'safe.txt');
+    writeFileSync(safePath, 'safe content');
+    assertToolWriteFilesystemOutcome('safe', projectDir, 'safe write evidence');
+
+    for (const [name, filename] of [['aws', 'aws.txt'], ['openai', 'openai.txt'], ['env', '.env']]) {
+      writeFileSync(join(projectDir, filename), 'blocked secret');
+      assert.throws(
+        () => assertToolWriteFilesystemOutcome(name, projectDir, `${name} denial evidence`),
+        new RegExp(`must not create ${filename.replace('.', '\\.')}`),
+      );
+      rmSync(join(projectDir, filename));
+    }
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
+export function assertToolWriteFilesystemOutcome(name, projectDir, detail) {
+  const paths = {
+    safe: join(projectDir, 'safe.txt'),
+    aws: join(projectDir, 'aws.txt'),
+    openai: join(projectDir, 'openai.txt'),
+    env: join(projectDir, '.env'),
+  };
+  const target = paths[name];
+  if (!target) return;
+  if (name === 'safe') {
+    assert.ok(existsSync(target), `safe write must create safe.txt\n${detail}`);
+    assert.equal(readFileSync(target, 'utf8'), 'safe content', `safe write content mismatch\n${detail}`);
+    return;
+  }
+  assert.equal(existsSync(target), false, `denied write must not create ${name === 'env' ? '.env' : `${name}.txt`}\n${detail}`);
+}
 
 export function requestMessages(body) {
   try {
@@ -376,6 +414,7 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
       } else {
         assert.match(output, /HARD_RULE violated|hardcoded-|destructive-|env-file-edit/, detail);
       }
+      assertToolWriteFilesystemOutcome(name, sandbox.projectDir, detail);
     }
     assert.ok(transcript.length >= 12, formatE2eFailure({
       phase: 'provider-transcript',
