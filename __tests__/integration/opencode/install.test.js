@@ -60,7 +60,8 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
   const fakeOpenCode = createFakeOpenCode(tmpHome);
   const env = fakeOpenCode.env;
 
-  // Step 1: install (use CLI wrapper which parses --tool)
+  try {
+    // Step 1: install (use CLI wrapper which parses --tool)
   execFileSync('node', ['bin/oms-install.js', '--tool', 'opencode', '-y'], {
     cwd: worktreeRoot,
     env,
@@ -139,7 +140,10 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
     'user-modified command',
   );
   assert.equal(fs.existsSync(delegatedSkill), false, 'npm-owned delegated skill should be removed');
-  assert.equal(fs.existsSync(manifestPath), false, 'npm ownership manifest should be removed');
+    assert.equal(fs.existsSync(manifestPath), false, 'npm ownership manifest should be removed');
+  } finally {
+    fakeOpenCode.sandbox.cleanup();
+  }
 });
 
 test('text install result closes the OpenCode pending loop in an isolated HOME', () => {
