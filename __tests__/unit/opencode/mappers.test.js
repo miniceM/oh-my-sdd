@@ -95,10 +95,20 @@ test('mappers: mapPreToolUse tracked tool returns mapped payload', () => {
   });
   assert.deepEqual(out, {
     tool_name: 'Write',
-    tool_input: { file_path: '/x', content: 'hi' },
+      tool_input: { file_path: '/x', filePath: '/x', content: 'hi' },
     session_id: 's1',
     cwd: process.cwd(),
   });
+});
+
+test('mappers: mapPreToolUse preserves file_path while adding filePath for shared hooks', () => {
+  const out = mapPreToolUse({
+    tool: 'write',
+    input: { file_path: '/x/.env', content: 'SECRET=value' },
+    sessionID: 's1',
+  });
+  assert.equal(out?.tool_input.file_path, '/x/.env');
+  assert.equal(out?.tool_input.filePath, '/x/.env');
 });
 
 test('mappers: mapPreToolUse bash maps to the shared Bash hard-rule gate', () => {
