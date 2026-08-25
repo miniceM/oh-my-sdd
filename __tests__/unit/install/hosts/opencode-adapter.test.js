@@ -123,10 +123,19 @@ describe('OpenCodeAdapter', () => {
       activation({ activated_at: new Date(FIXED_NOW - (48 * 60 * 60 * 1000)).toISOString() }),
       activation({ activated_at: new Date(FIXED_NOW + (60 * 60 * 1000)).toISOString() }),
     ]) {
-      const { runtime } = inspectDoctorWithActivation(record);
+      const { runtime, report } = inspectDoctorWithActivation(record);
       assert.equal(runtime.loaded.state, 'unknown');
       assert.equal(runtime.enforced.state, 'unknown');
       assert.match(runtime.loaded.reason, /rerun|restart|activation/i);
+      assert.equal(report.hosts[0].protection.level, 'registered');
+      assert.notEqual(report.hosts[0].protection.level, 'enforced');
+      assert.deepEqual(
+        report.findings
+          .filter((finding) => finding.code.startsWith('runtime-'))
+          .map((finding) => finding.code)
+          .sort(),
+        ['runtime-enforced-unknown', 'runtime-loaded-unknown'],
+      );
     }
   });
 
