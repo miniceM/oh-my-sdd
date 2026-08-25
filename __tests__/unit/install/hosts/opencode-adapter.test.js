@@ -151,9 +151,18 @@ describe('OpenCodeAdapter', () => {
 
   it('treats missing or invalid activation records as unknown runtime evidence', () => {
     for (const record of [undefined, '{ invalid JSON', activation({ schema_version: 2 })]) {
-      const { runtime } = inspectDoctorWithActivation(record);
+      const { runtime, report } = inspectDoctorWithActivation(record);
       assert.equal(runtime.loaded.state, 'unknown');
       assert.equal(runtime.enforced.state, 'unknown');
+      assert.equal(report.hosts[0].protection.level, 'registered');
+      assert.notEqual(report.hosts[0].protection.level, 'enforced');
+      assert.deepEqual(
+        report.findings
+          .filter((finding) => finding.code.startsWith('runtime-'))
+          .map((finding) => finding.code)
+          .sort(),
+        ['runtime-enforced-unknown', 'runtime-loaded-unknown'],
+      );
     }
   });
 
