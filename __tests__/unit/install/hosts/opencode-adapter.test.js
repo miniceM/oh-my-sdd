@@ -66,7 +66,9 @@ function activation(overrides = {}) {
     schema_version: 1,
     plugin_version: '1.0.0',
     resource_digest: resourceDigest(PLUGIN_ROOT),
-    activated_at: new Date().toISOString(),
+    // The doctor runs in a child process. Keep the fixture safely inside the
+    // 24-hour TTL instead of relying on cross-process clock granularity.
+    activated_at: new Date(Date.now() - 60_000).toISOString(),
     registered_hooks: ['tool.execute.before'],
     state: 'verified',
     drifted_resources: [],
