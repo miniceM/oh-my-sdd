@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { buildNpmRootInvocation, OpenCodeAdapter } from '../../../../install/hosts/opencode-adapter.js';
@@ -31,10 +31,14 @@ function inspectDoctorWithActivation(activation) {
     mkdirSync(configDir, { recursive: true });
     mkdirSync(join(npmRoot, '@cli-tools'), { recursive: true });
     mkdirSync(npmBin, { recursive: true });
-    symlinkSync(PLUGIN_ROOT, installedPlugin, 'dir');
-    const npm = join(npmBin, 'npm');
-    writeFileSync(npm, '#!/bin/sh\nprintf "%s\\n" "$OMS_TEST_NPM_ROOT"\n');
-    chmodSync(npm, 0o755);
+    symlinkSync(PLUGIN_ROOT, installedPlugin, process.platform === 'win32' ? 'junction' : 'dir');
+    const npm = join(npmBin, process.platform === 'win32' ? 'npm.cmd' : 'npm');
+    if (process.platform === 'win32') {
+      writeFileSync(npm, '@echo off\r\n@echo %OMS_TEST_NPM_ROOT%\r\n');
+    } else {
+      writeFileSync(npm, '#!/bin/sh\nprintf "%s\\n" "$OMS_TEST_NPM_ROOT"\n');
+      chmodSync(npm, 0o755);
+    }
     writeFileSync(join(configDir, 'opencode.json'), JSON.stringify({ plugin: ['@cli-tools/oh-my-sdd-opencode'] }));
     if (activation !== undefined) {
       mkdirSync(join(home, '.oh-my-sdd'), { recursive: true });
@@ -46,7 +50,7 @@ function inspectDoctorWithActivation(activation) {
     const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
       env: {
         ...process.env, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'),
-        OMS_TEST_NPM_ROOT: npmRoot, PATH: `${npmBin}:${process.env.PATH}`,
+        OMS_TEST_NPM_ROOT: npmRoot, PATH: `${npmBin}${delimiter}${process.env.PATH}`,
       },
       encoding: 'utf8',
     });

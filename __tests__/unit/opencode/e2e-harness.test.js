@@ -163,7 +163,7 @@ test('OpenCode E2E harness loader re-exports only the globally installed tarball
   const packageRoot = join(process.cwd(), 'opencode');
   try {
     const loader = writePluginLoader({ configDir, packageRoot });
-    assert.equal(loader, join(configDir, 'plugins', 'oh-my-sdd-e2e.js'));
+    assert.equal(loader, join(configDir, 'plugins', 'oh-my-sdd-e2e.mjs'));
     assert.ok(existsSync(loader));
     const source = readFileSync(loader, 'utf8');
     assert.match(source, /export \{ OhMySddPlugin \}/);
