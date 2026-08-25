@@ -51,15 +51,30 @@ fs.writeFileSync(configPath, JSON.stringify({ ...config, plugin: plugins }));
     fs.writeFileSync(path.join(binDir, 'opencode.cmd'), `@echo off\n"${process.execPath}" "%~dp0opencode.mjs" %*\n`);
   } else {
     const executable = path.join(binDir, 'opencode');
-    fs.writeFileSync(executable, `#!${process.execPath}\nimport '${scriptPath.replaceAll('\\', '\\\\')}';\n`);
+    fs.writeFileSync(executable, `#!/bin/sh\nexec "${process.execPath}" "${scriptPath}" "$@"\n`);
     fs.chmodSync(executable, 0o755);
   }
 
   return {
+    launcherPath: process.platform === 'win32'
+      ? path.join(binDir, 'opencode.cmd')
+      : path.join(binDir, 'opencode'),
     invocationLog,
     path: `${binDir}${path.delimiter}${process.env.PATH || ''}`,
   };
 }
+
+test('fake OpenCode launcher delegates to its .mjs entrypoint instead of parsing ESM itself', () => {
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oms-fake-opencode-'));
+  try {
+    const fakeOpenCode = createFakeOpenCode(tmpHome);
+    const launcher = fs.readFileSync(fakeOpenCode.launcherPath, 'utf8');
+    assert.match(launcher, /opencode\.mjs/);
+    assert.doesNotMatch(launcher, /^import\s/m);
+  } finally {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
 
 function readFakeOpenCodeInvocations(invocationLog) {
   return fs.readFileSync(invocationLog, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
