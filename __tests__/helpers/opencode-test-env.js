@@ -1,6 +1,6 @@
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { basename, delimiter, join } from 'node:path';
 
 const WINDOWS_ENV = ['ComSpec', 'COMSPEC', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'WINDIR'];
 
@@ -39,7 +39,7 @@ export function createOpenCodeTestSandbox(repoRoot, { root = mkdtempSync(join(tm
     packDir: join(root, 'pack'),
     toolchainDir: join(root, 'toolchain'),
     projectDir: join(root, 'project'),
-    artifactsDir: join(root, 'artifacts'),
+    artifactsDir: join(repoRoot, '.e2e-artifacts', basename(root)),
     env: {
       ...inheritedWindowsEnv(),
       HOME: home,

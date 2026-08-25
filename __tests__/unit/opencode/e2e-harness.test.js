@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
@@ -215,4 +215,16 @@ test('OpenCode E2E sandbox creates disposable project and artifact roots', () =>
     rmSync(sandbox.artifactsDir, { recursive: true, force: true });
   }
   assert.ok(!existsSync(sandbox.root));
+});
+
+test('OpenCode E2E sandbox cleanup preserves failure artifacts for upload', () => {
+  const sandbox = createE2eSandbox(process.cwd());
+  const evidence = join(sandbox.artifactsDir, 'failure.log');
+  try {
+    writeFileSync(evidence, 'hook failure evidence');
+    sandbox.cleanup();
+    assert.equal(existsSync(evidence), true);
+  } finally {
+    rmSync(sandbox.artifactsDir, { recursive: true, force: true });
+  }
 });
