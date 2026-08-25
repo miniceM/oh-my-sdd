@@ -23,6 +23,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm ci --prefix opencode --ignore-scripts
       - run: npm run --prefix opencode build
+      - run: npm run sync:resources --prefix opencode
       - run: npm test
       - name: Verify Windows mocks without Bash
         if: runner.os == 'Windows'
@@ -39,6 +40,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm ci --prefix opencode --ignore-scripts
       - run: npm run --prefix opencode build
+      - run: npm run sync:resources --prefix opencode
       - run: npm run test:coverage
 
   smoke-check:

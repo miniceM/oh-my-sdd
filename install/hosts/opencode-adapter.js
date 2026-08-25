@@ -1,16 +1,15 @@
 // install/hosts/opencode-adapter.js — OpenCode 安装/卸载入口。
 //
-// Production installs register the npm package in opencode.json. OpenCode
-// resolves and updates the package; local plugin paths are retained only for
-// backwards-compatible uninstall cleanup.
+// Production installs delegate plugin registration to the OpenCode CLI; local
+// plugin paths are retained only for backwards-compatible uninstall cleanup.
 
-import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { HostAdapter } from '../host-adapter.js';
 import { rmIfExistsSync } from '../common/fs.js';
 import { isCliInPath } from '../common/detect.js';
-import { patchOpencodeJson, unpatchOpencodeJson } from '../common/config-patcher.js';
+import { unpatchOpencodeJson } from '../common/config-patcher.js';
 import { removeSentinelBlock } from '../common/sentinel.js';
 import { getHomeDir } from '../../lib/platform.js';
 import { main as cleanupNpmResources } from '../../opencode/scripts/uninstall.mjs';
@@ -22,6 +21,30 @@ import {
 } from '../../lib/paths.js';
 
 const DEFERRED_LOAD_ACTION = '重启 OpenCode 后完成插件加载；随后可运行 oms doctor --tool opencode 查看注册状态。';
+const ACTIVATION_TTL_MS = 24 * 60 * 60 * 1000;
+
+export function buildOpenCodeInvocation(
+  args,
+  { platform = process.platform, comspec = process.env.ComSpec } = {},
+) {
+  if (platform === 'win32') {
+    return {
+      command: comspec || 'cmd.exe',
+      args: ['/d', '/s', '/c', 'opencode', ...args],
+    };
+  }
+  return { command: 'opencode', args };
+}
+
+export function buildNpmRootInvocation(
+  { platform = process.platform, comspec = process.env.ComSpec ?? process.env.COMSPEC } = {},
+) {
+  const args = ['root', '--global'];
+  if (platform === 'win32') {
+    return { command: comspec || 'cmd.exe', args: ['/d', '/s', '/c', 'npm', ...args] };
+  }
+  return { command: 'npm', args };
+}
 
 function inspectAvailability(check, source) {
   try {
@@ -72,6 +95,63 @@ function getOpenCodePaths() {
     skillsDir: join(configDir, 'skills'),
     agents: getAgentsPath(home),
     manifest: join(home, '.oh-my-sdd', 'opencode-npm-resources.json'),
+    activation: join(home, '.oh-my-sdd', 'opencode-activation.json'),
+  };
+}
+
+function readActivation({
+  platform = process.platform,
+  comspec = process.env.ComSpec ?? process.env.COMSPEC,
+  execFileSync: runCommand = execFileSync,
+} = {}) {
+  const { activation: path } = getOpenCodePaths();
+  if (!existsSync(path)) return { state: 'missing', path, reason: 'OpenCode activation record is missing.' };
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'));
+    const stringList = (list) => Array.isArray(list)
+      && list.every((item) => typeof item === 'string' && item.length > 0);
+    const expectedState = value?.failed_resources?.length > 0
+      ? 'failed'
+      : value?.drifted_resources?.length > 0 ? 'degraded' : 'verified';
+    const valid = value && value.schema_version === 1
+      && typeof value.plugin_version === 'string' && value.plugin_version.length > 0
+      && typeof value.resource_digest === 'string' && value.resource_digest.length > 0
+      && typeof value.activated_at === 'string' && !Number.isNaN(Date.parse(value.activated_at))
+      && stringList(value.registered_hooks)
+      && stringList(value.drifted_resources) && stringList(value.failed_resources)
+      && value.state === expectedState;
+    if (!valid) return { state: 'invalid', path, reason: 'OpenCode activation record does not match schema_version 1.' };
+    const age = Date.now() - Date.parse(value.activated_at);
+    if (age < 0 || age > ACTIVATION_TTL_MS) {
+      return { state: 'invalid', path, reason: 'OpenCode activation is expired or has a future timestamp; restart OpenCode to refresh activation evidence.' };
+    }
+    let expectedDigest;
+    try {
+      const invocation = buildNpmRootInvocation({ platform, comspec });
+      const npmRoot = runCommand(invocation.command, invocation.args, {
+        encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 2000,
+      }).trim();
+      const packageRoot = join(npmRoot, ...OPENCODE_PLUGIN_ENTRY.split('/'));
+      expectedDigest = resourceDigest(realpathSync(packageRoot));
+    } catch {
+      return { state: 'invalid', path, reason: 'Cannot verify the installed OpenCode plugin resources; reinstall or restart OpenCode, then rerun doctor.' };
+    }
+    return value.resource_digest === expectedDigest
+      ? { state: 'valid', path, value }
+      : { state: 'invalid', path, reason: 'OpenCode activation resource digest does not match the installed plugin; restart OpenCode to refresh activation evidence.' };
+  } catch (error) {
+    return { state: 'invalid', path, reason: `Invalid JSON in ${path}: ${error.message}` };
+  }
+}
+
+function activationDriftEvidence(activation) {
+  if (activation.state !== 'valid' || activation.value.drifted_resources.length === 0) return null;
+  return {
+    state: 'drifted',
+    path: activation.path,
+    evidence: `OpenCode activation recorded drift: ${activation.value.drifted_resources.join(', ')}`,
+    reason: `User modification detected in ${activation.value.drifted_resources.join(', ')}; OMS will not overwrite it.`,
+    next_action: 'Review the user change and handle it manually; repair preserves modified resources.',
   };
 }
 
@@ -193,7 +273,7 @@ export class OpenCodeAdapter extends HostAdapter {
           version: { state: 'available', value: process.version, source: 'process.version' },
         }),
         dependency('opencode', {
-          required: false,
+          required: true,
           available: cli.available,
           state: cli.state,
           source: cli.source,
@@ -222,10 +302,9 @@ export class OpenCodeAdapter extends HostAdapter {
         },
       },
       resources: [
-        { type: 'config', path: paths.json, action: 'patch', phase: 'install', owner: 'oms-install', scope: 'global', owned: true },
         {
-          type: 'npm-plugin', id: OPENCODE_PLUGIN_ENTRY, path: paths.json,
-          action: 'register-plugin', phase: 'install', owner: 'oms-install', scope: 'global', enforcement: 'registered', owned: true,
+          type: 'npm-plugin', id: OPENCODE_PLUGIN_ENTRY, path: paths.configDir,
+          action: 'install-plugin-native', phase: 'install', owner: 'OpenCode CLI', scope: 'global', enforcement: 'registered', owned: true,
         },
         { type: 'plugin-resources', path: paths.skillsDir, action: 'synchronize', phase: 'postinstall', owner: 'npm-plugin', scope: 'global', owned: true },
         { type: 'commands', path: paths.commandsDir, action: 'synchronize', phase: 'postinstall', owner: 'npm-plugin', scope: 'global', owned: true },
@@ -262,10 +341,14 @@ export class OpenCodeAdapter extends HostAdapter {
   static async inspectRuntime(ctx = {}) {
     const paths = getOpenCodePaths();
     const runtimeConfig = readRuntimeConfig();
+    const activation = readActivation(ctx);
     const isRegistered = runtimeConfig.state === 'valid'
       && Array.isArray(runtimeConfig.config.plugin)
       && runtimeConfig.config.plugin.includes(OPENCODE_PLUGIN_ENTRY);
     const invalid = runtimeConfig.state === 'invalid';
+    const active = activation.state === 'valid' && ['verified', 'degraded'].includes(activation.value.state);
+    const writeBeforeRegistered = active && activation.value.registered_hooks.includes('tool.execute.before');
+    const activationDrift = activationDriftEvidence(activation);
     return {
       written: {
         state: runtimeConfig.state === 'valid' ? 'verified' : (invalid ? 'unknown' : 'missing'),
@@ -279,16 +362,18 @@ export class OpenCodeAdapter extends HostAdapter {
         evidence: isRegistered ? "Plugin " + OPENCODE_PLUGIN_ENTRY + " registered in config" : null,
         reason: invalid ? runtimeConfig.reason : (isRegistered ? null : "Plugin entry missing from config"),
       },
-      postinstall: postinstallEvidence(),
+      postinstall: activationDrift || postinstallEvidence(),
       loaded: {
-        state: "unknown",
-        evidence: "No OpenCode host launch event was observed by oms-install",
-        reason: "OpenCode host launch evidence unavailable",
+        state: active ? 'verified' : 'unknown',
+        evidence: active ? `OpenCode activation recorded at ${activation.value.activated_at}` : null,
+        reason: active ? null : (activation.reason || 'OpenCode host launch evidence unavailable'),
       },
       enforced: {
-        state: "unknown",
-        evidence: "No active OpenCode runtime write-prevention probe was observed by oms-install",
-        reason: "Write prevention evidence requires active runtime",
+        state: writeBeforeRegistered ? 'verified' : 'unknown',
+        evidence: writeBeforeRegistered ? 'OpenCode activation registered tool.execute.before' : null,
+        reason: active
+          ? 'OpenCode activation does not include tool.execute.before.'
+          : (activation.reason || 'Write prevention evidence requires active runtime'),
       },
     };
   }
@@ -313,7 +398,7 @@ export class OpenCodeAdapter extends HostAdapter {
     return result;
   }
 
-  static async applyResource(resource) {
+  static async applyResource(resource, ctx = {}) {
     if (resource?.phase === 'postinstall') {
       return {
         status: 'deferred',
@@ -332,10 +417,33 @@ export class OpenCodeAdapter extends HostAdapter {
         next_action: DEFERRED_LOAD_ACTION,
       };
     }
-    if (resource?.action === 'patch' || resource?.action === 'register-plugin' || resource?.action === 'patch-config') {
-      const paths = getOpenCodePaths();
-      patchOpencodeJson({ configPath: paths.json });
-      return { status: 'succeeded', owned: true, message: `Wrote ${paths.json}` };
+    if (resource?.action === 'install-plugin-native') {
+      const runCommand = ctx.execFileSync || execFileSync;
+      const args = ['plugin', OPENCODE_PLUGIN_ENTRY, '--global', '--force'];
+      const invocation = buildOpenCodeInvocation(args, {
+        platform: ctx.platform,
+        comspec: ctx.comspec,
+      });
+      const retry = `Retry: opencode ${args.join(' ')}`;
+      try {
+        runCommand(invocation.command, invocation.args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+        return {
+          status: 'succeeded', owned: true,
+          message: `Installed ${OPENCODE_PLUGIN_ENTRY} through the OpenCode CLI.`,
+          next_action: DEFERRED_LOAD_ACTION,
+        };
+      } catch (error) {
+        const output = [error?.stderr, error?.stdout]
+          .map((value) => value == null ? '' : String(value).trim())
+          .filter(Boolean)
+          .join('\n') || error?.message || String(error);
+        return {
+          status: 'failed', owned: true,
+          message: `Failed to install ${OPENCODE_PLUGIN_ENTRY} through the OpenCode CLI.`,
+          reason: String(output).trim(),
+          next_action: retry,
+        };
+      }
     }
     return {
       status: 'unsupported',

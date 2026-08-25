@@ -14,6 +14,7 @@ import {
 } from './plugin.js';
 import { handlePermissionAsk, isPermissionAskEnabled } from './permission.js';
 import { log } from './logger.js';
+import { activatePlugin } from './activation.js';
 
 export function createPlugin(): Hooks {
   const hooks: Hooks = {
@@ -29,8 +30,13 @@ export function createPlugin(): Hooks {
 }
 
 export const OhMySddPlugin: Plugin = async (_input: PluginInput): Promise<Hooks> => {
+  const hooks = createPlugin();
+  const activation = await activatePlugin(Object.keys(hooks));
+  if (activation.state === 'failed') {
+    throw new Error(`oh-my-sdd resource activation failed: ${activation.failed_resources.join(', ')}`);
+  }
   log('info', 'oh-my-sdd opencode plugin loaded', {});
-  return createPlugin();
+  return hooks;
 };
 
 export default OhMySddPlugin;

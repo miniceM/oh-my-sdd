@@ -1,12 +1,81 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { OpenCodeAdapter } from '../../../../install/hosts/opencode-adapter.js';
+import { fileURLToPath } from 'node:url';
+import { buildNpmRootInvocation, OpenCodeAdapter } from '../../../../install/hosts/opencode-adapter.js';
 import { HostAdapter } from '../../../../install/host-adapter.js';
 import { SDD_COMMANDS } from '../../../../lib/command-generator.js';
+import { resourceDigest } from '../../../../opencode/scripts/resource-ownership.mjs';
+
+const PLUGIN_ROOT = fileURLToPath(new URL('../../../../opencode/', import.meta.url));
+
+function inspectDoctorWithActivation(activation) {
+  const home = mkdtempSync(join(tmpdir(), 'oms-opencode-activation-'));
+  const configDir = join(home, '.config', 'opencode');
+  const npmRoot = join(home, 'npm-root');
+  const npmBin = join(home, 'bin');
+  const installedPlugin = join(npmRoot, '@cli-tools', 'oh-my-sdd-opencode');
+  const adapterUrl = new URL('../../../../install/hosts/opencode-adapter.js', import.meta.url).href;
+  const healthUrl = new URL('../../../../install/control-plane/health.js', import.meta.url).href;
+  const script = `
+    const { OpenCodeAdapter } = await import(${JSON.stringify(adapterUrl)});
+    const { doctor } = await import(${JSON.stringify(healthUrl)});
+    const runtime = await OpenCodeAdapter.inspectRuntime();
+    const report = await doctor({ adapters: [OpenCodeAdapter] });
+    process.stdout.write(JSON.stringify({ runtime, report }));
+  `;
+  try {
+    mkdirSync(configDir, { recursive: true });
+    mkdirSync(join(npmRoot, '@cli-tools'), { recursive: true });
+    mkdirSync(npmBin, { recursive: true });
+    symlinkSync(PLUGIN_ROOT, installedPlugin, process.platform === 'win32' ? 'junction' : 'dir');
+    const npm = join(npmBin, process.platform === 'win32' ? 'npm.cmd' : 'npm');
+    if (process.platform === 'win32') {
+      writeFileSync(npm, '@echo off\r\n@echo %OMS_TEST_NPM_ROOT%\r\n');
+    } else {
+      writeFileSync(npm, '#!/bin/sh\nprintf "%s\\n" "$OMS_TEST_NPM_ROOT"\n');
+      chmodSync(npm, 0o755);
+    }
+    writeFileSync(join(configDir, 'opencode.json'), JSON.stringify({ plugin: ['@cli-tools/oh-my-sdd-opencode'] }));
+    if (activation !== undefined) {
+      mkdirSync(join(home, '.oh-my-sdd'), { recursive: true });
+      writeFileSync(
+        join(home, '.oh-my-sdd', 'opencode-activation.json'),
+        typeof activation === 'string' ? activation : JSON.stringify(activation),
+      );
+    }
+    const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
+      env: {
+        ...process.env, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'),
+        OMS_TEST_NPM_ROOT: npmRoot, PATH: `${npmBin}${delimiter}${process.env.PATH}`,
+      },
+      encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr);
+    return JSON.parse(result.stdout);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+
+function activation(overrides = {}) {
+  return {
+    schema_version: 1,
+    plugin_version: '1.0.0',
+    resource_digest: resourceDigest(PLUGIN_ROOT),
+    // The doctor runs in a child process. Keep the fixture safely inside the
+    // 24-hour TTL instead of relying on cross-process clock granularity.
+    activated_at: new Date(Date.now() - 60_000).toISOString(),
+    registered_hooks: ['tool.execute.before'],
+    state: 'verified',
+    drifted_resources: [],
+    failed_resources: [],
+    ...overrides,
+  };
+}
 
 describe('OpenCodeAdapter', () => {
   it('extends HostAdapter', () => {
@@ -30,7 +99,7 @@ describe('OpenCodeAdapter', () => {
     const host = OpenCodeAdapter.describe({ PACKAGE_ROOT: '/package/root' });
     const registration = host.resources.find((resource) => resource.type === 'npm-plugin');
 
-    assert.equal(registration.action, 'register-plugin');
+    assert.equal(registration.action, 'install-plugin-native');
     assert.equal(registration.enforcement, 'registered');
     assert.equal(host.risks.some((risk) => /load/i.test(risk.message)), true);
     assert.equal(host.capabilities.write_prevention.supported, false);
@@ -44,6 +113,88 @@ describe('OpenCodeAdapter', () => {
     )), true);
   });
 
+  it('requires the OpenCode CLI for native plugin installation', () => {
+    const host = OpenCodeAdapter.describe({ PACKAGE_ROOT: '/package/root' });
+    const cli = host.dependencies.find((dependency) => dependency.name === 'opencode');
+
+    assert.equal(cli.required, true);
+    assert.equal(cli.classification, 'required');
+  });
+
+  it('doctor verifies loaded and enforced only from a valid activation with the write-before hook', () => {
+    const { runtime, report } = inspectDoctorWithActivation(activation());
+
+    assert.equal(runtime.loaded.state, 'verified');
+    assert.equal(runtime.enforced.state, 'verified');
+    assert.equal(report.hosts[0].protection.level, 'enforced');
+    assert.equal(report.findings.some((finding) => finding.code.startsWith('runtime-')), false);
+  });
+
+  it('treats expired or resource-digest-mismatched activation records as unknown runtime evidence', () => {
+    for (const record of [
+      activation({ resource_digest: 'not-the-installed-plugin' }),
+      activation({ activated_at: new Date(Date.now() - (48 * 60 * 60 * 1000)).toISOString() }),
+      activation({ activated_at: new Date(Date.now() + (60 * 60 * 1000)).toISOString() }),
+    ]) {
+      const { runtime } = inspectDoctorWithActivation(record);
+      assert.equal(runtime.loaded.state, 'unknown');
+      assert.equal(runtime.enforced.state, 'unknown');
+      assert.match(runtime.loaded.reason, /rerun|restart|activation/i);
+    }
+  });
+
+  it('runs npm root through ComSpec on Windows', () => {
+    assert.deepEqual(buildNpmRootInvocation({
+      platform: 'win32',
+      comspec: 'C:\\Windows\\System32\\cmd.exe',
+    }), {
+      command: 'C:\\Windows\\System32\\cmd.exe',
+      args: ['/d', '/s', '/c', 'npm', 'root', '--global'],
+    });
+  });
+
+  it('treats missing or invalid activation records as unknown runtime evidence', () => {
+    for (const record of [undefined, '{ invalid JSON', activation({ schema_version: 2 })]) {
+      const { runtime } = inspectDoctorWithActivation(record);
+      assert.equal(runtime.loaded.state, 'unknown');
+      assert.equal(runtime.enforced.state, 'unknown');
+    }
+  });
+
+  it('treats semantically inconsistent activation records as unknown runtime evidence', () => {
+    const inconsistent = [
+      activation({ state: 'verified', drifted_resources: ['oms-skill:security-check'] }),
+      activation({ state: 'degraded' }),
+      activation({ state: 'failed' }),
+      activation({ state: 'verified', failed_resources: ['runtime:hooks'] }),
+      activation({ registered_hooks: [''] }),
+    ];
+
+    for (const record of inconsistent) {
+      const { runtime } = inspectDoctorWithActivation(record);
+      assert.equal(runtime.loaded.state, 'unknown');
+      assert.equal(runtime.enforced.state, 'unknown');
+    }
+  });
+
+  it('does not infer write enforcement when activation has no write-before hook', () => {
+    const { runtime } = inspectDoctorWithActivation(activation({ registered_hooks: ['tool.execute.after'] }));
+
+    assert.equal(runtime.loaded.state, 'verified');
+    assert.equal(runtime.enforced.state, 'unknown');
+  });
+
+  it('reports resource drift from a degraded activation without downgrading loaded evidence', () => {
+    const { runtime, report } = inspectDoctorWithActivation(activation({
+      state: 'degraded',
+      drifted_resources: ['oms-skill:security-check'],
+    }));
+
+    assert.equal(runtime.loaded.state, 'verified');
+    assert.equal(runtime.postinstall.state, 'drifted');
+    assert.equal(report.findings.some((finding) => finding.code === 'resource-drifted'), true);
+  });
+
   it('install() is an async function', () => {
     assert.equal(OpenCodeAdapter.install.constructor.name, 'AsyncFunction');
   });
@@ -52,46 +203,81 @@ describe('OpenCodeAdapter', () => {
     assert.equal(OpenCodeAdapter.uninstall.constructor.name, 'AsyncFunction');
   });
 
-  it('installs the npm plugin entry without copying a local development build', () => {
-    const home = mkdtempSync(join(tmpdir(), 'oms-opencode-install-'));
-    const adapterUrl = new URL('../../../../install/hosts/opencode-adapter.js', import.meta.url).href;
-    const script = `
-      const { OpenCodeAdapter } = await import(${JSON.stringify(adapterUrl)});
-      const messages = [];
-      const installation = await OpenCodeAdapter.install({ announce: (message) => messages.push(message) });
-      process.stdout.write(JSON.stringify({ installation, messages }));
-    `;
+  it('installs the npm plugin through the native OpenCode CLI', async () => {
+    const calls = [];
+    const messages = [];
+    const installation = await OpenCodeAdapter.install({
+      announce: (message) => messages.push(message),
+      execFileSync: (command, args, options) => {
+        calls.push({ command, args, options });
+        return 'installed';
+      },
+    });
 
-    try {
-      const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
-        env: {
-          ...process.env,
-          HOME: home,
-          USERPROFILE: home,
-          XDG_HOME_DIR: home,
-          XDG_CONFIG_HOME: join(home, '.config'),
-          OPENCODE_CONFIG_DIR: join(home, '.config', 'opencode'),
-        },
-        encoding: 'utf8',
-      });
-      assert.equal(result.status, 0, result.stderr);
+    const invocation = process.platform === 'win32'
+      ? { command: process.env.ComSpec ?? process.env.COMSPEC ?? 'cmd.exe', args: ['/d', '/s', '/c', 'opencode', 'plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'] }
+      : { command: 'opencode', args: ['plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'] };
+    assert.deepEqual(calls, [{
+      ...invocation,
+      options: { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    }]);
+    assert.equal(installation.status, 'succeeded');
+    assert.ok(messages.includes('✓ oh-my-sdd (OpenCode) npm 插件安装完成'));
+    assert.deepEqual(installation.summary.next_actions, [
+      '重启 OpenCode 后完成插件加载；随后可运行 oms doctor --tool opencode 查看注册状态。',
+    ]);
+    assert.equal(installation.events.filter((event) => event.status === 'deferred').length, 4);
+  });
 
-      const config = JSON.parse(readFileSync(join(home, '.config', 'opencode', 'opencode.json'), 'utf8'));
-      assert.deepEqual(config.plugin, ['@cli-tools/oh-my-sdd-opencode']);
+  it('runs the native OpenCode plugin command through ComSpec on Windows', async () => {
+    const calls = [];
+    const installation = await OpenCodeAdapter.install({
+      announce: () => {},
+      platform: 'win32',
+      comspec: 'C:\\Windows\\System32\\cmd.exe',
+      execFileSync: (command, args, options) => {
+        calls.push({ command, args, options });
+      },
+    });
 
-      const { installation, messages } = JSON.parse(result.stdout);
-      assert.ok(messages.includes('✓ oh-my-sdd (OpenCode) npm 插件安装完成'));
-      assert.ok(!messages.some((message) => message.includes('HARD_RULE')));
-      assert.ok(!messages.some((message) => message.includes('本地开发模式')));
-      assert.deepEqual(installation.summary.next_actions, [
-        '重启 OpenCode 后完成插件加载；随后可运行 oms doctor --tool opencode 查看注册状态。',
-      ]);
-      const deferredEvents = installation.events.filter((event) => event.status === 'deferred');
-      assert.equal(deferredEvents.length, 4);
-      assert.ok(deferredEvents.every((event) => !messages.some((message) => message.includes(event.message))));
-    } finally {
-      rmSync(home, { recursive: true, force: true });
-    }
+    assert.equal(installation.status, 'succeeded');
+    assert.deepEqual(calls, [{
+      command: 'C:\\Windows\\System32\\cmd.exe',
+      args: ['/d', '/s', '/c', 'opencode', 'plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'],
+      options: { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    }]);
+  });
+
+  it('reports a native plugin install failure with output and a retry command', async () => {
+    const installation = await OpenCodeAdapter.install({
+      announce: () => {},
+      execFileSync: () => {
+        const error = new Error('Command failed');
+        error.stderr = 'registry unavailable';
+        throw error;
+      },
+    });
+
+    assert.equal(installation.status, 'failed');
+    const failure = installation.events.find((event) => event.status === 'failed');
+    assert.match(failure.reason, /registry unavailable/);
+    assert.equal(failure.next_action, 'Retry: opencode plugin @cli-tools/oh-my-sdd-opencode --global --force');
+  });
+
+  it('includes both stderr and stdout when the native plugin install fails', async () => {
+    const installation = await OpenCodeAdapter.install({
+      announce: () => {},
+      execFileSync: () => {
+        const error = new Error('Command failed');
+        error.stderr = 'registry unavailable';
+        error.stdout = 'retrying package resolution';
+        throw error;
+      },
+    });
+
+    const failure = installation.events.find((event) => event.status === 'failed');
+    assert.match(failure.reason, /registry unavailable/);
+    assert.match(failure.reason, /retrying package resolution/);
   });
 
   it('numbers the five SDD workflow commands with integer rings', () => {

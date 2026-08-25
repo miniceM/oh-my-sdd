@@ -118,6 +118,14 @@ test('CI workflows install OpenCode build dependencies without running root life
   }
 });
 
+test('CI synchronizes generated OpenCode resources before test and coverage runs', () => {
+  const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', 'ci.yml'), 'utf8');
+  const syncStep = 'npm run sync:resources --prefix opencode';
+  assert.ok(workflow.includes(syncStep));
+  assert.ok(workflow.indexOf(syncStep) < workflow.indexOf('- run: npm test'));
+  assert.ok(workflow.indexOf(syncStep) < workflow.indexOf('- run: npm run test:coverage'));
+});
+
 test('OpenCode E2E workflow uploads hidden failure artifacts', () => {
   const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', 'opencode-e2e.yml'), 'utf8');
   assert.match(workflow, /include-hidden-files:\s*true/);
@@ -156,6 +164,7 @@ test('OpenCode E2E harness loader re-exports only the globally installed tarball
   try {
     const loader = writePluginLoader({ configDir, packageRoot });
     assert.equal(loader, join(configDir, 'plugins', 'oh-my-sdd-e2e.js'));
+    assert.equal(readFileSync(join(configDir, 'plugins', 'package.json'), 'utf8'), '{"type":"module"}\n');
     assert.ok(existsSync(loader));
     const source = readFileSync(loader, 'utf8');
     assert.match(source, /export \{ OhMySddPlugin \}/);

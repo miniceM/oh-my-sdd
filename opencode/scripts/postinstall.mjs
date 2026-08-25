@@ -59,6 +59,7 @@ import {
   upsertManagedAgentsBlock,
 } from './agents-md.mjs';
 import { getBodyForInjection } from '../lib/constitution.js';
+import { bootstrapOpenCodeResources } from './resource-bootstrap.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = resolve(__dirname, '..');
@@ -353,7 +354,7 @@ function findMissingDelegatedSkills() {
   ));
 }
 
-export function main() {
+function legacyPostinstall() {
   const results = [];
   const records = readOwnershipManifest(OWNERSHIP_MANIFEST);
   const ownership = new Map(records.map((record) => [record.target, record]));
@@ -472,6 +473,14 @@ export function main() {
 
   console.log(`[postinstall] resource changes this run: ${results.join(', ')}`);
   console.log('[postinstall] uninstall: run oms-opencode-uninstall (npm does not run uninstall lifecycle scripts)');
+}
+
+/** Compatibility entrypoint: native OpenCode installs use this same shared API at load time. */
+export function main() {
+  bootstrapOpenCodeResources();
+  // npm's lifecycle keeps the historic cross-tool mirrors, AGENTS baseline,
+  // and diagnostics. Native plugin loading never enters this compatibility path.
+  return legacyPostinstall();
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
