@@ -44,6 +44,7 @@ function inspectDoctorWithActivation(activation) {
     return JSON.parse(result.stdout);
   } finally {
     sandbox.cleanup();
+    sandbox.cleanupArtifacts();
   }
 }
 
