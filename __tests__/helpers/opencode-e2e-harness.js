@@ -1,52 +1,15 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { basename, delimiter, join, resolve } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { createOpenCodeTestSandbox } from './opencode-test-env.js';
 
 export function buildE2eEnv({ repoRoot, root }) {
-  const home = join(root, 'home');
-  const xdgConfigHome = join(root, 'xdg-config');
-  const configDir = join(xdgConfigHome, 'opencode');
-  const inherited = {};
-  for (const name of ['PATH', 'ComSpec', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'TEMP', 'TMP', 'TMPDIR', 'WINDIR']) {
-    if (process.env[name]) inherited[name] = process.env[name];
-  }
-  return {
-    ...inherited,
-    HOME: home,
-    USERPROFILE: home,
-    npm_config_prefix: join(root, 'prefix'),
-    npm_config_cache: join(root, 'npm-cache'),
-    XDG_CONFIG_HOME: xdgConfigHome,
-    OPENCODE_CONFIG: join(configDir, 'opencode.json'),
-    OPENCODE_CONFIG_DIR: configDir,
-    OPENCODE_DISABLE_AUTOUPDATE: '1',
-    OPENCODE_DISABLE_MODELS_FETCH: '1',
-    OPENCODE_DISABLE_LSP_DOWNLOAD: '1',
-    PATH: `${join(repoRoot, 'scripts')}${delimiter}${process.env.PATH ?? ''}`,
-  };
+  const sandbox = createOpenCodeTestSandbox(repoRoot, { root });
+  return sandbox.env;
 }
 
 export function createE2eSandbox(repoRoot) {
-  const root = mkdtempSync(join(tmpdir(), 'oms-opencode-e2e-'));
-  const env = buildE2eEnv({ repoRoot, root });
-  const sandbox = {
-    root,
-    home: env.HOME,
-    prefix: env.npm_config_prefix,
-    cache: env.npm_config_cache,
-    packDir: join(root, 'pack'),
-    toolchainDir: join(root, 'toolchain'),
-    projectDir: join(root, 'project'),
-    artifactsDir: join(repoRoot, '.e2e-artifacts', basename(root)),
-    env,
-    cleanup: () => rmSync(root, { recursive: true, force: true }),
-  };
-  for (const directory of [
-    sandbox.home, sandbox.prefix, sandbox.cache, sandbox.packDir,
-    sandbox.toolchainDir, sandbox.projectDir, sandbox.artifactsDir, env.OPENCODE_CONFIG_DIR,
-  ]) mkdirSync(directory, { recursive: true });
-  return sandbox;
+  return createOpenCodeTestSandbox(repoRoot);
 }
 
 export function normalizeManifest(value) {

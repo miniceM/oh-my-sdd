@@ -14,54 +14,15 @@ import {
   parseNpmPackJson,
   writePluginLoader,
 } from '../../helpers/opencode-e2e-harness.js';
+import { createFakeOpenCodeCli, createOpenCodeTestSandbox } from '../../helpers/opencode-test-env.js';
 import { resolveNpmCli } from '../../helpers/resolve-npm-cli.js';
 
 const worktreeRoot = process.cwd();
 
-function createFakeOpenCode(tmpHome) {
-  const binDir = path.join(tmpHome, 'fake-bin');
-  const invocationLog = path.join(tmpHome, 'opencode-invocations.jsonl');
-  const scriptPath = path.join(binDir, 'opencode.mjs');
-  fs.mkdirSync(binDir, { recursive: true });
-  fs.writeFileSync(scriptPath, `
-import fs from 'node:fs';
-import path from 'node:path';
-
-const args = process.argv.slice(2);
-if (args.length === 1 && args[0] === '--version') {
-  process.stdout.write('fake-opencode 1.0.0\\n');
-  process.exit(0);
-}
-const expected = ['plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'];
-if (JSON.stringify(args) !== JSON.stringify(expected)) {
-  process.stderr.write('unexpected fake opencode command: ' + JSON.stringify(args));
-  process.exit(64);
-}
-fs.appendFileSync(process.env.OPENCODE_FAKE_INVOCATION_LOG, JSON.stringify(args) + '\\n');
-const configDir = process.env.OPENCODE_CONFIG_DIR;
-fs.mkdirSync(configDir, { recursive: true });
-const configPath = path.join(configDir, 'opencode.json');
-const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {};
-const plugins = Array.isArray(config.plugin) ? config.plugin : [];
-if (!plugins.includes('@cli-tools/oh-my-sdd-opencode')) plugins.push('@cli-tools/oh-my-sdd-opencode');
-fs.writeFileSync(configPath, JSON.stringify({ ...config, plugin: plugins }));
-`);
-
-  if (process.platform === 'win32') {
-    fs.writeFileSync(path.join(binDir, 'opencode.cmd'), `@echo off\n"${process.execPath}" "%~dp0opencode.mjs" %*\n`);
-  } else {
-    const executable = path.join(binDir, 'opencode');
-    fs.writeFileSync(executable, `#!/bin/sh\nexec "${process.execPath}" "${scriptPath}" "$@"\n`);
-    fs.chmodSync(executable, 0o755);
-  }
-
-  return {
-    launcherPath: process.platform === 'win32'
-      ? path.join(binDir, 'opencode.cmd')
-      : path.join(binDir, 'opencode'),
-    invocationLog,
-    path: `${binDir}${path.delimiter}${process.env.PATH || ''}`,
-  };
+function createFakeOpenCode(root) {
+  const sandbox = createOpenCodeTestSandbox(worktreeRoot, { root });
+  const fake = createFakeOpenCodeCli(sandbox);
+  return { sandbox, ...fake, path: fake.env.PATH };
 }
 
 test('fake OpenCode launcher delegates to its .mjs entrypoint instead of parsing ESM itself', () => {
@@ -97,16 +58,7 @@ function runNpmWithOutput(args, options) {
 test('install + uninstall: oms-install/uninstall --tool opencode round-trip', () => {
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oms-install-'));
   const fakeOpenCode = createFakeOpenCode(tmpHome);
-  const env = {
-    ...process.env,
-    HOME: tmpHome,
-    USERPROFILE: tmpHome,
-    XDG_HOME_DIR: tmpHome,
-    XDG_CONFIG_HOME: path.join(tmpHome, '.config'),
-    OPENCODE_CONFIG_DIR: path.join(tmpHome, '.config', 'opencode'),
-    OPENCODE_FAKE_INVOCATION_LOG: fakeOpenCode.invocationLog,
-    PATH: fakeOpenCode.path,
-  };
+  const env = fakeOpenCode.env;
 
   // Step 1: install (use CLI wrapper which parses --tool)
   execFileSync('node', ['bin/oms-install.js', '--tool', 'opencode', '-y'], {
@@ -114,9 +66,9 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
     env,
     stdio: 'pipe',
   });
-  const pluginDir = path.join(tmpHome, '.config', 'opencode', 'plugins', 'oh-my-sdd');
+  const pluginDir = path.join(env.OPENCODE_CONFIG_DIR, 'plugins', 'oh-my-sdd');
   assert.ok(!fs.existsSync(pluginDir), 'production install should not copy a local development plugin');
-  const cfgPath = path.join(tmpHome, '.config', 'opencode', 'opencode.json');
+  const cfgPath = env.OPENCODE_CONFIG;
   const cfgAfterInstall = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
   assert.ok(
     cfgAfterInstall.plugin.includes('@cli-tools/oh-my-sdd-opencode'),
@@ -127,19 +79,17 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
   ]);
 
   // Simulate resources created by the npm package's postinstall lifecycle.
-  const npmCommand = path.join(tmpHome, '.config', 'opencode', 'commands', 'sdd-doc.md');
+  const npmCommand = path.join(env.OPENCODE_CONFIG_DIR, 'commands', 'sdd-doc.md');
   fs.mkdirSync(path.dirname(npmCommand), { recursive: true });
   fs.writeFileSync(npmCommand, 'plugin-owned command');
   const delegatedSkill = path.join(
-    tmpHome,
-    '.config',
-    'opencode',
+    env.OPENCODE_CONFIG_DIR,
     'skills',
     'brainstorming',
   );
   fs.mkdirSync(delegatedSkill, { recursive: true });
   fs.writeFileSync(path.join(delegatedSkill, 'SKILL.md'), 'plugin-owned delegated skill');
-  const manifestPath = path.join(tmpHome, '.oh-my-sdd', 'opencode-npm-resources.json');
+  const manifestPath = path.join(env.HOME, '.oh-my-sdd', 'opencode-npm-resources.json');
   writeOwnershipManifest(manifestPath, [
     {
       target: npmCommand,
@@ -157,7 +107,7 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
   fs.writeFileSync(npmCommand, 'user-modified command');
 
   // 模拟旧 SDK fallback 写入：卸载只能移除 OMS 区块，不能删除用户内容。
-  const agentsPath = path.join(tmpHome, '.config', 'opencode', 'AGENTS.md');
+  const agentsPath = path.join(env.OPENCODE_CONFIG_DIR, 'AGENTS.md');
   fs.writeFileSync(agentsPath, [
     '# User instructions',
     '<!-- OH-MY-SDD:BEGIN (do not edit between these markers) -->',
@@ -195,16 +145,7 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
 test('text install result closes the OpenCode pending loop in an isolated HOME', () => {
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oms-install-text-'));
   const fakeOpenCode = createFakeOpenCode(tmpHome);
-  const env = {
-    ...process.env,
-    HOME: tmpHome,
-    USERPROFILE: tmpHome,
-    XDG_HOME_DIR: tmpHome,
-    XDG_CONFIG_HOME: path.join(tmpHome, '.config'),
-    OPENCODE_CONFIG_DIR: path.join(tmpHome, '.config', 'opencode'),
-    OPENCODE_FAKE_INVOCATION_LOG: fakeOpenCode.invocationLog,
-    PATH: fakeOpenCode.path,
-  };
+  const env = fakeOpenCode.env;
 
   try {
     const result = spawnSync('node', ['bin/oms-install.js', '--tool', 'opencode', '--yes'], {
@@ -230,7 +171,7 @@ test('text install result closes the OpenCode pending loop in an isolated HOME',
     assert.match(output, /OpenCode activation record is missing/);
     assert.match(output, /enforced: unknown/);
     assert.match(output, /OpenCode activation record is missing/);
-    assert.ok(fs.existsSync(path.join(tmpHome, '.config', 'opencode', 'opencode.json')));
+    assert.ok(fs.existsSync(env.OPENCODE_CONFIG));
     assert.deepEqual(readFakeOpenCodeInvocations(fakeOpenCode.invocationLog), [
       ['plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force'],
     ]);
@@ -244,22 +185,14 @@ test('native install activates the packed plugin lifecycle and doctor verifies e
   const home = path.join(root, 'home');
   const prefix = path.join(root, 'prefix');
   const packDir = path.join(root, 'pack');
-  fs.mkdirSync(home, { recursive: true });
-  fs.mkdirSync(packDir, { recursive: true });
   const fakeOpenCode = createFakeOpenCode(root);
-  const configDir = path.join(home, '.config', 'opencode');
+  const configDir = fakeOpenCode.sandbox.configDir;
   const env = {
-    ...process.env,
-    HOME: home,
-    USERPROFILE: home,
-    XDG_HOME_DIR: home,
-    XDG_CONFIG_HOME: path.join(home, '.config'),
-    OPENCODE_CONFIG_DIR: configDir,
-    OPENCODE_FAKE_INVOCATION_LOG: fakeOpenCode.invocationLog,
+    ...fakeOpenCode.env,
     npm_config_prefix: prefix,
     npm_config_cache: path.join(root, 'cache'),
-    PATH: fakeOpenCode.path,
   };
+  fs.mkdirSync(packDir, { recursive: true });
 
   try {
     const packResult = runNpmWithOutput(['pack', '--json', '--pack-destination', packDir], {

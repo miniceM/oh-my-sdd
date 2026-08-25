@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 
 import {
   buildE2eEnv,
@@ -16,26 +17,49 @@ import {
   publishedSkills,
   writePluginLoader,
 } from '../../../__tests__/helpers/opencode-e2e-harness.js';
+import {
+  createFakeOpenCodeCli,
+  createOpenCodeTestSandbox,
+} from '../../../__tests__/helpers/opencode-test-env.js';
 
-test('OpenCode E2E harness isolates every mutable OpenCode and npm path', () => {
-  const root = mkdtempSync(join(tmpdir(), 'oms-opencode-e2e-env-'));
+test('OpenCode test sandbox isolates every mutable OpenCode, npm, and temporary path', () => {
   const previousSentinel = process.env.OMS_E2E_TEST_SECRET;
   process.env.OMS_E2E_TEST_SECRET = 'must-not-reach-opencode';
+  const sandbox = createOpenCodeTestSandbox(process.cwd());
   try {
-    const env = buildE2eEnv({ repoRoot: process.cwd(), root });
-    assert.equal(env.HOME, join(root, 'home'));
-    assert.equal(env.USERPROFILE, join(root, 'home'));
-    assert.equal(env.npm_config_prefix, join(root, 'prefix'));
-    assert.equal(env.npm_config_cache, join(root, 'npm-cache'));
-    assert.equal(env.XDG_CONFIG_HOME, join(root, 'xdg-config'));
-    assert.equal(env.OPENCODE_CONFIG, join(root, 'xdg-config', 'opencode', 'opencode.json'));
-    assert.equal(env.OPENCODE_CONFIG_DIR, join(root, 'xdg-config', 'opencode'));
-    assert.ok(env.PATH.startsWith(join(process.cwd(), 'scripts')));
+    const { env, root } = sandbox;
+    for (const value of [
+      env.HOME, env.USERPROFILE, env.npm_config_prefix, env.npm_config_cache,
+      env.XDG_CONFIG_HOME, env.OPENCODE_CONFIG, env.OPENCODE_CONFIG_DIR,
+      env.TEMP, env.TMP, env.TMPDIR,
+    ]) assert.ok(value.startsWith(root), `${value} must be inside ${root}`);
+    assert.equal(env.PATH.split(delimiter)[0], join(process.cwd(), 'scripts'));
     assert.equal(env.OMS_E2E_TEST_SECRET, undefined);
+    assert.ok(existsSync(sandbox.projectDir));
+    assert.ok(existsSync(sandbox.artifactsDir));
   } finally {
     if (previousSentinel === undefined) delete process.env.OMS_E2E_TEST_SECRET;
     else process.env.OMS_E2E_TEST_SECRET = previousSentinel;
-    rmSync(root, { recursive: true, force: true });
+    sandbox.cleanup();
+  }
+});
+
+test('fake OpenCode CLI records the native installation command and updates sandbox config', () => {
+  const sandbox = createOpenCodeTestSandbox(process.cwd());
+  try {
+    const fake = createFakeOpenCodeCli(sandbox);
+    const result = spawnSync(fake.launcherPath, [
+      'plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force',
+    ], { env: fake.env, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(fake.readInvocations(), [[
+      'plugin', '@cli-tools/oh-my-sdd-opencode', '--global', '--force',
+    ]]);
+    assert.ok(JSON.parse(readFileSync(sandbox.env.OPENCODE_CONFIG, 'utf8')).plugin
+      .includes('@cli-tools/oh-my-sdd-opencode'));
+    if (process.platform === 'win32') assert.match(fake.launcherPath, /\.cmd$/i);
+  } finally {
+    sandbox.cleanup();
   }
 });
 

@@ -1,23 +1,20 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { buildNpmRootInvocation, OpenCodeAdapter } from '../../../../install/hosts/opencode-adapter.js';
 import { HostAdapter } from '../../../../install/host-adapter.js';
 import { SDD_COMMANDS } from '../../../../lib/command-generator.js';
 import { resourceDigest } from '../../../../opencode/scripts/resource-ownership.mjs';
+import { createOpenCodeTestSandbox, prepareDoctorInstalledPackage } from '../../../helpers/opencode-test-env.js';
 
 const PLUGIN_ROOT = fileURLToPath(new URL('../../../../opencode/', import.meta.url));
 
 function inspectDoctorWithActivation(activation) {
-  const home = mkdtempSync(join(tmpdir(), 'oms-opencode-activation-'));
-  const configDir = join(home, '.config', 'opencode');
-  const npmRoot = join(home, 'npm-root');
-  const npmBin = join(home, 'bin');
-  const installedPlugin = join(npmRoot, '@cli-tools', 'oh-my-sdd-opencode');
+  const sandbox = createOpenCodeTestSandbox(process.cwd());
+  const { home, configDir } = sandbox;
   const adapterUrl = new URL('../../../../install/hosts/opencode-adapter.js', import.meta.url).href;
   const healthUrl = new URL('../../../../install/control-plane/health.js', import.meta.url).href;
   const script = `
@@ -28,17 +25,7 @@ function inspectDoctorWithActivation(activation) {
     process.stdout.write(JSON.stringify({ runtime, report }));
   `;
   try {
-    mkdirSync(configDir, { recursive: true });
-    mkdirSync(join(npmRoot, '@cli-tools'), { recursive: true });
-    mkdirSync(npmBin, { recursive: true });
-    symlinkSync(PLUGIN_ROOT, installedPlugin, process.platform === 'win32' ? 'junction' : 'dir');
-    const npm = join(npmBin, process.platform === 'win32' ? 'npm.cmd' : 'npm');
-    if (process.platform === 'win32') {
-      writeFileSync(npm, '@echo off\r\n@echo %OMS_TEST_NPM_ROOT%\r\n');
-    } else {
-      writeFileSync(npm, '#!/bin/sh\nprintf "%s\\n" "$OMS_TEST_NPM_ROOT"\n');
-      chmodSync(npm, 0o755);
-    }
+    const doctorFixture = prepareDoctorInstalledPackage({ sandbox, packageRoot: PLUGIN_ROOT });
     writeFileSync(join(configDir, 'opencode.json'), JSON.stringify({ plugin: ['@cli-tools/oh-my-sdd-opencode'] }));
     if (activation !== undefined) {
       mkdirSync(join(home, '.oh-my-sdd'), { recursive: true });
@@ -49,15 +36,14 @@ function inspectDoctorWithActivation(activation) {
     }
     const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
       env: {
-        ...process.env, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'),
-        OMS_TEST_NPM_ROOT: npmRoot, PATH: `${npmBin}${delimiter}${process.env.PATH}`,
+        ...doctorFixture.env,
       },
       encoding: 'utf8',
     });
     assert.equal(result.status, 0, result.stderr);
     return JSON.parse(result.stdout);
   } finally {
-    rmSync(home, { recursive: true, force: true });
+    sandbox.cleanup();
   }
 }
 
