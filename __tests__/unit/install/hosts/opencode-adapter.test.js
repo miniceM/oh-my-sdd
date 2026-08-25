@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { OpenCodeAdapter } from '../../../../install/hosts/opencode-adapter.js';
+import { buildNpmRootInvocation, OpenCodeAdapter } from '../../../../install/hosts/opencode-adapter.js';
 import { HostAdapter } from '../../../../install/host-adapter.js';
 import { SDD_COMMANDS } from '../../../../lib/command-generator.js';
 import { resourceDigest } from '../../../../opencode/scripts/resource-ownership.mjs';
@@ -128,12 +128,23 @@ describe('OpenCodeAdapter', () => {
     for (const record of [
       activation({ resource_digest: 'not-the-installed-plugin' }),
       activation({ activated_at: new Date(Date.now() - (48 * 60 * 60 * 1000)).toISOString() }),
+      activation({ activated_at: new Date(Date.now() + (60 * 60 * 1000)).toISOString() }),
     ]) {
       const { runtime } = inspectDoctorWithActivation(record);
       assert.equal(runtime.loaded.state, 'unknown');
       assert.equal(runtime.enforced.state, 'unknown');
       assert.match(runtime.loaded.reason, /rerun|restart|activation/i);
     }
+  });
+
+  it('runs npm root through ComSpec on Windows', () => {
+    assert.deepEqual(buildNpmRootInvocation({
+      platform: 'win32',
+      comspec: 'C:\\Windows\\System32\\cmd.exe',
+    }), {
+      command: 'C:\\Windows\\System32\\cmd.exe',
+      args: ['/d', '/s', '/c', 'npm', 'root', '--global'],
+    });
   });
 
   it('treats missing or invalid activation records as unknown runtime evidence', () => {

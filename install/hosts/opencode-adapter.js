@@ -36,6 +36,16 @@ export function buildOpenCodeInvocation(
   return { command: 'opencode', args };
 }
 
+export function buildNpmRootInvocation(
+  { platform = process.platform, comspec = process.env.ComSpec ?? process.env.COMSPEC } = {},
+) {
+  const args = ['root', '--global'];
+  if (platform === 'win32') {
+    return { command: comspec || 'cmd.exe', args: ['/d', '/s', '/c', 'npm', ...args] };
+  }
+  return { command: 'npm', args };
+}
+
 function inspectAvailability(check, source) {
   try {
     const available = Boolean(check());
@@ -89,7 +99,11 @@ function getOpenCodePaths() {
   };
 }
 
-function readActivation() {
+function readActivation({
+  platform = process.platform,
+  comspec = process.env.ComSpec ?? process.env.COMSPEC,
+  execFileSync: runCommand = execFileSync,
+} = {}) {
   const { activation: path } = getOpenCodePaths();
   if (!existsSync(path)) return { state: 'missing', path, reason: 'OpenCode activation record is missing.' };
   try {
@@ -108,12 +122,13 @@ function readActivation() {
       && value.state === expectedState;
     if (!valid) return { state: 'invalid', path, reason: 'OpenCode activation record does not match schema_version 1.' };
     const age = Date.now() - Date.parse(value.activated_at);
-    if (age > ACTIVATION_TTL_MS) {
-      return { state: 'invalid', path, reason: 'OpenCode activation has expired; restart OpenCode to refresh activation evidence.' };
+    if (age < 0 || age > ACTIVATION_TTL_MS) {
+      return { state: 'invalid', path, reason: 'OpenCode activation is expired or has a future timestamp; restart OpenCode to refresh activation evidence.' };
     }
     let expectedDigest;
     try {
-      const npmRoot = execFileSync('npm', ['root', '--global'], {
+      const invocation = buildNpmRootInvocation({ platform, comspec });
+      const npmRoot = runCommand(invocation.command, invocation.args, {
         encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 2000,
       }).trim();
       const packageRoot = join(npmRoot, ...OPENCODE_PLUGIN_ENTRY.split('/'));
@@ -326,7 +341,7 @@ export class OpenCodeAdapter extends HostAdapter {
   static async inspectRuntime(ctx = {}) {
     const paths = getOpenCodePaths();
     const runtimeConfig = readRuntimeConfig();
-    const activation = readActivation();
+    const activation = readActivation(ctx);
     const isRegistered = runtimeConfig.state === 'valid'
       && Array.isArray(runtimeConfig.config.plugin)
       && runtimeConfig.config.plugin.includes(OPENCODE_PLUGIN_ENTRY);
