@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import {
   createE2eSandbox,
@@ -16,13 +18,64 @@ import {
 } from '../../helpers/opencode-e2e-harness.js';
 
 const nodeMajor = Number(process.versions.node.split('.')[0]);
-const enabled = process.env.OMS_OPENCODE_E2E === '1' && nodeMajor === 22;
+export const supportedE2eNodeMajors = [18, 22];
+const enabled = process.env.OMS_OPENCODE_E2E === '1' && supportedE2eNodeMajors.includes(nodeMajor);
 const packageName = process.env.OPENCODE_PACKAGE ?? 'opencode-ai';
 const version = process.env.OPENCODE_VERSION;
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const commandTimeoutMs = process.platform === 'win32' ? 120_000 : 30_000;
+const defaultCommandTimeoutMs = process.platform === 'win32' ? 120_000 : 30_000;
+export const commandTimeoutByNodeMajor = Object.freeze({
+  18: 120_000,
+  22: defaultCommandTimeoutMs,
+});
+const commandTimeoutMs = commandTimeoutByNodeMajor[nodeMajor] ?? defaultCommandTimeoutMs;
 const cliInstallTimeoutMs = 120_000;
 const managedAgentsMarker = '<!-- OH-MY-SDD:BEGIN (do not edit between these markers) -->';
+
+test('real OpenCode E2E is eligible on every supported Node runtime', () => {
+  assert.deepEqual(supportedE2eNodeMajors, [18, 22]);
+});
+
+test('real OpenCode E2E leaves Node 18 enough time to initialize the real CLI', () => {
+  assert.equal(commandTimeoutByNodeMajor[18], 120_000);
+});
+
+test('real OpenCode E2E verifies write outcomes on disk, not only hook output', () => {
+  const projectDir = mkdtempSync(join(tmpdir(), 'oms-opencode-write-outcome-'));
+  try {
+    const safePath = join(projectDir, 'safe.txt');
+    writeFileSync(safePath, 'safe content');
+    assertToolWriteFilesystemOutcome('safe', projectDir, 'safe write evidence');
+
+    for (const [name, filename] of [['aws', 'aws.txt'], ['openai', 'openai.txt'], ['env', '.env']]) {
+      writeFileSync(join(projectDir, filename), 'blocked secret');
+      assert.throws(
+        () => assertToolWriteFilesystemOutcome(name, projectDir, `${name} denial evidence`),
+        new RegExp(`must not create ${filename.replace('.', '\\.')}`),
+      );
+      rmSync(join(projectDir, filename));
+    }
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
+export function assertToolWriteFilesystemOutcome(name, projectDir, detail) {
+  const paths = {
+    safe: join(projectDir, 'safe.txt'),
+    aws: join(projectDir, 'aws.txt'),
+    openai: join(projectDir, 'openai.txt'),
+    env: join(projectDir, '.env'),
+  };
+  const target = paths[name];
+  if (!target) return;
+  if (name === 'safe') {
+    assert.ok(existsSync(target), `safe write must create safe.txt\n${detail}`);
+    assert.equal(readFileSync(target, 'utf8'), 'safe content', `safe write content mismatch\n${detail}`);
+    return;
+  }
+  assert.equal(existsSync(target), false, `denied write must not create ${name === 'env' ? '.env' : `${name}.txt`}\n${detail}`);
+}
 
 export function requestMessages(body) {
   try {
@@ -156,6 +209,17 @@ function fail(phase, result, sandbox) {
   assert.equal(result.code, 0, detail);
 }
 
+async function inspectDefaultRuntimeEvidence(sandbox) {
+  const adapterUrl = pathToFileURL(join(process.cwd(), 'install', 'hosts', 'opencode-adapter.js')).href;
+  const result = await run(process.execPath, [
+    '--input-type=module',
+    '--eval',
+    `const { OpenCodeAdapter } = await import(${JSON.stringify(adapterUrl)}); process.stdout.write(JSON.stringify(await OpenCodeAdapter.inspectRuntime()));`,
+  ], { env: sandbox.env, cwd: sandbox.projectDir, timeoutMs: commandTimeoutMs });
+  fail('doctor-default-runtime-probe', result, sandbox);
+  return JSON.parse(result.stdout);
+}
+
 function stream(response, delta, finishReason = null, usage) {
   response.write(`data: ${JSON.stringify({
     id: 'e2e',
@@ -234,7 +298,7 @@ async function startProvider(transcript, projectDir) {
 }
 
 test('real OpenCode CLI loads commands and the globally installed tarball plugin', {
-  skip: !enabled && 'requires OMS_OPENCODE_E2E=1 on the pinned Node 22 runtime',
+  skip: !enabled && 'requires OMS_OPENCODE_E2E=1 on supported Node 18 or 22',
 }, async () => {
   assert.ok(version, 'OPENCODE_VERSION is required when OMS_OPENCODE_E2E=1');
   const sandbox = createE2eSandbox(process.cwd());
@@ -322,6 +386,10 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
     writeFileSync(join(sandbox.artifactsDir, 'conversation.log'), `${conversation.stdout}\n${conversation.stderr}`);
     fail('conversation', conversation, sandbox);
 
+    const runtimeEvidence = await inspectDefaultRuntimeEvidence(sandbox);
+    assert.equal(runtimeEvidence.loaded.state, 'verified', 'default probe must verify the real OpenCode activation');
+    assert.equal(runtimeEvidence.enforced.state, 'verified', 'real activation must register tool.execute.before');
+
     const compact = await run(executable, [
       'run', '--continue', '--print-logs', '--format', 'json', 'Continue after the deterministic high-token turn.',
     ], { env: sandbox.env, cwd: sandbox.projectDir, timeoutMs: commandTimeoutMs });
@@ -362,6 +430,7 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
       } else {
         assert.match(output, /HARD_RULE violated|hardcoded-|destructive-|env-file-edit/, detail);
       }
+      assertToolWriteFilesystemOutcome(name, sandbox.projectDir, detail);
     }
     assert.ok(transcript.length >= 12, formatE2eFailure({
       phase: 'provider-transcript',

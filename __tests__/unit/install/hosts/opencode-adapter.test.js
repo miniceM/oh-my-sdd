@@ -1,74 +1,41 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildNpmRootInvocation, OpenCodeAdapter } from '../../../../install/hosts/opencode-adapter.js';
+import { buildNpmRootInvocation, inspectOpenCodeActivation, OpenCodeAdapter } from '../../../../install/hosts/opencode-adapter.js';
 import { HostAdapter } from '../../../../install/host-adapter.js';
+import { doctor } from '../../../../install/control-plane/health.js';
 import { SDD_COMMANDS } from '../../../../lib/command-generator.js';
 import { resourceDigest } from '../../../../opencode/scripts/resource-ownership.mjs';
+import { createOpenCodeTestSandbox, prepareDoctorInstalledPackage } from '../../../helpers/opencode-test-env.js';
 
 const PLUGIN_ROOT = fileURLToPath(new URL('../../../../opencode/', import.meta.url));
+const FIXED_NOW = Date.parse('2026-08-25T12:00:00.000Z');
+const FIXTURE_RESOURCE_DIGEST = 'fixture-resource-digest';
 
-function inspectDoctorWithActivation(activation) {
-  const home = mkdtempSync(join(tmpdir(), 'oms-opencode-activation-'));
-  const configDir = join(home, '.config', 'opencode');
-  const npmRoot = join(home, 'npm-root');
-  const npmBin = join(home, 'bin');
-  const installedPlugin = join(npmRoot, '@cli-tools', 'oh-my-sdd-opencode');
-  const adapterUrl = new URL('../../../../install/hosts/opencode-adapter.js', import.meta.url).href;
-  const healthUrl = new URL('../../../../install/control-plane/health.js', import.meta.url).href;
-  const script = `
-    const { OpenCodeAdapter } = await import(${JSON.stringify(adapterUrl)});
-    const { doctor } = await import(${JSON.stringify(healthUrl)});
-    const runtime = await OpenCodeAdapter.inspectRuntime();
-    const report = await doctor({ adapters: [OpenCodeAdapter] });
-    process.stdout.write(JSON.stringify({ runtime, report }));
-  `;
-  try {
-    mkdirSync(configDir, { recursive: true });
-    mkdirSync(join(npmRoot, '@cli-tools'), { recursive: true });
-    mkdirSync(npmBin, { recursive: true });
-    symlinkSync(PLUGIN_ROOT, installedPlugin, process.platform === 'win32' ? 'junction' : 'dir');
-    const npm = join(npmBin, process.platform === 'win32' ? 'npm.cmd' : 'npm');
-    if (process.platform === 'win32') {
-      writeFileSync(npm, '@echo off\r\n@echo %OMS_TEST_NPM_ROOT%\r\n');
-    } else {
-      writeFileSync(npm, '#!/bin/sh\nprintf "%s\\n" "$OMS_TEST_NPM_ROOT"\n');
-      chmodSync(npm, 0o755);
-    }
-    writeFileSync(join(configDir, 'opencode.json'), JSON.stringify({ plugin: ['@cli-tools/oh-my-sdd-opencode'] }));
-    if (activation !== undefined) {
-      mkdirSync(join(home, '.oh-my-sdd'), { recursive: true });
-      writeFileSync(
-        join(home, '.oh-my-sdd', 'opencode-activation.json'),
-        typeof activation === 'string' ? activation : JSON.stringify(activation),
-      );
-    }
-    const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
-      env: {
-        ...process.env, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'),
-        OMS_TEST_NPM_ROOT: npmRoot, PATH: `${npmBin}${delimiter}${process.env.PATH}`,
-      },
-      encoding: 'utf8',
-    });
-    assert.equal(result.status, 0, result.stderr);
-    return JSON.parse(result.stdout);
-  } finally {
-    rmSync(home, { recursive: true, force: true });
-  }
+async function inspectDoctorWithActivation(record, now = FIXED_NOW) {
+  const expectedState = record?.failed_resources?.length > 0 ? 'failed'
+    : record?.drifted_resources?.length > 0 ? 'degraded' : 'verified';
+  const valid = record && typeof record === 'object' && record.schema_version === 1
+    && record.resource_digest === activation().resource_digest
+    && Date.parse(record.activated_at) <= now && now - Date.parse(record.activated_at) <= 24 * 60 * 60 * 1000
+    && Array.isArray(record.registered_hooks) && record.registered_hooks.every(Boolean)
+    && Array.isArray(record.drifted_resources) && Array.isArray(record.failed_resources)
+    && record.state === expectedState && record.state !== 'failed';
+  const ctx = { runtimeProbe: { inspectActivation: () => valid
+    ? { state: 'valid', path: '/fixture/activation.json', value: record }
+    : { state: 'invalid', path: '/fixture/activation.json', reason: 'Activation evidence is unavailable' } } };
+  return { runtime: await OpenCodeAdapter.inspectRuntime(ctx), report: await doctor({ adapters: [OpenCodeAdapter], ctx }) };
 }
 
 function activation(overrides = {}) {
   return {
     schema_version: 1,
     plugin_version: '1.0.0',
-    resource_digest: resourceDigest(PLUGIN_ROOT),
-    // The doctor runs in a child process. Keep the fixture safely inside the
-    // 24-hour TTL instead of relying on cross-process clock granularity.
-    activated_at: new Date(Date.now() - 60_000).toISOString(),
+    resource_digest: FIXTURE_RESOURCE_DIGEST,
+    activated_at: new Date(FIXED_NOW - 60_000).toISOString(),
     registered_hooks: ['tool.execute.before'],
     state: 'verified',
     drifted_resources: [],
@@ -121,8 +88,43 @@ describe('OpenCodeAdapter', () => {
     assert.equal(cli.classification, 'required');
   });
 
-  it('doctor verifies loaded and enforced only from a valid activation with the write-before hook', () => {
-    const { runtime, report } = inspectDoctorWithActivation(activation());
+  it('uses an injected activation probe for deterministic runtime evidence', async () => {
+    const runtime = await OpenCodeAdapter.inspectRuntime({
+      runtimeProbe: {
+        inspectActivation: () => ({
+          state: 'valid',
+          path: '/fixture/opencode-activation.json',
+          value: activation(),
+        }),
+      },
+    });
+
+    assert.equal(runtime.loaded.state, 'verified');
+    assert.equal(runtime.enforced.state, 'verified');
+  });
+
+  it('validates activation evidence with an injected npm-root command', () => {
+    const sandbox = createOpenCodeTestSandbox(process.cwd());
+    try {
+      const fixture = prepareDoctorInstalledPackage({ sandbox, packageRoot: PLUGIN_ROOT });
+      mkdirSync(join(sandbox.home, '.oh-my-sdd'), { recursive: true });
+      writeFileSync(join(sandbox.home, '.oh-my-sdd', 'opencode-activation.json'), JSON.stringify(
+        activation({ resource_digest: resourceDigest(fixture.packageSnapshot) }),
+      ));
+      const adapterUrl = new URL('../../../../install/hosts/opencode-adapter.js', import.meta.url).href;
+      const result = spawnSync(process.execPath, ['--input-type=module', '--eval',
+        `const { inspectOpenCodeActivation } = await import(${JSON.stringify(adapterUrl)}); process.stdout.write(JSON.stringify(inspectOpenCodeActivation({ now: () => ${FIXED_NOW}, execFileSync: () => process.env.OMS_TEST_NPM_ROOT })));`,
+      ], { env: fixture.env, encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(JSON.parse(result.stdout).state, 'valid');
+    } finally {
+      sandbox.cleanup();
+      sandbox.cleanupArtifacts();
+    }
+  });
+
+  it('doctor verifies loaded and enforced only from a valid activation with the write-before hook', async () => {
+    const { runtime, report } = await inspectDoctorWithActivation(activation());
 
     assert.equal(runtime.loaded.state, 'verified');
     assert.equal(runtime.enforced.state, 'verified');
@@ -130,16 +132,23 @@ describe('OpenCodeAdapter', () => {
     assert.equal(report.findings.some((finding) => finding.code.startsWith('runtime-')), false);
   });
 
-  it('treats expired or resource-digest-mismatched activation records as unknown runtime evidence', () => {
+  it('treats expired or resource-digest-mismatched activation records as unknown runtime evidence', async () => {
     for (const record of [
       activation({ resource_digest: 'not-the-installed-plugin' }),
-      activation({ activated_at: new Date(Date.now() - (48 * 60 * 60 * 1000)).toISOString() }),
-      activation({ activated_at: new Date(Date.now() + (60 * 60 * 1000)).toISOString() }),
+      activation({ activated_at: new Date(FIXED_NOW - (48 * 60 * 60 * 1000)).toISOString() }),
+      activation({ activated_at: new Date(FIXED_NOW + (60 * 60 * 1000)).toISOString() }),
     ]) {
-      const { runtime } = inspectDoctorWithActivation(record);
+      const { runtime, report } = await inspectDoctorWithActivation(record);
       assert.equal(runtime.loaded.state, 'unknown');
       assert.equal(runtime.enforced.state, 'unknown');
       assert.match(runtime.loaded.reason, /rerun|restart|activation/i);
+      assert.deepEqual(
+        report.findings
+          .filter((finding) => finding.code.startsWith('runtime-'))
+          .map((finding) => finding.code)
+          .sort(),
+        ['runtime-enforced-unknown', 'runtime-loaded-unknown'],
+      );
     }
   });
 
@@ -153,15 +162,38 @@ describe('OpenCodeAdapter', () => {
     });
   });
 
-  it('treats missing or invalid activation records as unknown runtime evidence', () => {
-    for (const record of [undefined, '{ invalid JSON', activation({ schema_version: 2 })]) {
-      const { runtime } = inspectDoctorWithActivation(record);
-      assert.equal(runtime.loaded.state, 'unknown');
-      assert.equal(runtime.enforced.state, 'unknown');
+  it('doctor fixture keeps a stable package snapshot when the source changes', () => {
+    const sandbox = createOpenCodeTestSandbox(process.cwd());
+    const source = join(sandbox.root, 'source-plugin');
+    try {
+      mkdirSync(source, { recursive: true });
+      writeFileSync(join(source, 'version.txt'), 'before');
+      const fixture = prepareDoctorInstalledPackage({ sandbox, packageRoot: source });
+      writeFileSync(join(source, 'version.txt'), 'after');
+      assert.equal(existsSync(fixture.installedPlugin), true);
+      assert.equal(readFileSync(join(fixture.installedPlugin, 'version.txt'), 'utf8'), 'before');
+    } finally {
+      sandbox.cleanup();
+      sandbox.cleanupArtifacts();
     }
   });
 
-  it('treats semantically inconsistent activation records as unknown runtime evidence', () => {
+  it('treats missing or invalid activation records as unknown runtime evidence', async () => {
+    for (const record of [undefined, '{ invalid JSON', activation({ schema_version: 2 })]) {
+      const { runtime, report } = await inspectDoctorWithActivation(record);
+      assert.equal(runtime.loaded.state, 'unknown');
+      assert.equal(runtime.enforced.state, 'unknown');
+      assert.deepEqual(
+        report.findings
+          .filter((finding) => finding.code.startsWith('runtime-'))
+          .map((finding) => finding.code)
+          .sort(),
+        ['runtime-enforced-unknown', 'runtime-loaded-unknown'],
+      );
+    }
+  });
+
+  it('treats semantically inconsistent activation records as unknown runtime evidence', async () => {
     const inconsistent = [
       activation({ state: 'verified', drifted_resources: ['oms-skill:security-check'] }),
       activation({ state: 'degraded' }),
@@ -171,21 +203,21 @@ describe('OpenCodeAdapter', () => {
     ];
 
     for (const record of inconsistent) {
-      const { runtime } = inspectDoctorWithActivation(record);
+      const { runtime } = await inspectDoctorWithActivation(record);
       assert.equal(runtime.loaded.state, 'unknown');
       assert.equal(runtime.enforced.state, 'unknown');
     }
   });
 
-  it('does not infer write enforcement when activation has no write-before hook', () => {
-    const { runtime } = inspectDoctorWithActivation(activation({ registered_hooks: ['tool.execute.after'] }));
+  it('does not infer write enforcement when activation has no write-before hook', async () => {
+    const { runtime } = await inspectDoctorWithActivation(activation({ registered_hooks: ['tool.execute.after'] }));
 
     assert.equal(runtime.loaded.state, 'verified');
     assert.equal(runtime.enforced.state, 'unknown');
   });
 
-  it('reports resource drift from a degraded activation without downgrading loaded evidence', () => {
-    const { runtime, report } = inspectDoctorWithActivation(activation({
+  it('reports resource drift from a degraded activation without downgrading loaded evidence', async () => {
+    const { runtime, report } = await inspectDoctorWithActivation(activation({
       state: 'degraded',
       drifted_resources: ['oms-skill:security-check'],
     }));

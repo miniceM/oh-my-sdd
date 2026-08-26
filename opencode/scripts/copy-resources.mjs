@@ -372,32 +372,36 @@ export function syncCommandLayouts(opencodeDir = OPENCODE_DIR) {
   );
 }
 
-export function main() {
+export function main({
+  rootDir = ROOT_DIR,
+  opencodeDir = OPENCODE_DIR,
+  report = console.error,
+} = {}) {
   let failed = false;
   for (const [fromRel, toRel] of SYNC_MAP) {
-    const src = join(ROOT_DIR, fromRel);
-    const dst = join(OPENCODE_DIR, toRel);
+    const src = join(rootDir, fromRel);
+    const dst = join(opencodeDir, toRel);
 
     if (!existsSync(src) || !statSync(src).isDirectory()) {
-      console.error(`[copy-resources] MISSING source: ${src}`);
+      report(`[copy-resources] MISSING source: ${src}`);
       failed = true;
       continue;
     }
 
     try {
       syncResourceTree(src, dst);
-      console.error(`[copy-resources] OK  ${fromRel} -> ${toRel}`);
+      report(`[copy-resources] OK  ${fromRel} -> ${toRel}`);
     } catch (err) {
-      console.error(`[copy-resources] FAIL ${fromRel} -> ${toRel}: ${err.message}`);
+      report(`[copy-resources] FAIL ${fromRel} -> ${toRel}: ${err.message}`);
       failed = true;
     }
   }
 
   try {
-    syncCommandLayouts();
-    console.error('[copy-resources] OK  .opencode/commands -> .agents/command');
+    syncCommandLayouts(opencodeDir);
+    report('[copy-resources] OK  .opencode/commands -> .agents/command');
   } catch (err) {
-    console.error(`[copy-resources] FAIL .opencode/commands -> .agents/command: ${err.message}`);
+    report(`[copy-resources] FAIL .opencode/commands -> .agents/command: ${err.message}`);
     failed = true;
   }
 
@@ -405,7 +409,7 @@ export function main() {
     throw new Error('[copy-resources] one or more syncs failed');
   }
 
-  console.error('[copy-resources] all resources synced');
+  report('[copy-resources] all resources synced');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

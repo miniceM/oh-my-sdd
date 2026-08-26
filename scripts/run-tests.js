@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const TESTS_DIR = path.join(PROJECT_ROOT, '__tests__');
+const OPENCODE_RESOURCE_SYNC_SCRIPT = path.join(PROJECT_ROOT, 'opencode', 'scripts', 'copy-resources.mjs');
 
 async function findTests(dir) {
   const out = [];
@@ -58,17 +59,42 @@ function validateCoverage(output, minimum = COVERAGE_MINIMUM) {
   return { actual, minimum };
 }
 
+function syncOpenCodeResources({ spawnFn = spawn } = {}) {
+  const child = spawnFn(process.execPath, [OPENCODE_RESOURCE_SYNC_SCRIPT], {
+    cwd: PROJECT_ROOT,
+    stdio: 'inherit',
+  });
+
+  return new Promise((resolve, reject) => {
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`OpenCode resource synchronization failed with code ${code}`));
+    });
+  });
+}
+
 /** Discover test files, run them, and optionally enforce native line coverage. */
-async function main({ coverage = process.argv.includes('--coverage') } = {}) {
-  const files = await findTests(TESTS_DIR);
+async function main({
+  coverage = process.argv.includes('--coverage'),
+  findTestsFn = findTests,
+  spawnFn = spawn,
+  syncResources = syncOpenCodeResources,
+} = {}) {
+  const files = await findTestsFn(TESTS_DIR);
   if (files.length === 0) {
     process.stderr.write('No test files found under __tests__/\n');
     process.exit(1);
   }
 
+  await syncResources();
+
   process.stderr.write(`Running ${files.length} test file(s)...\n`);
 
-  const child = spawn(process.execPath, buildNodeArgs(files, { coverage }), {
+  const child = spawnFn(process.execPath, buildNodeArgs(files, { coverage }), {
     stdio: coverage ? ['inherit', 'pipe', 'pipe'] : 'inherit',
   });
 
@@ -114,6 +140,8 @@ export {
   buildNodeArgs,
   findTests,
   main,
+  OPENCODE_RESOURCE_SYNC_SCRIPT,
   parseLineCoverage,
+  syncOpenCodeResources,
   validateCoverage,
 };

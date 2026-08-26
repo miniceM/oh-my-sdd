@@ -7,6 +7,8 @@ import { join } from 'node:path';
 import { bootstrapOpenCodeResources } from '../../../opencode/scripts/resource-bootstrap.mjs';
 import { readOwnershipManifest, uninstallOwnedResources } from '../../../opencode/scripts/resource-ownership.mjs';
 
+const FIXED_NOW = Date.parse('2026-08-25T12:00:00.000Z');
+
 function fixture() {
   return mkdtempSync(join(tmpdir(), 'oms-bootstrap-test-'));
 }
@@ -42,6 +44,7 @@ test('bootstrap projects OpenCode discovery resources and records verified activ
 
     const result = bootstrap(root, home, {
       delegatedSkillNames: ['brainstorming'],
+      now: () => FIXED_NOW,
     });
 
     assert.equal(result.state, 'verified');
@@ -53,6 +56,7 @@ test('bootstrap projects OpenCode discovery resources and records verified activ
     assert.equal(activation.schema_version, 1);
     assert.equal(activation.plugin_version, '9.9.9');
     assert.equal(activation.state, 'verified');
+    assert.equal(activation.activated_at, '2026-08-25T12:00:00.000Z');
     assert.deepEqual(activation.registered_hooks, []);
     assert.equal(activation.resource_digest, result.resource_digest);
   } finally {
