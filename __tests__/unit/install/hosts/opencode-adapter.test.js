@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { buildNpmRootInvocation, OpenCodeAdapter } from '../../../../install/hosts/opencode-adapter.js';
+import { buildNpmRootInvocation, inspectOpenCodeActivation, OpenCodeAdapter } from '../../../../install/hosts/opencode-adapter.js';
 import { HostAdapter } from '../../../../install/host-adapter.js';
 import { SDD_COMMANDS } from '../../../../lib/command-generator.js';
 import { resourceDigest } from '../../../../opencode/scripts/resource-ownership.mjs';
@@ -19,9 +19,17 @@ function inspectDoctorWithActivation(activation, now = FIXED_NOW) {
   const adapterUrl = new URL('../../../../install/hosts/opencode-adapter.js', import.meta.url).href;
   const healthUrl = new URL('../../../../install/control-plane/health.js', import.meta.url).href;
   const script = `
-    const { OpenCodeAdapter } = await import(${JSON.stringify(adapterUrl)});
+    const { inspectOpenCodeActivation, OpenCodeAdapter } = await import(${JSON.stringify(adapterUrl)});
     const { doctor } = await import(${JSON.stringify(healthUrl)});
-    const ctx = { now: () => ${JSON.stringify(now)} };
+    const ctx = {
+      now: () => ${JSON.stringify(now)},
+      runtimeProbe: {
+        inspectActivation: () => inspectOpenCodeActivation({
+          now: () => ${JSON.stringify(now)},
+          execFileSync: () => process.env.OMS_TEST_NPM_ROOT,
+        }),
+      },
+    };
     const runtime = await OpenCodeAdapter.inspectRuntime(ctx);
     const report = await doctor({ adapters: [OpenCodeAdapter], ctx });
     process.stdout.write(JSON.stringify({ runtime, report }));
@@ -106,6 +114,47 @@ describe('OpenCodeAdapter', () => {
 
     assert.equal(cli.required, true);
     assert.equal(cli.classification, 'required');
+  });
+
+  it('uses an injected activation probe for deterministic runtime evidence', async () => {
+    const runtime = await OpenCodeAdapter.inspectRuntime({
+      runtimeProbe: {
+        inspectActivation: () => ({
+          state: 'valid',
+          path: '/fixture/opencode-activation.json',
+          value: activation(),
+        }),
+      },
+    });
+
+    assert.equal(runtime.loaded.state, 'verified');
+    assert.equal(runtime.enforced.state, 'verified');
+  });
+
+  it('validates activation evidence with an injected npm-root command', () => {
+    const sandbox = createOpenCodeTestSandbox(process.cwd());
+    try {
+      const fixture = prepareDoctorInstalledPackage({ sandbox, packageRoot: PLUGIN_ROOT });
+      mkdirSync(join(sandbox.home, '.oh-my-sdd'), { recursive: true });
+      writeFileSync(join(sandbox.home, '.oh-my-sdd', 'opencode-activation.json'), JSON.stringify(activation()));
+      const previous = Object.fromEntries(Object.keys(sandbox.env).map((key) => [key, process.env[key]]));
+      Object.assign(process.env, sandbox.env);
+      try {
+        const result = inspectOpenCodeActivation({
+          now: () => FIXED_NOW,
+          execFileSync: () => fixture.npmRoot,
+        });
+        assert.equal(result.state, 'valid');
+      } finally {
+        for (const [key, value] of Object.entries(previous)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      }
+    } finally {
+      sandbox.cleanup();
+      sandbox.cleanupArtifacts();
+    }
   });
 
   it('doctor verifies loaded and enforced only from a valid activation with the write-before hook', () => {

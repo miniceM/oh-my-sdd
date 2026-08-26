@@ -99,7 +99,7 @@ function getOpenCodePaths() {
   };
 }
 
-function readActivation({
+export function inspectOpenCodeActivation({
   platform = process.platform,
   comspec = process.env.ComSpec ?? process.env.COMSPEC,
   execFileSync: runCommand = execFileSync,
@@ -342,7 +342,18 @@ export class OpenCodeAdapter extends HostAdapter {
   static async inspectRuntime(ctx = {}) {
     const paths = getOpenCodePaths();
     const runtimeConfig = readRuntimeConfig();
-    const activation = readActivation(ctx);
+    let activation;
+    try {
+      activation = typeof ctx.runtimeProbe?.inspectActivation === 'function'
+        ? await ctx.runtimeProbe.inspectActivation(ctx)
+        : inspectOpenCodeActivation(ctx);
+    } catch (error) {
+      activation = {
+        state: 'invalid',
+        path: paths.activation,
+        reason: `Unable to inspect OpenCode activation evidence: ${error.message}`,
+      };
+    }
     const isRegistered = runtimeConfig.state === 'valid'
       && Array.isArray(runtimeConfig.config.plugin)
       && runtimeConfig.config.plugin.includes(OPENCODE_PLUGIN_ENTRY);

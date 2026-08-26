@@ -5,6 +5,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { test } from 'node:test';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import {
   createE2eSandbox,
@@ -208,6 +209,17 @@ function fail(phase, result, sandbox) {
   assert.equal(result.code, 0, detail);
 }
 
+async function inspectDefaultRuntimeEvidence(sandbox) {
+  const adapterUrl = pathToFileURL(join(process.cwd(), 'install', 'hosts', 'opencode-adapter.js')).href;
+  const result = await run(process.execPath, [
+    '--input-type=module',
+    '--eval',
+    `const { OpenCodeAdapter } = await import(${JSON.stringify(adapterUrl)}); process.stdout.write(JSON.stringify(await OpenCodeAdapter.inspectRuntime()));`,
+  ], { env: sandbox.env, cwd: sandbox.projectDir, timeoutMs: commandTimeoutMs });
+  fail('doctor-default-runtime-probe', result, sandbox);
+  return JSON.parse(result.stdout);
+}
+
 function stream(response, delta, finishReason = null, usage) {
   response.write(`data: ${JSON.stringify({
     id: 'e2e',
@@ -373,6 +385,10 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
     ], { env: sandbox.env, cwd: sandbox.projectDir, timeoutMs: commandTimeoutMs });
     writeFileSync(join(sandbox.artifactsDir, 'conversation.log'), `${conversation.stdout}\n${conversation.stderr}`);
     fail('conversation', conversation, sandbox);
+
+    const runtimeEvidence = await inspectDefaultRuntimeEvidence(sandbox);
+    assert.equal(runtimeEvidence.loaded.state, 'verified', 'default probe must verify the real OpenCode activation');
+    assert.equal(runtimeEvidence.enforced.state, 'verified', 'real activation must register tool.execute.before');
 
     const compact = await run(executable, [
       'run', '--continue', '--print-logs', '--format', 'json', 'Continue after the deterministic high-token turn.',
