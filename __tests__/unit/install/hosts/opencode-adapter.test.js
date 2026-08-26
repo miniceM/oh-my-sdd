@@ -107,7 +107,9 @@ describe('OpenCodeAdapter', () => {
     try {
       const fixture = prepareDoctorInstalledPackage({ sandbox, packageRoot: PLUGIN_ROOT });
       mkdirSync(join(sandbox.home, '.oh-my-sdd'), { recursive: true });
-      writeFileSync(join(sandbox.home, '.oh-my-sdd', 'opencode-activation.json'), JSON.stringify(activation()));
+      writeFileSync(join(sandbox.home, '.oh-my-sdd', 'opencode-activation.json'), JSON.stringify(
+        activation({ resource_digest: resourceDigest(fixture.packageSnapshot) }),
+      ));
       const adapterUrl = new URL('../../../../install/hosts/opencode-adapter.js', import.meta.url).href;
       const result = spawnSync(process.execPath, ['--input-type=module', '--eval',
         `const { inspectOpenCodeActivation } = await import(${JSON.stringify(adapterUrl)}); process.stdout.write(JSON.stringify(inspectOpenCodeActivation({ now: () => ${FIXED_NOW}, execFileSync: () => process.env.OMS_TEST_NPM_ROOT })));`,
