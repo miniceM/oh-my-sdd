@@ -13,6 +13,7 @@ import { createOpenCodeTestSandbox, prepareDoctorInstalledPackage } from '../../
 
 const PLUGIN_ROOT = fileURLToPath(new URL('../../../../opencode/', import.meta.url));
 const FIXED_NOW = Date.parse('2026-08-25T12:00:00.000Z');
+const FIXTURE_RESOURCE_DIGEST = 'fixture-resource-digest';
 
 async function inspectDoctorWithActivation(record, now = FIXED_NOW) {
   const expectedState = record?.failed_resources?.length > 0 ? 'failed'
@@ -33,7 +34,7 @@ function activation(overrides = {}) {
   return {
     schema_version: 1,
     plugin_version: '1.0.0',
-    resource_digest: resourceDigest(PLUGIN_ROOT),
+    resource_digest: FIXTURE_RESOURCE_DIGEST,
     activated_at: new Date(FIXED_NOW - 60_000).toISOString(),
     registered_hooks: ['tool.execute.before'],
     state: 'verified',

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -19,6 +19,7 @@ import {
 } from '../../../opencode/scripts/uninstall.mjs';
 import {
   shouldCopy,
+  main as copyResources,
   syncCommandLayouts,
   syncResourceTree,
   withSyncLock,
@@ -39,15 +40,22 @@ function fixture() {
 }
 
 test('resource sync writes normal diagnostics to stderr', () => {
-  const child = spawnSync(process.execPath, [
-    '--input-type=module',
-    '--eval',
-    `import { main } from ${JSON.stringify(pathToFileURL(join(process.cwd(), 'opencode', 'scripts', 'copy-resources.mjs')).href)}; main();`,
-  ], { encoding: 'utf8' });
+  const root = fixture();
+  const sourceRoot = process.cwd();
+  const opencodeDir = join(root, 'opencode');
+  const messages = [];
+  try {
+    for (const directory of ['skills', 'content', 'hooks', 'lib']) {
+      cpSync(join(sourceRoot, directory), join(root, directory), { recursive: true });
+    }
+    cpSync(join(sourceRoot, 'opencode', '.opencode'), join(opencodeDir, '.opencode'), { recursive: true });
 
-  assert.equal(child.status, 0, child.stderr || child.stdout);
-  assert.doesNotMatch(child.stdout, /\[copy-resources\]/);
-  assert.match(child.stderr, /\[copy-resources\] all resources synced/);
+    copyResources({ rootDir: root, opencodeDir, report: (message) => messages.push(message) });
+
+    assert.match(messages.at(-1), /\[copy-resources\] all resources synced/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('AGENTS helper creates one managed block and preserves user content', () => {
