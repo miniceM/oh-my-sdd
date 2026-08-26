@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildNpmRootInvocation, inspectOpenCodeActivation, OpenCodeAdapter } from '../../../../install/hosts/opencode-adapter.js';
@@ -107,20 +108,12 @@ describe('OpenCodeAdapter', () => {
       const fixture = prepareDoctorInstalledPackage({ sandbox, packageRoot: PLUGIN_ROOT });
       mkdirSync(join(sandbox.home, '.oh-my-sdd'), { recursive: true });
       writeFileSync(join(sandbox.home, '.oh-my-sdd', 'opencode-activation.json'), JSON.stringify(activation()));
-      const previous = Object.fromEntries(Object.keys(sandbox.env).map((key) => [key, process.env[key]]));
-      Object.assign(process.env, sandbox.env);
-      try {
-        const result = inspectOpenCodeActivation({
-          now: () => FIXED_NOW,
-          execFileSync: () => fixture.npmRoot,
-        });
-        assert.equal(result.state, 'valid');
-      } finally {
-        for (const [key, value] of Object.entries(previous)) {
-          if (value === undefined) delete process.env[key];
-          else process.env[key] = value;
-        }
-      }
+      const adapterUrl = new URL('../../../../install/hosts/opencode-adapter.js', import.meta.url).href;
+      const result = spawnSync(process.execPath, ['--input-type=module', '--eval',
+        `const { inspectOpenCodeActivation } = await import(${JSON.stringify(adapterUrl)}); process.stdout.write(JSON.stringify(inspectOpenCodeActivation({ now: () => ${FIXED_NOW}, execFileSync: () => process.env.OMS_TEST_NPM_ROOT })));`,
+      ], { env: fixture.env, encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(JSON.parse(result.stdout).state, 'valid');
     } finally {
       sandbox.cleanup();
       sandbox.cleanupArtifacts();
