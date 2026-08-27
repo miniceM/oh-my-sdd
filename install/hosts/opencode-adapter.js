@@ -3,7 +3,7 @@
 // Production installs delegate plugin registration to the OpenCode CLI; local
 // plugin paths are retained only for backwards-compatible uninstall cleanup.
 
-import { existsSync, readFileSync, realpathSync, writeFileSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { HostAdapter } from '../host-adapter.js';
@@ -100,9 +100,6 @@ function getOpenCodePaths() {
 }
 
 export function inspectOpenCodeActivation({
-  platform = process.platform,
-  comspec = process.env.ComSpec ?? process.env.COMSPEC,
-  execFileSync: runCommand = execFileSync,
   now = Date.now,
 } = {}) {
   const { activation: path } = getOpenCodePaths();
@@ -111,6 +108,7 @@ export function inspectOpenCodeActivation({
     const value = JSON.parse(readFileSync(path, 'utf8'));
     const stringList = (list) => Array.isArray(list)
       && list.every((item) => typeof item === 'string' && item.length > 0);
+    const nonEmptyStringList = (list) => stringList(list) && list.length > 0;
     const expectedState = value?.failed_resources?.length > 0
       ? 'failed'
       : value?.drifted_resources?.length > 0 ? 'degraded' : 'verified';
@@ -118,7 +116,7 @@ export function inspectOpenCodeActivation({
       && typeof value.plugin_version === 'string' && value.plugin_version.length > 0
       && typeof value.resource_digest === 'string' && value.resource_digest.length > 0
       && typeof value.activated_at === 'string' && !Number.isNaN(Date.parse(value.activated_at))
-      && stringList(value.registered_hooks)
+      && nonEmptyStringList(value.registered_hooks)
       && stringList(value.drifted_resources) && stringList(value.failed_resources)
       && value.state === expectedState;
     if (!valid) return { state: 'invalid', path, reason: 'OpenCode activation record does not match schema_version 1.' };
@@ -126,20 +124,7 @@ export function inspectOpenCodeActivation({
     if (age < 0 || age > ACTIVATION_TTL_MS) {
       return { state: 'invalid', path, reason: 'OpenCode activation is expired or has a future timestamp; restart OpenCode to refresh activation evidence.' };
     }
-    let expectedDigest;
-    try {
-      const invocation = buildNpmRootInvocation({ platform, comspec });
-      const npmRoot = runCommand(invocation.command, invocation.args, {
-        encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 2000,
-      }).trim();
-      const packageRoot = join(npmRoot, ...OPENCODE_PLUGIN_ENTRY.split('/'));
-      expectedDigest = resourceDigest(realpathSync(packageRoot));
-    } catch {
-      return { state: 'invalid', path, reason: 'Cannot verify the installed OpenCode plugin resources; reinstall or restart OpenCode, then rerun doctor.' };
-    }
-    return value.resource_digest === expectedDigest
-      ? { state: 'valid', path, value }
-      : { state: 'invalid', path, reason: 'OpenCode activation resource digest does not match the installed plugin; restart OpenCode to refresh activation evidence.' };
+    return { state: 'valid', path, value };
   } catch (error) {
     return { state: 'invalid', path, reason: `Invalid JSON in ${path}: ${error.message}` };
   }
@@ -383,9 +368,11 @@ export class OpenCodeAdapter extends HostAdapter {
       enforced: {
         state: writeBeforeRegistered ? 'verified' : 'unknown',
         evidence: writeBeforeRegistered ? 'OpenCode activation registered tool.execute.before' : null,
-        reason: active
-          ? 'OpenCode activation does not include tool.execute.before.'
-          : (activation.reason || 'Write prevention evidence requires active runtime'),
+        reason: writeBeforeRegistered
+          ? null
+          : (active
+            ? 'OpenCode activation does not include tool.execute.before.'
+            : (activation.reason || 'Write prevention evidence requires active runtime')),
       },
     };
   }

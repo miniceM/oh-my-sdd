@@ -11,6 +11,11 @@ export const DELEGATED_SKILL_NAMES = Object.freeze([
   'brainstorming', 'writing-plans', 'executing-plans', 'subagent-driven-development',
   'requesting-code-review', 'using-git-worktrees', 'finishing-a-development-branch', 'test-driven-development',
 ]);
+export const DEFAULT_REGISTERED_HOOKS = Object.freeze([
+  'tool.execute.before',
+  'tool.execute.after',
+  'command.execute.before',
+]);
 const ownedSkill = (name) => /^(sdd-|api-design$|business-modeling$|db-conventions$|doc-writer$|fe-|security-check$|testing-strategy$)/.test(name);
 const ownedCommand = (name) => name.startsWith('sdd-') && name.endsWith('.md');
 
@@ -97,7 +102,7 @@ export function bootstrapOpenCodeResources(options = {}) {
   const resource_digest = resourceDigest(pluginRoot);
   const result = {
     schema_version: 1, plugin_version: packageVersion(pluginRoot), resource_digest, activated_at: new Date(now()).toISOString(),
-    registered_hooks: options.registeredHooks ?? [],
+    registered_hooks: options.registeredHooks ?? DEFAULT_REGISTERED_HOOKS,
     state: failed_resources.length ? 'failed' : drifted_resources.length ? 'degraded' : 'verified',
     drifted_resources, failed_resources,
   };

@@ -8,7 +8,6 @@ import { buildNpmRootInvocation, inspectOpenCodeActivation, OpenCodeAdapter } fr
 import { HostAdapter } from '../../../../install/host-adapter.js';
 import { doctor } from '../../../../install/control-plane/health.js';
 import { SDD_COMMANDS } from '../../../../lib/command-generator.js';
-import { resourceDigest } from '../../../../opencode/scripts/resource-ownership.mjs';
 import { createOpenCodeTestSandbox, prepareDoctorInstalledPackage } from '../../../helpers/opencode-test-env.js';
 
 const PLUGIN_ROOT = fileURLToPath(new URL('../../../../opencode/', import.meta.url));
@@ -21,7 +20,7 @@ async function inspectDoctorWithActivation(record, now = FIXED_NOW) {
   const valid = record && typeof record === 'object' && record.schema_version === 1
     && record.resource_digest === activation().resource_digest
     && Date.parse(record.activated_at) <= now && now - Date.parse(record.activated_at) <= 24 * 60 * 60 * 1000
-    && Array.isArray(record.registered_hooks) && record.registered_hooks.every(Boolean)
+    && Array.isArray(record.registered_hooks) && record.registered_hooks.length > 0 && record.registered_hooks.every(Boolean)
     && Array.isArray(record.drifted_resources) && Array.isArray(record.failed_resources)
     && record.state === expectedState && record.state !== 'failed';
   const ctx = { runtimeProbe: { inspectActivation: () => valid
@@ -103,20 +102,27 @@ describe('OpenCodeAdapter', () => {
     assert.equal(runtime.enforced.state, 'verified');
   });
 
-  it('validates activation evidence with an injected npm-root command', () => {
+  it('accepts digest drift but rejects activation evidence without registered hooks', () => {
     const sandbox = createOpenCodeTestSandbox(process.cwd());
     try {
       const fixture = prepareDoctorInstalledPackage({ sandbox, packageRoot: PLUGIN_ROOT });
       mkdirSync(join(sandbox.home, '.oh-my-sdd'), { recursive: true });
       writeFileSync(join(sandbox.home, '.oh-my-sdd', 'opencode-activation.json'), JSON.stringify(
-        activation({ resource_digest: resourceDigest(fixture.packageSnapshot) }),
+        activation({ resource_digest: 'stale-resource-digest' }),
       ));
       const adapterUrl = new URL('../../../../install/hosts/opencode-adapter.js', import.meta.url).href;
-      const result = spawnSync(process.execPath, ['--input-type=module', '--eval',
+      const inspect = () => spawnSync(process.execPath, ['--input-type=module', '--eval',
         `const { inspectOpenCodeActivation } = await import(${JSON.stringify(adapterUrl)}); process.stdout.write(JSON.stringify(inspectOpenCodeActivation({ now: () => ${FIXED_NOW}, execFileSync: () => process.env.OMS_TEST_NPM_ROOT })));`,
       ], { env: fixture.env, encoding: 'utf8' });
+      const result = inspect();
       assert.equal(result.status, 0, result.stderr);
       assert.equal(JSON.parse(result.stdout).state, 'valid');
+      writeFileSync(join(sandbox.home, '.oh-my-sdd', 'opencode-activation.json'), JSON.stringify(
+        activation({ registered_hooks: [] }),
+      ));
+      const emptyHooks = inspect();
+      assert.equal(emptyHooks.status, 0, emptyHooks.stderr);
+      assert.equal(JSON.parse(emptyHooks.stdout).state, 'invalid');
     } finally {
       sandbox.cleanup();
       sandbox.cleanupArtifacts();
@@ -128,13 +134,13 @@ describe('OpenCodeAdapter', () => {
 
     assert.equal(runtime.loaded.state, 'verified');
     assert.equal(runtime.enforced.state, 'verified');
+    assert.equal(runtime.enforced.reason, null);
     assert.equal(report.hosts[0].protection.level, 'enforced');
     assert.equal(report.findings.some((finding) => finding.code.startsWith('runtime-')), false);
   });
 
-  it('treats expired or resource-digest-mismatched activation records as unknown runtime evidence', async () => {
+  it('treats expired activation records as unknown runtime evidence', async () => {
     for (const record of [
-      activation({ resource_digest: 'not-the-installed-plugin' }),
       activation({ activated_at: new Date(FIXED_NOW - (48 * 60 * 60 * 1000)).toISOString() }),
       activation({ activated_at: new Date(FIXED_NOW + (60 * 60 * 1000)).toISOString() }),
     ]) {
@@ -214,6 +220,7 @@ describe('OpenCodeAdapter', () => {
 
     assert.equal(runtime.loaded.state, 'verified');
     assert.equal(runtime.enforced.state, 'unknown');
+    assert.equal(runtime.enforced.reason, 'OpenCode activation does not include tool.execute.before.');
   });
 
   it('reports resource drift from a degraded activation without downgrading loaded evidence', async () => {

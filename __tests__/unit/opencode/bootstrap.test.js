@@ -57,7 +57,11 @@ test('bootstrap projects OpenCode discovery resources and records verified activ
     assert.equal(activation.plugin_version, '9.9.9');
     assert.equal(activation.state, 'verified');
     assert.equal(activation.activated_at, '2026-08-25T12:00:00.000Z');
-    assert.deepEqual(activation.registered_hooks, []);
+    assert.deepEqual(activation.registered_hooks, [
+      'tool.execute.before',
+      'tool.execute.after',
+      'command.execute.before',
+    ]);
     assert.equal(activation.resource_digest, result.resource_digest);
   } finally {
     rmSync(root, { recursive: true, force: true });
