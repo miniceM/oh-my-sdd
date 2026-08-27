@@ -61,7 +61,12 @@ __tests__/
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { PRODUCT_ROOT, OPENCODE_PLUGIN_ROOT, REPO_ROOT } from '../../helpers/workspace-layout.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const PRODUCT_ROOT = path.join(REPO_ROOT, 'packages', 'product');
+const OPENCODE_PLUGIN_ROOT = path.join(REPO_ROOT, 'packages', 'opencode-plugin');
 
 const json = (file) => JSON.parse(readFileSync(file, 'utf8'));
 
@@ -81,20 +86,14 @@ test('two public workspaces are fixed to one version and use one root lockfile',
 
 运行：`node --test __tests__/unit/workspace/release-contract.test.js`
 
-预期：FAIL，提示 `workspace-layout.js` 或 `packages/product/package.json` 不存在。
+预期：FAIL，断言 `packages/product/package.json` 存在失败。
 
 - [ ] **步骤 3：编写 release-check 的失败路径测试**
 
 ```js
 // __tests__/unit/workspace/release-check.test.js
 test('release check reports mismatched OpenCode snapshot as a failure', () => {
-  const result = checkReleaseContract({
-    productRoot: fixture.productRoot,
-    opencodeRoot: fixture.opencodeRoot,
-    compareTree: () => false,
-  });
-  assert.equal(result.ok, false);
-  assert.match(result.errors.join('\n'), /OpenCode resource snapshot differs/);
+  assert.equal(existsSync(join(REPO_ROOT, 'scripts', 'release-check.mjs')), true);
 });
 ```
 
@@ -102,7 +101,7 @@ test('release check reports mismatched OpenCode snapshot as a failure', () => {
 
 运行：`node --test __tests__/unit/workspace/release-check.test.js`
 
-预期：FAIL，提示 `checkReleaseContract` 尚未导出。
+预期：FAIL，断言 `scripts/release-check.mjs` 存在失败。
 
 - [ ] **步骤 5：实现独立、只读的校验器骨架**
 
@@ -115,6 +114,15 @@ export function checkReleaseContract({ productRoot, opencodeRoot, compareTree })
   }
   return { ok: errors.length === 0, errors };
 }
+```
+
+创建模块后，将第二个测试替换为对 `checkReleaseContract` 的直接导入与不一致资源
+快照断言：
+
+```js
+const result = checkReleaseContract({ productRoot: fixture.productRoot, opencodeRoot: fixture.opencodeRoot, compareTree: () => false });
+assert.equal(result.ok, false);
+assert.match(result.errors.join('\n'), /OpenCode resource snapshot differs/);
 ```
 
 校验器还必须读取两个包的 `package.json`、产品包 `.claude-plugin/plugin.json`、产品包
@@ -472,11 +480,12 @@ KiloCode、OpenCode；OpenCode 包是原生桥接而非第二套能力源；两�
 
 ```bash
 node --test __tests__/unit/scripts __tests__/unit/workspace
-rg -n '版本号独立管理|cd opencode|--prefix opencode|0\.1\.0' README.md scripts .github docs/release
+rg -n '版本号独立管理|cd opencode|--prefix opencode' README.md scripts .github docs/release
 git diff -- docs/archive
 ```
 
-预期：测试 PASS；前两个命令不输出旧工作区指令或当前版本硬编码；第三个命令无输出。
+预期：测试 PASS；前两个命令不输出旧工作区指令；第三个命令无输出。当前发布文档中的
+历史版本记录可以保留，但必须与迁移后的锁步发布说明清楚分隔。
 
 - [ ] **步骤 6：提交编排与文档更新**
 
