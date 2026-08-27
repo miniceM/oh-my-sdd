@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SKILL_PATH = path.resolve(__dirname, '..', '..', 'skills', 'sdd-plan', 'SKILL.md');
+const SKILL_PATH = path.resolve(__dirname, '..', '..', 'packages', 'product', 'skills', 'sdd-plan', 'SKILL.md');
 
 async function readSkill() {
   return readFile(SKILL_PATH, 'utf8');

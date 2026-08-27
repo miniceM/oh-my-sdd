@@ -8,32 +8,32 @@ import path from 'node:path';
 import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { copyDirSafe } from '../../../opencode/scripts/postinstall.mjs';
+import { copyDirSafe } from '../../../packages/opencode-plugin/scripts/postinstall.mjs';
 import {
   buildNpmInvocation,
   main as uninstallPackage,
-} from '../../../opencode/bin/oms-opencode-uninstall.mjs';
+} from '../../../packages/opencode-plugin/bin/oms-opencode-uninstall.mjs';
 import {
   main as uninstallOpenCode,
   unregisterOpenCodePlugin,
-} from '../../../opencode/scripts/uninstall.mjs';
+} from '../../../packages/opencode-plugin/scripts/uninstall.mjs';
 import {
   shouldCopy,
   main as copyResources,
   syncCommandLayouts,
   syncResourceTree,
   withSyncLock,
-} from '../../../opencode/scripts/copy-resources.mjs';
+} from '../../../packages/opencode-plugin/scripts/copy-resources.mjs';
 import {
   readOwnershipManifest,
   uninstallOwnedResources,
   writeOwnershipManifest,
-} from '../../../opencode/scripts/resource-ownership.mjs';
+} from '../../../packages/opencode-plugin/scripts/resource-ownership.mjs';
 import {
   getAgentsPath,
   removeManagedAgentsBlock,
   upsertManagedAgentsBlock,
-} from '../../../opencode/scripts/agents-md.mjs';
+} from '../../../packages/opencode-plugin/scripts/agents-md.mjs';
 
 function fixture() {
   return mkdtempSync(join(tmpdir(), 'oms-resource-test-'));
@@ -42,13 +42,14 @@ function fixture() {
 test('resource sync writes normal diagnostics to stderr', () => {
   const root = fixture();
   const sourceRoot = process.cwd();
-  const opencodeDir = join(root, 'opencode');
+  const opencodeDir = join(root, 'packages', 'opencode-plugin');
   const messages = [];
   try {
+    mkdirSync(opencodeDir, { recursive: true });
     for (const directory of ['skills', 'content', 'hooks', 'lib']) {
-      cpSync(join(sourceRoot, directory), join(root, directory), { recursive: true });
+      cpSync(join(sourceRoot, 'packages', 'product', directory), join(root, directory), { recursive: true });
     }
-    cpSync(join(sourceRoot, 'opencode', '.opencode'), join(opencodeDir, '.opencode'), { recursive: true });
+    cpSync(join(sourceRoot, 'packages', 'opencode-plugin', '.opencode'), join(opencodeDir, '.opencode'), { recursive: true });
 
     copyResources({ rootDir: root, opencodeDir, report: (message) => messages.push(message) });
 
@@ -206,7 +207,7 @@ test('postinstall writes AGENTS.md beside the effective OpenCode config', () => 
       OPENCODE_CONFIG_DIR: configDir,
     };
     execFileSync(process.execPath, ['scripts/postinstall.mjs'], {
-      cwd: join(process.cwd(), 'opencode'),
+      cwd: join(process.cwd(), 'packages', 'opencode-plugin'),
       env,
       encoding: 'utf8',
     });
@@ -219,7 +220,7 @@ test('postinstall writes AGENTS.md beside the effective OpenCode config', () => 
 });
 
 test('OpenCode uninstall resolves config and allowed roots from the effective config directory', async () => {
-  const { getUninstallPaths } = await import('../../../opencode/scripts/uninstall.mjs');
+  const { getUninstallPaths } = await import('../../../packages/opencode-plugin/scripts/uninstall.mjs');
   const custom = getUninstallPaths('/home/alice', path.posix, {
     OPENCODE_CONFIG_DIR: '/tmp/custom-opencode',
   });
@@ -263,7 +264,7 @@ test('postinstall manages one global AGENTS baseline block across upgrades', () 
     mkdirSync(dirname(agentsPath), { recursive: true });
     writeFileSync(agentsPath, '# User instructions\nkeep me\n');
     const env = { ...process.env, HOME: home, USERPROFILE: home };
-    const options = { cwd: join(process.cwd(), 'opencode'), env, encoding: 'utf8' };
+    const options = { cwd: join(process.cwd(), 'packages', 'opencode-plugin'), env, encoding: 'utf8' };
 
     execFileSync(process.execPath, ['scripts/postinstall.mjs'], options);
     execFileSync(process.execPath, ['scripts/postinstall.mjs'], options);
@@ -289,7 +290,7 @@ test('Windows CRLF AGENTS lifecycle preserves user bytes across install upgrade 
     mkdirSync(dirname(agentsPath), { recursive: true });
     writeFileSync(agentsPath, userContent);
     const env = { ...process.env, HOME: home, USERPROFILE: home };
-    const options = { cwd: join(process.cwd(), 'opencode'), env, encoding: 'utf8' };
+    const options = { cwd: join(process.cwd(), 'packages', 'opencode-plugin'), env, encoding: 'utf8' };
 
     execFileSync(process.execPath, ['scripts/postinstall.mjs'], options);
     execFileSync(process.execPath, ['scripts/postinstall.mjs'], options);
@@ -313,7 +314,7 @@ test('Windows CRLF AGENTS lifecycle preserves user bytes across install upgrade 
 });
 
 test('OpenCode adapter documents Windows support without a stale unsupported warning', () => {
-  const source = readFileSync(join(process.cwd(), 'install', 'hosts', 'opencode-adapter.js'), 'utf8');
+  const source = readFileSync(join(process.cwd(), 'packages', 'product', 'install', 'hosts', 'opencode-adapter.js'), 'utf8');
   assert.doesNotMatch(source, /Windows 不支持/);
 });
 
@@ -609,7 +610,7 @@ test('npm resource upgrades do not overwrite user modifications made after insta
 });
 
 test('OpenCode package exposes an explicit ownership-aware uninstaller', () => {
-  const pkg = JSON.parse(readFileSync(join(process.cwd(), 'opencode', 'package.json'), 'utf8'));
+  const pkg = JSON.parse(readFileSync(join(process.cwd(), 'packages', 'opencode-plugin', 'package.json'), 'utf8'));
   assert.equal(pkg.scripts.preuninstall, undefined, 'must not claim unsupported npm uninstall hooks');
   assert.equal(pkg.bin['oms-opencode-uninstall'], './bin/oms-opencode-uninstall.mjs');
   assert.ok(pkg.files.includes('bin'));
@@ -691,7 +692,7 @@ test('OpenCode uninstaller removes only OMS plugin entries from opencode.json', 
 });
 
 test('npm package exposes every delegated workflow skill from its canonical bundle', () => {
-  const packageRoot = join(process.cwd(), 'opencode');
+  const packageRoot = join(process.cwd(), 'packages', 'opencode-plugin');
   const pkg = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'));
 
   assert.ok(
@@ -713,7 +714,7 @@ test('npm package exposes every delegated workflow skill from its canonical bund
 
 test('postinstall delegated-skill exports document pinned source and read-only arrays', () => {
   const source = readFileSync(
-    join(process.cwd(), 'opencode', 'scripts', 'postinstall.mjs'),
+    join(process.cwd(), 'packages', 'opencode-plugin', 'scripts', 'postinstall.mjs'),
     'utf8',
   );
   const exportedDocs = {
@@ -740,7 +741,7 @@ test('postinstall installs delegated skills into a clean OpenCode HOME with acti
     delete env.OPENCODE_CONFIG_DIR;
     delete env.XDG_CONFIG_HOME;
     const output = execFileSync('node', ['scripts/postinstall.mjs'], {
-      cwd: join(process.cwd(), 'opencode'),
+      cwd: join(process.cwd(), 'packages', 'opencode-plugin'),
       env,
       encoding: 'utf8',
     });
@@ -776,7 +777,7 @@ test('postinstall installs delegated skills into a clean OpenCode HOME with acti
 test('npm package exposes every supported SDD slash command', () => {
   const expected = ['sdd-spec', 'sdd-plan', 'sdd-task', 'sdd-apply', 'sdd-review', 'sdd-doc'];
   for (const command of expected) {
-    const commandPath = join(process.cwd(), 'opencode', '.opencode', 'commands', `${command}.md`);
+    const commandPath = join(process.cwd(), 'packages', 'opencode-plugin', '.opencode', 'commands', `${command}.md`);
     assert.ok(
       existsSync(commandPath),
       `.opencode/commands/${command}.md should be packaged`,
@@ -792,7 +793,8 @@ test('npm package exposes every supported SDD slash command', () => {
 test('vendored brainstorming lifecycle scripts validate paths and process identity', () => {
   const scripts = join(
     process.cwd(),
-    'opencode',
+    'packages',
+    'opencode-plugin',
     'delegated-skills',
     'brainstorming',
     'scripts',
@@ -820,7 +822,7 @@ test('vendored brainstorming lifecycle scripts validate paths and process identi
 });
 
 test('brainstorm companion requires one session token for HTTP and WebSocket access', () => {
-  const scripts = join(process.cwd(), 'opencode', 'delegated-skills', 'brainstorming', 'scripts');
+  const scripts = join(process.cwd(), 'packages', 'opencode-plugin', 'delegated-skills', 'brainstorming', 'scripts');
   const server = readFileSync(join(scripts, 'server.cjs'), 'utf8');
   const helper = readFileSync(join(scripts, 'helper.js'), 'utf8');
 
@@ -844,7 +846,8 @@ test('brainstorm stop helper refuses an unrelated PID without terminating it', (
   const root = fixture();
   const scripts = join(
     process.cwd(),
-    'opencode',
+    'packages',
+    'opencode-plugin',
     'delegated-skills',
     'brainstorming',
     'scripts',
@@ -882,7 +885,8 @@ test('brainstorm start helper fails fast when a value option is missing its valu
 
   const start = join(
     process.cwd(),
-    'opencode',
+    'packages',
+    'opencode-plugin',
     'delegated-skills',
     'brainstorming',
     'scripts',
@@ -905,7 +909,7 @@ test('brainstorm start helper fails fast when a value option is missing its valu
 
 test('published sdd-plan command resolves namespaced delegates and retains inline fallback', () => {
   const command = readFileSync(
-    join(process.cwd(), 'opencode', '.opencode', 'commands', 'sdd-plan.md'),
+    join(process.cwd(), 'packages', 'opencode-plugin', '.opencode', 'commands', 'sdd-plan.md'),
     'utf8',
   );
 
@@ -924,7 +928,7 @@ test('published sdd-plan command resolves namespaced delegates and retains inlin
 });
 
 test('all published commands retain the generator skill-resolution contract', () => {
-  const commandRoot = join(process.cwd(), 'opencode', '.opencode', 'commands');
+  const commandRoot = join(process.cwd(), 'packages', 'opencode-plugin', '.opencode', 'commands');
   const commands = ['sdd-spec', 'sdd-plan', 'sdd-task', 'sdd-apply', 'sdd-review', 'sdd-doc'];
 
   for (const name of commands) {
@@ -1183,7 +1187,7 @@ test('resource sync waits for an existing destination lock before replacing it',
       token: 'test-owner',
     }));
 
-    const moduleUrl = pathToFileURL(join(process.cwd(), 'opencode', 'scripts', 'copy-resources.mjs')).href;
+    const moduleUrl = pathToFileURL(join(process.cwd(), 'packages', 'opencode-plugin', 'scripts', 'copy-resources.mjs')).href;
     const child = spawn(process.execPath, [
       '--input-type=module',
       '--eval',

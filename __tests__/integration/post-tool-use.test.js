@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const HOOK_PATH = path.resolve(__dirname, '..', '..', 'hooks', 'post-tool-use.js');
+const HOOK_PATH = path.resolve(__dirname, '..', '..', 'packages', 'product', 'hooks', 'post-tool-use.js');
 
 function runHook(stdinPayload, env = {}) {
   return new Promise((resolve) => {

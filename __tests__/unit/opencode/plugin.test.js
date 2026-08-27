@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createPlugin, OhMySddPlugin } from '../../../opencode/dist/index.js';
+import { createPlugin, OhMySddPlugin } from '../../../packages/opencode-plugin/dist/index.js';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

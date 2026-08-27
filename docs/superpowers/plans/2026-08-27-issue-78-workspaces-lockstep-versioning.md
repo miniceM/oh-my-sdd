@@ -17,6 +17,7 @@
 | `package.json` | 私有 workspace 根、跨包脚本、Changesets 开发依赖 |
 | `package-lock.json` | 唯一 npm lockfile，记录两个 workspace 与工具依赖 |
 | `packages/product/` | `@cli-tools/oh-my-sdd`：统一 CLI、规则、技能、内容、安装控制平面和四宿主适配器 |
+| `packages/product/lib/opencode/` | 非公开 OpenCode 共享资源层：所有权、AGENTS 路径与卸载规则的权威实现 |
 | `packages/opencode-plugin/` | `@cli-tools/oh-my-sdd-opencode`：OpenCode 原生插件运行时和产品资源快照 |
 | `.changeset/config.json` | 两个公开包的 `fixed` 版本组 |
 | `scripts/release-check.mjs` | 版本、插件清单、workspace 和 OpenCode 快照的只读一致性门禁 |
@@ -237,6 +238,9 @@ git commit -m "refactor: move cross-agent product into workspace" -m "Refs #78"
 - 修改：`packages/opencode-plugin/scripts/copy-resources.mjs`
 - 修改：`packages/opencode-plugin/scripts/postinstall.mjs`
 - 修改：`packages/product/install/hosts/opencode-adapter.js`
+- 创建：`packages/product/lib/opencode/ownership.js`
+- 创建：`packages/product/lib/opencode/agents.js`
+- 创建：`packages/product/lib/opencode/uninstall.js`
 - 修改：`__tests__/unit/opencode/resource-scripts.test.js`
 - 修改：`__tests__/integration/opencode/clean-pack.test.js`
 - 修改：`__tests__/integration/opencode/concurrent-pack.test.js`
@@ -260,7 +264,23 @@ test('sync copies canonical product resources into every OpenCode delivery layou
 
 预期：FAIL，旧同步脚本把 `opencode/` 的父目录误认为产品根。
 
-- [ ] **步骤 3：移动插件并修正同步根路径**
+- [ ] **步骤 3：先提取产品内 OpenCode 共享资源层**
+
+将产品适配器当前直接导入的 OpenCode `resource-ownership.mjs`、`agents-md.mjs` 与
+`uninstall.mjs` 中的可复用资源所有权、AGENTS 路径、资源清理逻辑提取为：
+
+```text
+packages/product/lib/opencode/ownership.js
+packages/product/lib/opencode/agents.js
+packages/product/lib/opencode/uninstall.js
+```
+
+产品 `install/hosts/opencode-adapter.js` 只能导入这些产品内模块。插件 lifecycle 脚本
+导入本地 `lib/opencode/` 副本；该副本由后续同步生成，不能从产品包或仓库使用跨包相对
+路径。为每个导出函数先写单元测试，覆盖所有权清单读取、用户修改资源保护、AGENTS
+路径和卸载边界。
+
+- [ ] **步骤 4：移动插件并修正同步根路径**
 
 运行：`git mv opencode packages/opencode-plugin`
 
@@ -279,7 +299,7 @@ const SYNC_MAP = [
 继续调用 OpenCode 自身 bootstrap 和 ownership 逻辑。它们不得从已安装用户目录回读
 产品包，也不得把资源同步失败降级为成功。
 
-- [ ] **步骤 4：修正产品的 OpenCode 安装适配器**
+- [ ] **步骤 5：修正产品的 OpenCode 安装适配器**
 
 产品适配器仍以 `@cli-tools/oh-my-sdd-opencode` 注册 npm 插件，但不再查找
 `product/opencode/dist` 或调用旧 `build:opencode`。开发期构建改为根工作区命令：
@@ -292,7 +312,7 @@ execFileSync(npmCmd, args, { cwd: REPO_ROOT, stdio: 'inherit', shell: process.pl
 只在开发安装流程确实需要未编译插件时执行这条路径；已发布产品安装必须注册已发布的
 OpenCode npm 插件，不在用户机器编译 TypeScript。
 
-- [ ] **步骤 5：运行 OpenCode 单元与打包回归测试验证通过**
+- [ ] **步骤 6：运行 OpenCode 单元与打包回归测试验证通过**
 
 运行：
 
@@ -305,7 +325,7 @@ node --test __tests__/unit/opencode __tests__/integration/opencode/clean-pack.te
 
 预期：PASS；并发 `npm pack` 无残留 staging/lock 目录，资源不漂移。
 
-- [ ] **步骤 6：提交 OpenCode 桥接迁移**
+- [ ] **步骤 7：提交 OpenCode 桥接迁移**
 
 ```bash
 git add packages/opencode-plugin packages/product/install/hosts/opencode-adapter.js __tests__

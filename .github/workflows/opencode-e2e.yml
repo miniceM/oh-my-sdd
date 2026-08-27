@@ -34,12 +34,11 @@ jobs:
         shell: pwsh
         run: Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $env:GITHUB_WORKSPACE 'scripts')
       - run: npm ci --ignore-scripts
-      - run: npm ci --prefix opencode --ignore-scripts
-      - run: npm run --prefix opencode build
+      - run: npm run build --workspace=@cli-tools/oh-my-sdd-opencode
       - name: Sync OpenCode resources twice
         run: |
-          npm run sync:resources --prefix opencode
-          npm run sync:resources --prefix opencode
+          npm run sync:opencode
+          npm run sync:opencode
       - run: node --test __tests__/unit/opencode/resource-scripts.test.js
       - run: npm run test:e2e:opencode
       - name: Upload OpenCode E2E artifacts

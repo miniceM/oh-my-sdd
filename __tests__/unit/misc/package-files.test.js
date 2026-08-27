@@ -6,25 +6,24 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PACKAGE_ROOT = path.resolve(__dirname, '..', '..', '..');
+const REPOSITORY_ROOT = path.resolve(__dirname, '..', '..', '..');
+const PRODUCT_ROOT = path.join(REPOSITORY_ROOT, 'packages', 'product');
+const OPENCODE_PLUGIN_ROOT = path.join(REPOSITORY_ROOT, 'packages', 'opencode-plugin');
 
-test('package.json files whitelist includes content/ and install-time opencode scripts', () => {
-  const pkg = JSON.parse(readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'));
+test('public packages include their owned runtime resources', () => {
+  const pkg = JSON.parse(readFileSync(path.join(PRODUCT_ROOT, 'package.json'), 'utf8'));
   assert.ok(Array.isArray(pkg.files), 'package.json must have a "files" array');
   assert.ok(pkg.files.includes('content/'), 'files must include "content/"');
-  // install.js 经 install/hosts/opencode-adapter.js 加载 uninstall.mjs，
-  // 后者 import agents-md.mjs / resource-ownership.mjs——缺任何一个都会让
-  // postinstall 在模块解析阶段崩溃（ERR_MODULE_NOT_FOUND）
-  for (const script of ['agents-md.mjs', 'uninstall.mjs', 'resource-ownership.mjs']) {
-    assert.ok(pkg.files.includes(`opencode/scripts/${script}`),
-      `files must include "opencode/scripts/${script}"`);
-  }
+  assert.ok(pkg.files.includes('lib/'), 'product files must include its shared runtime library');
+  const plugin = JSON.parse(readFileSync(path.join(OPENCODE_PLUGIN_ROOT, 'package.json'), 'utf8'));
+  assert.ok(plugin.files.includes('scripts'), 'OpenCode bridge must include lifecycle wrappers');
+  assert.ok(plugin.files.includes('lib'), 'OpenCode bridge must include synchronized shared resources');
 });
 
-test('npm pack --dry-run output includes content/ and install-time opencode scripts', () => {
+test('npm pack --dry-run outputs both public package resource sets', () => {
   // npm pack writes the file listing to stderr, not stdout
   const result = spawnSync('npm', ['pack', '--dry-run'], {
-    cwd: PACKAGE_ROOT,
+    cwd: PRODUCT_ROOT,
     encoding: 'utf8',
     shell: process.platform === 'win32', // Windows needs shell for PATH resolution
   });
@@ -34,8 +33,13 @@ test('npm pack --dry-run output includes content/ and install-time opencode scri
     `npm pack exited ${result.status}; stderr: ${(result.stderr || '').slice(0, 500)}`);
   const output = ((result.stdout || '') + (result.stderr || '')).replaceAll('\\', '/');
   assert.match(output, /content\/lingma-baseline\.md/);
-  for (const script of ['agents-md', 'uninstall', 'resource-ownership']) {
-    assert.match(output, new RegExp(`opencode/scripts/${script}\\.mjs`),
-      `packed tarball must include opencode/scripts/${script}.mjs`);
-  }
+  const pluginResult = spawnSync('npm', ['pack', '--dry-run'], {
+    cwd: OPENCODE_PLUGIN_ROOT,
+    encoding: 'utf8',
+    shell: process.platform === 'win32',
+  });
+  assert.equal(pluginResult.status, 0, `OpenCode pack failed: ${(pluginResult.stderr || '').slice(0, 500)}`);
+  const pluginOutput = ((pluginResult.stdout || '') + (pluginResult.stderr || '')).replaceAll('\\', '/');
+  assert.match(pluginOutput, /scripts\/uninstall\.mjs/);
+  assert.match(pluginOutput, /lib\/opencode\/uninstall\.js/);
 });

@@ -5,7 +5,7 @@ import {
   buildHealthFinding,
   status,
   doctor,
-} from "../../../../install/control-plane/health.js";
+} from "../../../../packages/product/install/control-plane/health.js";
 
 test("LEVELS contains five defined protection levels", () => {
   assert.deepEqual(LEVELS, ["written", "registered", "loaded", "enforced", "advisory"]);
@@ -69,10 +69,10 @@ test("doctor reports findings with evidence, code, and repairable flag", async (
   assert.equal(missingFinding.repairable, true);
 });
 
-import { ClaudeAdapter } from "../../../../install/hosts/claude-adapter.js";
-import { OpenCodeAdapter } from "../../../../install/hosts/opencode-adapter.js";
-import { LingmaAdapter } from "../../../../install/hosts/lingma-adapter.js";
-import { KiloCodeAdapter } from "../../../../install/hosts/kilocode-adapter.js";
+import { ClaudeAdapter } from "../../../../packages/product/install/hosts/claude-adapter.js";
+import { OpenCodeAdapter } from "../../../../packages/product/install/hosts/opencode-adapter.js";
+import { LingmaAdapter } from "../../../../packages/product/install/hosts/lingma-adapter.js";
+import { KiloCodeAdapter } from "../../../../packages/product/install/hosts/kilocode-adapter.js";
 
 test("status produces status report for all four adapters", async () => {
   const result = await status({

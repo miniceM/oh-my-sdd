@@ -19,7 +19,7 @@ import {
   isDopCompletionPending,
   RINGS,
   RING_ORDINAL,
-} from '../../../lib/sdd-context.js';
+} from '../../../packages/product/lib/sdd-context.js';
 
 // ============================================
 // DOP completion intent

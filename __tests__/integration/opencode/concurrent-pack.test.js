@@ -31,13 +31,13 @@ const PRIMARY_DELEGATES = [
 ];
 function createRepositoryFixture(root) {
   const repository = join(root, 'repository');
-  for (const name of ['skills', 'content', 'hooks', 'lib', 'opencode']) {
-    cpSync(join(SOURCE_ROOT, name), join(repository, name), {
+  for (const name of ['product', 'opencode-plugin']) {
+    cpSync(join(SOURCE_ROOT, 'packages', name), join(repository, 'packages', name), {
       recursive: true,
       filter: (source) => !['node_modules', '.git', '.worktrees'].includes(source.split(/[\\/]/).at(-1)),
     });
   }
-  const opencodeDir = join(repository, 'opencode');
+  const opencodeDir = join(repository, 'packages', 'opencode-plugin');
   // Drop every pre-copied mirror so the pack's prepack sync is the only way
   // these destinations can exist; the later assertions then prove the
   // concurrent syncs materialized complete trees.
@@ -100,10 +100,10 @@ function run(executable, args, options = {}) {
 test('concurrent package syncs are serialized and leave the worktree unchanged', async () => {
   const root = mkdtempSync(join(tmpdir(), 'oms-concurrent-pack-'));
   try {
-    const sourceMirror = join(SOURCE_ROOT, 'opencode', 'oms-skills');
+    const sourceMirror = join(SOURCE_ROOT, 'packages', 'opencode-plugin', 'oms-skills');
     const sourceDigestBefore = directoryDigest(sourceMirror);
     const repository = createRepositoryFixture(root);
-    const opencodeDir = join(repository, 'opencode');
+    const opencodeDir = join(repository, 'packages', 'opencode-plugin');
     const npmCli = resolveNpmCli();
 
     const runs = [0, 1].map((index) => {
@@ -142,7 +142,7 @@ test('concurrent package syncs are serialized and leave the worktree unchanged',
     // Directly verify every sync destination tree equals its source: the fixture
     // packs run the real prepack synchronizer concurrently, so the final state
     // must be complete and correct rather than half-synced.
-    const skillsSource = join(repository, 'skills');
+    const skillsSource = join(repository, 'packages', 'product', 'skills');
     const skillsDigest = directoryDigest(skillsSource);
     for (const target of [
       join(opencodeDir, 'skills'),
@@ -154,17 +154,17 @@ test('concurrent package syncs are serialized and leave the worktree unchanged',
     }
     assert.equal(
       directoryDigest(join(opencodeDir, 'content')),
-      directoryDigest(join(repository, 'content')),
+      directoryDigest(join(repository, 'packages', 'product', 'content')),
       'content sync destination must mirror its source',
     );
     assert.equal(
       directoryDigest(join(opencodeDir, 'hooks')),
-      directoryDigest(join(repository, 'hooks')),
+      directoryDigest(join(repository, 'packages', 'product', 'hooks')),
       'hooks sync destination must mirror its source',
     );
     assert.equal(
       directoryDigest(join(opencodeDir, 'lib')),
-      directoryDigest(join(repository, 'lib')),
+      directoryDigest(join(repository, 'packages', 'product', 'lib')),
       'lib sync destination must mirror its source',
     );
     assert.equal(

@@ -10,7 +10,7 @@ import {
   getStateDir,
   getLogFile,
   sanitizeSessionId,
-} from '../../../opencode/dist/paths.js';
+} from '../../../packages/opencode-plugin/dist/paths.js';
 
 test('paths: getPluginRoot reads OMS_PLUGIN_ROOT env', () => {
   process.env.OMS_PLUGIN_ROOT = '/custom/root';
@@ -21,14 +21,14 @@ test('paths: getPluginRoot reads OMS_PLUGIN_ROOT env', () => {
   }
 });
 
-test('paths: getPluginRoot falls back to opencode/ plugin dir when env unset', () => {
+test('paths: getPluginRoot falls back to the workspace OpenCode bridge directory when env unset', () => {
   delete process.env.OMS_PLUGIN_ROOT;
   const root = getPluginRoot();
   // 安装后布局：~/.config/opencode/plugins/oh-my-sdd/
-  // 源码布局：opencode/dist/paths.js → plugin root = opencode/ (the dir containing dist/)
+  // 源码布局：packages/opencode-plugin/dist/paths.js → plugin root = packages/opencode-plugin/
   assert.ok(
-    root.endsWith('opencode') || root.endsWith('oh-my-sdd'),
-    `Expected endsWith 'opencode' or 'oh-my-sdd', got ${root}`
+    root.endsWith('opencode-plugin') || root.endsWith('oh-my-sdd'),
+    `Expected endsWith 'opencode-plugin' or 'oh-my-sdd', got ${root}`
   );
 });
 

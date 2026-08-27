@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-import { main as uninstall } from '../../install/uninstall.js';
+import { main as uninstall } from '../../packages/product/install/uninstall.js';
 
 const worktreeRoot = process.cwd();
 
@@ -20,7 +20,7 @@ test('--tool opencode --purge uninstalls the host and removes shared state', () 
   fs.writeFileSync(path.join(stateDir, 'marker'), 'state');
 
   try {
-    execFileSync('node', ['bin/oms-uninstall.js', '--tool', 'opencode', '--purge'], {
+    execFileSync('node', ['packages/product/bin/oms-uninstall.js', '--tool', 'opencode', '--purge'], {
       cwd: worktreeRoot,
       env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome },
       stdio: 'pipe',
@@ -58,7 +58,7 @@ test('targeted Claude uninstall is dispatched through the host registry', async 
 
   assert.deepEqual(calls, [
     ['getAdapter', 'claude'],
-    ['uninstall', 'function', worktreeRoot],
+    ['uninstall', 'function', path.join(worktreeRoot, 'packages', 'product')],
   ]);
 });
 
@@ -96,7 +96,7 @@ test('--tool claude uses the adapter for plugin, marketplace, legacy and wrapper
 
   const pathValue = `${fakeCliDir}${path.delimiter}${process.env.PATH ?? ''}`;
   try {
-    execFileSync('node', ['bin/oms-uninstall.js', '--tool', 'claude'], {
+    execFileSync('node', ['packages/product/bin/oms-uninstall.js', '--tool', 'claude'], {
       cwd: worktreeRoot,
       env: {
         ...process.env,

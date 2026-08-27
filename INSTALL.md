@@ -446,6 +446,6 @@ oms-opencode-uninstall
 ## 相关文档
 
 - [项目 README](README.md)
-- [OpenCode 子包说明](opencode/README.md)
+- [OpenCode 原生桥接说明](packages/opencode-plugin/README.md)
 - [企业 baseline](content/enterprise-baseline.md)
 - [贡献指南](CONTRIBUTING.md)

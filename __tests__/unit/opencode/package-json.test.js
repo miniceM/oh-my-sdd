@@ -11,7 +11,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const OPENCODE_DIR = resolve(__dirname, '../../../opencode');
+const OPENCODE_DIR = resolve(__dirname, '../../../packages/opencode-plugin');
 const PACKAGE_JSON_PATH = resolve(OPENCODE_DIR, 'package.json');
 
 test('opencode/package.json exists', () => {

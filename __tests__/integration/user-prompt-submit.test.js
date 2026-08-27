@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const HOOK_PATH = path.resolve(__dirname, '..', '..', 'hooks', 'user-prompt-submit.js');
+const HOOK_PATH = path.resolve(__dirname, '..', '..', 'packages', 'product', 'hooks', 'user-prompt-submit.js');
 
 function runHook(stdinPayload, env = {}) {
   return new Promise((resolve) => {

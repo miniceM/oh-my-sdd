@@ -59,7 +59,7 @@ function withInstalledResources(run) {
     const packResult = runNpmWithOutput([
       'pack', '--ignore-scripts', '--json', '--pack-destination', pack,
     ], {
-      cwd: path.join(worktreeRoot, 'opencode'),
+      cwd: path.join(worktreeRoot, 'packages', 'opencode-plugin'),
       env,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],

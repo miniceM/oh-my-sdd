@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildInstallationPlan } from '../../../../install/control-plane/plan.js';
+import { buildInstallationPlan } from '../../../../packages/product/install/control-plane/plan.js';
 
 class KiloStyleAdapter {
   static id = 'kilocode';

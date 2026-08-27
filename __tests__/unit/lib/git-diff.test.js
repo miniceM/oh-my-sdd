@@ -20,7 +20,7 @@ test('computeCodeDelta returns zeros for empty diff', async (t) => {
   execSync('git add . && git commit -m init', { cwd: dir, stdio: 'ignore' });
   const head = execSync('git rev-parse HEAD', { cwd: dir }).toString().trim();
 
-  const { computeCodeDelta } = await import('../../../lib/git-diff.js');
+  const { computeCodeDelta } = await import('../../../packages/product/lib/git-diff.js');
   const delta = await computeCodeDelta(head, 'HEAD', dir);
   assert.equal(delta.files_changed, 0);
   assert.equal(delta.lines_added, 0);
@@ -38,7 +38,7 @@ test('computeCodeDelta aggregates added lines by language', async (t) => {
   writeFileSync(path.join(dir, 'b.md'), '# Title\n');
   execSync('git add .', { cwd: dir, stdio: 'ignore' });
 
-  const { computeCodeDelta } = await import('../../../lib/git-diff.js');
+  const { computeCodeDelta } = await import('../../../packages/product/lib/git-diff.js');
   const delta = await computeCodeDelta(head, 'HEAD', dir);
   assert.equal(delta.files_changed, 2);
   assert.equal(delta.by_lang.ts, 1);
@@ -58,7 +58,7 @@ test('computeCodeDelta handles binary files gracefully', async (t) => {
   writeFileSync(path.join(dir, 'img.bin'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]));
   execSync('git add .', { cwd: dir, stdio: 'ignore' });
 
-  const { computeCodeDelta } = await import('../../../lib/git-diff.js');
+  const { computeCodeDelta } = await import('../../../packages/product/lib/git-diff.js');
   const delta = await computeCodeDelta(head, 'HEAD', dir);
   assert.equal(delta.files_changed, 1);
   assert.equal(delta.lines_added, 0); // binary files report -
@@ -67,7 +67,7 @@ test('computeCodeDelta handles binary files gracefully', async (t) => {
 test('getCurrentHead returns null outside git repo', async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), 'oms-nogit-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const { getCurrentHead } = await import('../../../lib/git-diff.js');
+  const { getCurrentHead } = await import('../../../packages/product/lib/git-diff.js');
   const head = await getCurrentHead(dir);
   assert.equal(head, null);
 });

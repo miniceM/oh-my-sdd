@@ -6,8 +6,8 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { listTools, getAdapter } from '../../../../install/host-registry.js';
-import { HostAdapter } from '../../../../install/host-adapter.js';
+import { listTools, getAdapter } from '../../../../packages/product/install/host-registry.js';
+import { HostAdapter } from '../../../../packages/product/install/host-adapter.js';
 
 describe('HostAdapter interface consistency', () => {
   const toolIds = listTools();

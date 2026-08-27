@@ -21,8 +21,8 @@ const SOURCE_ROOT = process.cwd();
 
 function copyRepositoryFixture(root) {
   const repository = join(root, 'repository');
-  for (const name of ['skills', 'content', 'hooks', 'lib', 'opencode']) {
-    cpSync(join(SOURCE_ROOT, name), join(repository, name), {
+  for (const name of ['product', 'opencode-plugin']) {
+    cpSync(join(SOURCE_ROOT, 'packages', name), join(repository, 'packages', name), {
       recursive: true,
       filter: (source) => !['node_modules', '.git', '.worktrees'].includes(source.split(/[\\/]/).at(-1)),
     });
@@ -50,7 +50,7 @@ test('clean OpenCode source can pack and install without opencode node_modules',
 
   try {
     const repository = copyRepositoryFixture(root);
-    const opencodeDir = join(repository, 'opencode');
+    const opencodeDir = join(repository, 'packages', 'opencode-plugin');
     const opencodeNodeModules = join(opencodeDir, 'node_modules');
     assert.equal(existsSync(opencodeNodeModules), false, 'fixture must not contain opencode/node_modules');
 

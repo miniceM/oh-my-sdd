@@ -4,7 +4,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { isCliInPath, isDirPresent } from '../../../../install/common/detect.js';
+import { isCliInPath, isDirPresent } from '../../../../packages/product/install/common/detect.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';

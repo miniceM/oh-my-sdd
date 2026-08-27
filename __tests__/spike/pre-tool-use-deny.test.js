@@ -18,7 +18,7 @@ import { runHook } from '../helpers/spawn-hook.js';
  */
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const HOOK_PATH = path.resolve(__dirname, '..', '..', 'hooks', 'pre-tool-use.js');
+const HOOK_PATH = path.resolve(__dirname, '..', '..', 'packages', 'product', 'hooks', 'pre-tool-use.js');
 
 const FIXTURES = {
   awsAk: { filePath: 'leak.js', content: 'const AWS_KEY = "AKIAIOSFODNN7EXAMPLE";\n' },

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
-const COMMIT_MSG_CHECK = path.join(PROJECT_ROOT, 'hooks', 'git', 'commit-msg-check.js');
+const COMMIT_MSG_CHECK = path.join(PROJECT_ROOT, 'packages', 'product', 'hooks', 'git', 'commit-msg-check.js');
 
 // 调用 commit-msg-check.js 并传入临时消息文件路径作为 $1
 function runCommitMsg(message, env = {}) {

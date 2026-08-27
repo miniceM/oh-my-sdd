@@ -4,8 +4,8 @@ import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { bootstrapOpenCodeResources } from '../../../opencode/scripts/resource-bootstrap.mjs';
-import { readOwnershipManifest, uninstallOwnedResources } from '../../../opencode/scripts/resource-ownership.mjs';
+import { bootstrapOpenCodeResources } from '../../../packages/opencode-plugin/scripts/resource-bootstrap.mjs';
+import { readOwnershipManifest, uninstallOwnedResources } from '../../../packages/opencode-plugin/scripts/resource-ownership.mjs';
 
 const FIXED_NOW = Date.parse('2026-08-25T12:00:00.000Z');
 

@@ -8,9 +8,9 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 
-import { loadBaseline, getBodyForInjection } from '../../lib/constitution.js';
+import { loadBaseline, getBodyForInjection } from '../../packages/product/lib/constitution.js';
 
-const BASELINE_PATH = path.join(PROJECT_ROOT, 'content', 'enterprise-baseline.md');
+const BASELINE_PATH = path.join(PROJECT_ROOT, 'packages', 'product', 'content', 'enterprise-baseline.md');
 
 // ---------- baseline schema integrity ----------
 
@@ -84,7 +84,7 @@ test('getBodyForInjection strips frontmatter + Sync Report', () => {
 // ---------- lint script integration ----------
 
 test('check-baseline-tokens.mjs exits 0', () => {
-  const lintPath = path.join(PROJECT_ROOT, 'scripts', 'check-baseline-tokens.mjs');
+  const lintPath = path.join(PROJECT_ROOT, 'packages', 'product', 'scripts', 'check-baseline-tokens.mjs');
   const result = execFileSync('node', [lintPath], { encoding: 'utf8', env: { ...process.env } });
   assert.match(result, /baseline schema ok/);
   // Token under budget
@@ -97,7 +97,7 @@ test('check-baseline-tokens.mjs exits 0', () => {
 // ---------- sdd-constitution skill exists ----------
 
 test('sdd-constitution SKILL.md exists and references enterprise-baseline.md', () => {
-  const skillPath = path.join(PROJECT_ROOT, 'skills', 'sdd-constitution', 'SKILL.md');
+  const skillPath = path.join(PROJECT_ROOT, 'packages', 'product', 'skills', 'sdd-constitution', 'SKILL.md');
   const skill = readFileSync(skillPath, 'utf8');
   assert.match(skill, /enterprise-baseline\.md/, 'skill must reference baseline file');
   assert.match(skill, /Sync Impact Report/, 'skill must mention Sync Impact Report');

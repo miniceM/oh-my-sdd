@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import {
   resourceDigest,
   writeOwnershipManifest,
-} from '../../../opencode/scripts/resource-ownership.mjs';
+} from '../../../packages/opencode-plugin/scripts/resource-ownership.mjs';
 import {
   firstNpmPackEntry,
   parseNpmPackJson,
@@ -63,7 +63,7 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
 
   try {
     // Step 1: install (use CLI wrapper which parses --tool)
-  execFileSync('node', ['bin/oms-install.js', '--tool', 'opencode', '-y'], {
+  execFileSync('node', ['packages/product/bin/oms-install.js', '--tool', 'opencode', '-y'], {
     cwd: worktreeRoot,
     env,
     stdio: 'pipe',
@@ -119,7 +119,7 @@ test('install + uninstall: oms-install/uninstall --tool opencode round-trip', ()
   ].join('\n'));
 
   // Step 2: uninstall
-  execFileSync('node', ['bin/oms-uninstall.js', '--tool', 'opencode'], {
+  execFileSync('node', ['packages/product/bin/oms-uninstall.js', '--tool', 'opencode'], {
     cwd: worktreeRoot,
     env,
     stdio: 'pipe',
@@ -154,7 +154,7 @@ test('text install result closes the OpenCode pending loop in an isolated HOME',
   const env = fakeOpenCode.env;
 
   try {
-    const result = spawnSync('node', ['bin/oms-install.js', '--tool', 'opencode', '--yes'], {
+    const result = spawnSync('node', ['packages/product/bin/oms-install.js', '--tool', 'opencode', '--yes'], {
       cwd: worktreeRoot,
       env,
       encoding: 'utf8',
@@ -203,7 +203,7 @@ test('native install activates the packed plugin lifecycle and doctor verifies e
 
   try {
     const packResult = runNpmWithOutput(['pack', '--json', '--pack-destination', packDir], {
-      cwd: path.join(worktreeRoot, 'opencode'), env,
+      cwd: path.join(worktreeRoot, 'packages', 'opencode-plugin'), env,
     });
     const packEntry = firstNpmPackEntry(parseNpmPackJson(packResult.stdout, packResult.stderr), packResult);
     const tarballFiles = new Set(packEntry.files.map((file) => file.path));
@@ -214,7 +214,7 @@ test('native install activates the packed plugin lifecycle and doctor verifies e
       assert.ok(tarballFiles.has(requiredFile), `packed plugin must include ${requiredFile}`);
     }
 
-    execFileSync('node', ['bin/oms-install.js', '--tool', 'opencode', '--yes'], {
+    execFileSync('node', ['packages/product/bin/oms-install.js', '--tool', 'opencode', '--yes'], {
       cwd: worktreeRoot, env, stdio: 'pipe',
     });
     assert.deepEqual(readFakeOpenCodeInvocations(fakeOpenCode.invocationLog), [
@@ -253,7 +253,7 @@ test('native install activates the packed plugin lifecycle and doctor verifies e
     assert.equal(activation.state, 'verified');
     assert.ok(activation.registered_hooks.includes('tool.execute.before'));
 
-    const doctor = JSON.parse(execFileSync('node', ['bin/oms.js', 'doctor', '--tool', 'opencode', '--json'], {
+    const doctor = JSON.parse(execFileSync('node', ['packages/product/bin/oms.js', 'doctor', '--tool', 'opencode', '--json'], {
       cwd: worktreeRoot, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
     }));
     const host = doctor.hosts.find((entry) => entry.id === 'opencode');
@@ -276,7 +276,7 @@ test('packed OpenCode package installs from a clean tarball and its wrapper full
       '--pack-destination',
       packDir,
     ], {
-      cwd: path.join(worktreeRoot, 'opencode'),
+      cwd: path.join(worktreeRoot, 'packages', 'opencode-plugin'),
       env,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],

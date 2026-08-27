@@ -316,7 +316,7 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
     const packResult = execNpmWithOutput([
       'pack', '--json', '--pack-destination', sandbox.packDir,
     ], {
-      cwd: join(process.cwd(), 'opencode'), env: sandbox.env, encoding: 'utf8',
+      cwd: join(process.cwd(), 'packages', 'opencode-plugin'), env: sandbox.env, encoding: 'utf8',
     });
     const packed = parseNpmPackJson(packResult.stdout, packResult.stderr);
     const packEntry = firstNpmPackEntry(packed, packResult);

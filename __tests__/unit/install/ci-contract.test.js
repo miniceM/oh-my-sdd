@@ -15,17 +15,17 @@ test('CI runs the Node 18/20/22 matrix and enforces coverage in a stable dedicat
   assert.match(coverageJob, /npm run test:coverage/);
 });
 
-test('CI builds OpenCode explicitly after installing its locked dependencies', () => {
+test('CI builds the OpenCode bridge from the root workspace lockfile', () => {
   const testJob = workflow.slice(workflow.indexOf('  test:'), workflow.indexOf('  coverage:'));
   const coverageJob = workflow.slice(workflow.indexOf('  coverage:'), workflow.indexOf('  smoke-check:'));
   for (const [jobName, job, testCommand] of [
     ['test', testJob, 'npm test'],
     ['coverage', coverageJob, 'npm run test:coverage'],
   ]) {
-    const installIndex = job.indexOf('npm ci --prefix opencode --ignore-scripts');
-    const buildIndex = job.indexOf('npm run --prefix opencode build');
+    const installIndex = job.indexOf('npm ci --ignore-scripts');
+    const buildIndex = job.indexOf('npm run build --workspace=@cli-tools/oh-my-sdd-opencode');
     const testIndex = job.indexOf(testCommand);
-    assert.ok(installIndex >= 0, `${jobName} must install OpenCode from its lockfile`);
+    assert.ok(installIndex >= 0, `${jobName} must install the shared workspace lockfile`);
     assert.ok(buildIndex > installIndex, `${jobName} must build after installing OpenCode dependencies`);
     assert.ok(testIndex > buildIndex, `${jobName} must test after the explicit OpenCode build`);
   }
@@ -36,7 +36,7 @@ test('smoke-check runs for pull requests with an isolated HOME and the current u
 
   assert.doesNotMatch(smoke, /github\.ref == 'refs\/heads\/main'/);
   assert.match(smoke, /TESTHOME=\$\(mktemp -d\)/);
-  assert.match(smoke, /HOME=\$TESTHOME USERPROFILE=\$TESTHOME node install\/uninstall\.js/);
+  assert.match(smoke, /HOME=\$TESTHOME USERPROFILE=\$TESTHOME node packages\/product\/install\/uninstall\.js/);
   assert.doesNotMatch(smoke, /node uninstall\.js/);
 });
 

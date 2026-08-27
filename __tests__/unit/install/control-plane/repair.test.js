@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   buildRepairPlan,
   applyRepair,
-} from "../../../../install/control-plane/repair.js";
+} from "../../../../packages/product/install/control-plane/repair.js";
 
 test("repair dry run lists only doctor-confirmed OMS-owned repairable findings", () => {
   const doctorReport = {

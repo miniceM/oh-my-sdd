@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { renderJson, renderText, renderResultJson, renderResultText } from "../../../../install/control-plane/render.js";
+import { renderJson, renderText, renderResultJson, renderResultText } from "../../../../packages/product/install/control-plane/render.js";
 
 const plan = {
   schema_version: 1,

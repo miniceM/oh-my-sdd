@@ -12,7 +12,7 @@ import {
   login,
   pickAnyLoggedUsername,
   runIam,
-} from '../../../lib/iam-cli.js';
+} from '../../../packages/product/lib/iam-cli.js';
 
 function makeFakeChild(pid = 321) {
   const child = new EventEmitter();

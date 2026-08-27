@@ -4,13 +4,13 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildNpmRootInvocation, inspectOpenCodeActivation, OpenCodeAdapter } from '../../../../install/hosts/opencode-adapter.js';
-import { HostAdapter } from '../../../../install/host-adapter.js';
-import { doctor } from '../../../../install/control-plane/health.js';
-import { SDD_COMMANDS } from '../../../../lib/command-generator.js';
+import { buildNpmRootInvocation, inspectOpenCodeActivation, OpenCodeAdapter } from '../../../../packages/product/install/hosts/opencode-adapter.js';
+import { HostAdapter } from '../../../../packages/product/install/host-adapter.js';
+import { doctor } from '../../../../packages/product/install/control-plane/health.js';
+import { SDD_COMMANDS } from '../../../../packages/product/lib/command-generator.js';
 import { createOpenCodeTestSandbox, prepareDoctorInstalledPackage } from '../../../helpers/opencode-test-env.js';
 
-const PLUGIN_ROOT = fileURLToPath(new URL('../../../../opencode/', import.meta.url));
+const PLUGIN_ROOT = fileURLToPath(new URL('../../../../packages/opencode-plugin/', import.meta.url));
 const FIXED_NOW = Date.parse('2026-08-25T12:00:00.000Z');
 const FIXTURE_RESOURCE_DIGEST = 'fixture-resource-digest';
 
@@ -110,7 +110,7 @@ describe('OpenCodeAdapter', () => {
       writeFileSync(join(sandbox.home, '.oh-my-sdd', 'opencode-activation.json'), JSON.stringify(
         activation({ resource_digest: 'stale-resource-digest' }),
       ));
-      const adapterUrl = new URL('../../../../install/hosts/opencode-adapter.js', import.meta.url).href;
+      const adapterUrl = new URL('../../../../packages/product/install/hosts/opencode-adapter.js', import.meta.url).href;
       const inspect = () => spawnSync(process.execPath, ['--input-type=module', '--eval',
         `const { inspectOpenCodeActivation } = await import(${JSON.stringify(adapterUrl)}); process.stdout.write(JSON.stringify(inspectOpenCodeActivation({ now: () => ${FIXED_NOW}, execFileSync: () => process.env.OMS_TEST_NPM_ROOT })));`,
       ], { env: fixture.env, encoding: 'utf8' });

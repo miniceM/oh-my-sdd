@@ -130,7 +130,7 @@ test('Sentinel metadata round-trips correctly', () => {
 // Skills 复制测试（轻量集成：临时目录构造 fake skills）
 // ============================================
 test('copySkillsToDir preserves skill name as directory', async () => {
-  const { copySkillsToDir } = await import('../../../install/common/fs.js');
+  const { copySkillsToDir } = await import('../../../packages/product/install/common/fs.js');
 
   // 构造 fake skills 源
   const srcRoot = mkdtempSync(join(tmpdir(), 'oms-skills-src-'));

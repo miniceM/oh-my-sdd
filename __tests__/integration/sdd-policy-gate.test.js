@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { runHook } from '../helpers/spawn-hook.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const HOOK_PATH = path.resolve(__dirname, '..', '..', 'hooks', 'pre-tool-use.js');
+const HOOK_PATH = path.resolve(__dirname, '..', '..', 'packages', 'product', 'hooks', 'pre-tool-use.js');
 
 async function makeSddProject(ring = 'apply') {
   const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'sdd-gate-'));

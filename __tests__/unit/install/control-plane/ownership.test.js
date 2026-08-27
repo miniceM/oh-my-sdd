@@ -5,7 +5,7 @@ import {
   recordOwnedResource,
   isResourceDrifted,
   rollbackOwnedResource,
-} from "../../../../install/control-plane/ownership.js";
+} from "../../../../packages/product/install/control-plane/ownership.js";
 
 test("computeDigest returns sha256 hex string", () => {
   const hash = computeDigest("hello world");

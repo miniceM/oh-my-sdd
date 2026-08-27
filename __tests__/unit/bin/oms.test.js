@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const CLI = path.join(ROOT, "bin", "oms.js");
+const CLI = path.join(ROOT, "packages", "product", "bin", "oms.js");
 
 function runOms(args = [], { env, entryScript = CLI } = {}) {
   return new Promise((resolve, reject) => {

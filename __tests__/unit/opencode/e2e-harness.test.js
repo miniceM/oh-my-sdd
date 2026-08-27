@@ -69,7 +69,7 @@ test('fake OpenCode CLI records the native installation command and updates sand
 });
 
 test('OpenCode E2E harness publishes the six supported commands and excludes constitution', () => {
-  const commands = publishedCommands(join(process.cwd(), 'opencode'));
+  const commands = publishedCommands(join(process.cwd(), 'packages', 'opencode-plugin'));
   assert.deepEqual(commands, [
     'sdd-apply', 'sdd-doc', 'sdd-plan', 'sdd-review', 'sdd-spec', 'sdd-task',
   ]);
@@ -77,7 +77,7 @@ test('OpenCode E2E harness publishes the six supported commands and excludes con
 });
 
 test('OpenCode E2E harness derives every published OMS skill from the package', () => {
-  const skills = publishedSkills(join(process.cwd(), 'opencode'));
+  const skills = publishedSkills(join(process.cwd(), 'packages', 'opencode-plugin'));
   assert.ok(skills.length > 0);
   assert.ok(skills.includes('api-design'));
   assert.ok(skills.includes('sdd-apply'));
@@ -142,7 +142,7 @@ test('OpenCode E2E harness reports stdout and stderr when filename is missing', 
 test('OpenCode E2E harness loader re-exports only the globally installed tarball plugin', () => {
   const root = mkdtempSync(join(tmpdir(), 'oms-opencode-e2e-loader-'));
   const configDir = join(root, 'xdg-config', 'opencode');
-  const packageRoot = join(process.cwd(), 'opencode');
+  const packageRoot = join(process.cwd(), 'packages', 'opencode-plugin');
   try {
     const loader = writePluginLoader({ configDir, packageRoot });
     assert.equal(loader, join(configDir, 'plugins', 'oh-my-sdd-e2e.js'));

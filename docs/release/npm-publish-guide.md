@@ -20,14 +20,14 @@
 
 ## 1. 背景知识：发布的是什么、为什么要"搬运"
 
-### 1.1 两个独立的 npm 包
+### 1.1 两个固定版本的 npm 包
 
 | 包名 | 用途 | 版本在哪改 |
 | --- | --- | --- |
-| `@cli-tools/oh-my-sdd` | 主包：Claude Code / Lingma / KiloCode 插件 + 安装器 + 企业 baseline + hooks | 根目录 `package.json` |
-| `@cli-tools/oh-my-sdd-opencode` | OpenCode 子包：OpenCode 工具的 skills + commands + baseline | `opencode/package.json` |
+| `@cli-tools/oh-my-sdd` | 通用企业 SDD 产品：面向 Claude Code、Lingma、KiloCode 及未来宿主的安装器、基线、skills、hooks 和控制面 | `packages/product/package.json` |
+| `@cli-tools/oh-my-sdd-opencode` | OpenCode 原生桥接：满足 OpenCode npm 插件加载与生命周期要求，并消费产品包派生资源 | `packages/opencode-plugin/package.json` |
 
-两个包**独立演进、独立发版**（例如主包 0.1.x 时子包可以是 0.2.x），只在各自有变更时 bump。
+根目录仅负责工作区编排，不发布。两个公开包通过 `.changeset/config.json` 的 `fixed` 组保持相同版本；产品能力在 `packages/product/` 唯一维护，OpenCode 包中的 skills、content、hooks、lib 是可校验的派生产物。
 
 ### 1.2 为什么不能在外部机器直接 publish
 
@@ -103,8 +103,9 @@ npm test
 # 3. baseline token 预算检查
 npm run lint:baseline
 
-# 4. OpenCode 子包构建
-npm run build:opencode
+# 4. OpenCode 原生桥接构建与资源同步
+npm run build --workspace=@cli-tools/oh-my-sdd-opencode
+npm run sync:opencode
 ```
 
 ### 3.2 bump 版本号（必须走 Issue → 分支 → PR）
@@ -117,9 +118,9 @@ npm run build:opencode
 git checkout main && git pull
 git checkout -b chore/issue-N-release-v0.1.1
 
-# 3. bump 版本。-m 让自动产生的 commit 符合 Conventional Commits
-npm version patch -m "chore(release): v0.1.1"
-# OpenCode 子包若也要发版，在同一分支同步修改 opencode/package.json 的 version
+# 3. 根据 Changeset 生成固定组版本；不要手工分别修改两个 package.json
+npx changeset version
+# 随后运行 npm run release:check，确认两个公开包版本和资源快照一致
 
 # 4. 推送分支并创建 PR，正文关联 Issue（如 Closes #N）
 git push -u origin chore/issue-N-release-v0.1.1
@@ -188,7 +189,7 @@ git checkout v0.1.1
 ```bash
 git describe --tags          # 期望: v0.1.1
 git status --short           # 期望: 无输出
-ls .claude-plugin/plugin.json install.js bin/ skills/ hooks/ content/ package.json
+ls packages/product/.claude-plugin/plugin.json packages/product/install.js packages/product/bin/ packages/product/skills/ packages/product/hooks/ packages/product/content/ packages/product/package.json packages/opencode-plugin/package.json
 # 期望: 全部存在
 ```
 
@@ -198,13 +199,15 @@ ls .claude-plugin/plugin.json install.js bin/ skills/ hooks/ content/ package.js
 npm test                     # 全部 pass
 npm run lint:baseline        # 通过
 claude plugin validate .     # 期望: ✔ Validation passed
-npm run build:opencode       # TypeScript 编译 0 错误
+npm run build --workspace=@cli-tools/oh-my-sdd-opencode  # TypeScript 编译 0 错误
+npm run sync:opencode
 ```
 
 ### 4.4 打包验证
 
 ```bash
-npm pack
+npm pack --workspace=@cli-tools/oh-my-sdd
+npm pack --workspace=@cli-tools/oh-my-sdd-opencode
 tar -tzf cli-tools-oh-my-sdd-*.tgz | sort
 ```
 
@@ -213,9 +216,9 @@ tar -tzf cli-tools-oh-my-sdd-*.tgz | sort
 - `package/.claude-plugin/plugin.json`
 - `package/install.js`、`package/bin/oms-*.js`
 - `package/skills/`、`package/content/`、`package/hooks/`
-- `package/opencode/dist/`
+- OpenCode 桥接包中的 `package/dist/`、`package/lib/`、`package/oms-skills/`
 
-若缺关键文件：检查 `package.json` 的 `files` 字段、确认 `npm run build:opencode` 已执行，重新打包。
+若缺关键文件：检查对应工作区 `package.json` 的 `files` 字段，确认桥接构建与 `npm run sync:opencode` 已执行，重新打包。
 
 ### 4.5 本地安装演练
 
@@ -382,7 +385,7 @@ tag 名（`v0.1.1`）必须与 `package.json` 的 `version`（`0.1.1`）一致�
 - [ ] 外部：发布 Issue 已创建，版本 bump 已通过 PR 合并到 main
 - [ ] 外部：`npm test` 通过
 - [ ] 外部：`npm run lint:baseline` 通过
-- [ ] 外部：`npm run build:opencode` 通过
+- [ ] 外部：`npm run build --workspace=@cli-tools/oh-my-sdd-opencode` 通过，且 `npm run sync:opencode` 通过
 - [ ] 外部：已在合并后的 main 上打 `v<版本>` tag
 - [ ] 代码已通过 git bundle / tar 传输到内网
 - [ ] 内网：`git checkout v<版本>` 成功、`git status --short` 干净

@@ -1,0 +1,47 @@
+{
+  "name": "@cli-tools/oh-my-sdd",
+  "version": "0.2.1",
+  "description": "企业级 SDD 工作流 + iam 身份校验 + DOP 埋点（多宿主 Coding Agent 产品包）",
+  "type": "module",
+  "main": "install.js",
+  "bin": {
+    "oms": "./bin/oms.js",
+    "oms-install": "./bin/oms-install.js",
+    "oms-uninstall": "./bin/oms-uninstall.js",
+    "oms-login": "./bin/oms-login.js",
+    "oms-wrapper-verify": "./bin/oms-wrapper-verify.js",
+    "oms-update": "./bin/oms-update.js",
+    "oms-git-hooks": "./bin/oms-git-hooks.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js",
+    "preuninstall": "node install/uninstall.js",
+    "build": "npm run lint:baseline",
+    "lint:baseline": "node scripts/check-baseline-tokens.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    ".claude-plugin/",
+    "install.js",
+    "install/",
+    "bin/",
+    "wrapper/",
+    "skills/",
+    "content/",
+    "hooks/",
+    "lib/",
+    "README.md"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.enterprise.com/",
+    "access": "restricted"
+  },
+  "engines": { "node": ">=18.0.0", "npm": ">=9.0.0" },
+  "os": ["win32", "darwin", "linux"],
+  "cpu": ["x64", "arm64"],
+  "keywords": ["sdd", "coding-agent", "plugin", "enterprise"],
+  "license": "UNLICENSED",
+  "repository": { "type": "git", "url": "git+https://github.com/enterprise/oh-my-sdd.git" },
+  "bugs": { "url": "https://github.com/enterprise/oh-my-sdd/issues" },
+  "homepage": "https://github.com/enterprise/oh-my-sdd#readme"
+}
