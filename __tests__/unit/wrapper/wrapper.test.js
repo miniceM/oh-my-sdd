@@ -257,9 +257,10 @@ test('Windows wrapper lifecycle installs scripts and preserves the original exec
   process.env.PATH = `${wrapperBin}${path.delimiter}${originalEnv.PATH ?? ''}`;
 
   const messages = [];
-  assert.equal(await wrapper.installWrapper(PROJECT_ROOT, message => messages.push(message)), true);
+  const productRoot = path.join(PROJECT_ROOT, 'packages', 'product');
+  assert.equal(await wrapper.installWrapper(productRoot, message => messages.push(message)), true);
   assert.equal(wrapper.verifyWrapper(message => messages.push(message)), true);
-  assert.equal(await wrapper.installWrapper(PROJECT_ROOT, message => messages.push(message)), true);
+  assert.equal(await wrapper.installWrapper(productRoot, message => messages.push(message)), true);
 
   const backup = path.join(wrapperBin, 'claude-original.exe');
   assert.equal(existsSync(backup), true);
