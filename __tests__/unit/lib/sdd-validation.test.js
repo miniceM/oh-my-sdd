@@ -5,8 +5,8 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
 
-import { addValidationRecord, checkPrePrReadiness, checkPrSubmissionReadiness } from '../../../lib/sdd-validation.js';
-import { readMeta, writeMeta } from '../../../lib/sdd-context.js';
+import { addValidationRecord, checkPrePrReadiness, checkPrSubmissionReadiness } from '../../../packages/product/lib/sdd-validation.js';
+import { readMeta, writeMeta } from '../../../packages/product/lib/sdd-context.js';
 
 async function makeTmpDir() {
   return mkdtemp(path.join(os.tmpdir(), 'sdd-val-test-'));

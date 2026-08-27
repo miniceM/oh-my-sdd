@@ -4,13 +4,13 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { OpenCodeAdapter } from '../../../install/hosts/opencode-adapter.js';
-import { doctor } from '../../../install/control-plane/health.js';
-import { applyRepair } from '../../../install/control-plane/repair.js';
-import { buildRepairPlan } from '../../../install/control-plane/repair.js';
-import { renderText } from '../../../install/control-plane/render.js';
-import { runOmsInstall } from '../../../bin/oms-install.js';
-import { resourceDigest } from '../../../opencode/scripts/resource-ownership.mjs';
+import { OpenCodeAdapter } from '../../../packages/product/install/hosts/opencode-adapter.js';
+import { doctor } from '../../../packages/product/install/control-plane/health.js';
+import { applyRepair } from '../../../packages/product/install/control-plane/repair.js';
+import { buildRepairPlan } from '../../../packages/product/install/control-plane/repair.js';
+import { renderText } from '../../../packages/product/install/control-plane/render.js';
+import { runOmsInstall } from '../../../packages/product/bin/oms-install.js';
+import { resourceDigest } from '../../../packages/opencode-plugin/scripts/resource-ownership.mjs';
 
 test('OpenCode plan exposes detection, versions, scope, and lifecycle ownership', () => {
   const plan = OpenCodeAdapter.describe({});
@@ -35,7 +35,7 @@ test('OpenCode plan exposes detection, versions, scope, and lifecycle ownership'
 
 test('OpenCode reports a missing host runtime when CLI and config are absent', () => {
   const home = mkdtempSync(join(tmpdir(), 'oms-opencode-detection-'));
-  const adapterUrl = new URL('../../../install/hosts/opencode-adapter.js', import.meta.url).href;
+  const adapterUrl = new URL('../../../packages/product/install/hosts/opencode-adapter.js', import.meta.url).href;
   const script = `
     const { OpenCodeAdapter } = await import(${JSON.stringify(adapterUrl)});
     process.stdout.write(JSON.stringify(OpenCodeAdapter.describe()));
@@ -66,7 +66,7 @@ test('OpenCode reports a missing host runtime when CLI and config are absent', (
 
 test('OpenCode installation fails structurally when the native CLI is unavailable', () => {
   const home = mkdtempSync(join(tmpdir(), 'oms-opencode-closure-'));
-  const mainUrl = new URL('../../../install/main.js', import.meta.url).href;
+  const mainUrl = new URL('../../../packages/product/install/main.js', import.meta.url).href;
   const script = `
     const { main } = await import(${JSON.stringify(mainUrl)});
     const result = await main({ tool: 'opencode' });
@@ -109,8 +109,8 @@ test('OpenCode installation fails structurally when the native CLI is unavailabl
 
 test('OpenCode doctor includes actionable missing-resource evidence', () => {
   const home = mkdtempSync(join(tmpdir(), 'oms-opencode-doctor-'));
-  const adapterUrl = new URL('../../../install/hosts/opencode-adapter.js', import.meta.url).href;
-  const healthUrl = new URL('../../../install/control-plane/health.js', import.meta.url).href;
+  const adapterUrl = new URL('../../../packages/product/install/hosts/opencode-adapter.js', import.meta.url).href;
+  const healthUrl = new URL('../../../packages/product/install/control-plane/health.js', import.meta.url).href;
   const script = `
     const { OpenCodeAdapter } = await import(${JSON.stringify(adapterUrl)});
     const { doctor } = await import(${JSON.stringify(healthUrl)});
@@ -234,7 +234,7 @@ test('repair plan keeps non-repairable OpenCode findings explicit', async () => 
 test('OpenCode native install accepts an injected runner without writing configuration', () => {
   const home = mkdtempSync(join(tmpdir(), 'oms-opencode-custom-dir-'));
   const configDir = join(home, 'custom-opencode');
-  const adapterUrl = new URL('../../../install/hosts/opencode-adapter.js', import.meta.url).href;
+  const adapterUrl = new URL('../../../packages/product/install/hosts/opencode-adapter.js', import.meta.url).href;
   const script = `
     const { OpenCodeAdapter } = await import(${JSON.stringify(adapterUrl)});
     const calls = [];
@@ -310,7 +310,7 @@ test('multiple-host selection explains that no files were written', async () => 
 
 test('corrupt OpenCode configuration fails without replacing the user file', () => {
   const home = mkdtempSync(join(tmpdir(), 'oms-opencode-corrupt-'));
-  const adapterUrl = new URL('../../../install/hosts/opencode-adapter.js', import.meta.url).href;
+  const adapterUrl = new URL('../../../packages/product/install/hosts/opencode-adapter.js', import.meta.url).href;
   const configPath = join(home, '.config/opencode/opencode.json');
   const script = `
     const { OpenCodeAdapter } = await import(${JSON.stringify(adapterUrl)});

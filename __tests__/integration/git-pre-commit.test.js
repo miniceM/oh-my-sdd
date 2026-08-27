@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
-const PRE_COMMIT_CHECK = path.join(PROJECT_ROOT, 'hooks', 'git', 'pre-commit-check.js');
+const PRE_COMMIT_CHECK = path.join(PROJECT_ROOT, 'packages', 'product', 'hooks', 'git', 'pre-commit-check.js');
 
 function setupGitRepo() {
   const dir = mkdtempSync(path.join(tmpdir(), 'oms-precommit-'));

@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 
-import { evaluateWritePolicy } from '../../../lib/sdd-policy.js';
+import { evaluateWritePolicy } from '../../../packages/product/lib/sdd-policy.js';
 
 const CWD = '/projects/myapp';
 const CHANGE_DIR = '/projects/myapp/openspec/changes/feat-login';

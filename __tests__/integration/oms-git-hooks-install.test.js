@@ -14,7 +14,7 @@ import {
   statusAll,
   getHookStatus,
   HOOK_TYPES,
-} from '../../hooks/git/lib/hook-installer.js';
+} from '../../packages/product/hooks/git/lib/hook-installer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');

@@ -8,7 +8,7 @@ import {
   mapPreToolUse,
   mapPostToolUse,
   mapUserPromptSubmit,
-} from '../../../opencode/dist/mappers.js';
+} from '../../../packages/opencode-plugin/dist/mappers.js';
 
 // ============================================
 // TOOL_MAP

@@ -11,7 +11,7 @@ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'oms-logger-'));
 process.env.OMS_LOG_FILE = path.join(tmpDir, 'test.log');
 
 // Import after env var is set so log() reads it
-const { log, _resetForTest } = await import('../../../opencode/dist/logger.js');
+const { log, _resetForTest } = await import('../../../packages/opencode-plugin/dist/logger.js');
 
 test('logger: log() writes one JSON line per call', () => {
   _resetForTest();

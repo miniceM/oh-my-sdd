@@ -8,8 +8,8 @@ import path from 'node:path';
 import {
   createInstaller,
   isDirectExecution as isInstallDirect,
-} from '../../../install/main.js';
-import { isDirectExecution as isUninstallDirect } from '../../../install/uninstall.js';
+} from '../../../packages/product/install/main.js';
+import { isDirectExecution as isUninstallDirect } from '../../../packages/product/install/uninstall.js';
 
 const projectRoot = process.cwd();
 
@@ -92,7 +92,7 @@ test('importing the package entry point has no install side effects and preserve
     const result = spawnSync(
       process.execPath,
       ['--input-type=module', '-e', [
-        "const api = await import('./install.js');",
+        "const api = await import('./packages/product/install.js');",
         "process.stdout.write(JSON.stringify(Object.keys(api).sort()));",
       ].join(' ')],
       {
@@ -120,7 +120,7 @@ test('importing the package entry point has no install side effects and preserve
 test('executing the package entry point still invokes installation', () => {
   const fakeHome = mkdtempSync(path.join(os.tmpdir(), 'oms-direct-entry-'));
   try {
-    const result = spawnSync(process.execPath, ['install.js'], {
+    const result = spawnSync(process.execPath, ['packages/product/install.js'], {
       cwd: projectRoot,
       env: {
         ...process.env,
@@ -146,7 +146,7 @@ test('calling the public installer resolves when Claude CLI is unavailable', () 
   const fakeHome = mkdtempSync(path.join(os.tmpdir(), 'oms-call-entry-'));
   try {
     const result = spawnSync(process.execPath, ['--input-type=module', '-e', [
-      "const { main } = await import('./install.js');",
+      "const { main } = await import('./packages/product/install.js');",
       "await main({ tool: 'claude' });",
       "process.stdout.write('resolved');",
     ].join(' ')], {

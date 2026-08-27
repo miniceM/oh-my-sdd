@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { runHook, HookError } from '../../../opencode/dist/runner.js';
+import { runHook, HookError } from '../../../packages/opencode-plugin/dist/runner.js';
 
 // 保存原始 env（测试结束时恢复，避免污染同进程其他测试）
 const ORIGINAL_HOOKS_DIR = process.env.OMS_HOOKS_DIR;

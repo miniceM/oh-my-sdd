@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, '..', '..');
-const SKILLS_SRC = join(PACKAGE_ROOT, 'skills');
+const SKILLS_SRC = join(PACKAGE_ROOT, 'packages', 'product', 'skills');
 
 // ============================================
 // 集成测试：把 Lingma 安装/卸载的副作用
@@ -27,7 +27,7 @@ function makeFakeHome() {
 test('integration: skills copy creates expected files for lingma install', async () => {
   const fakeHome = makeFakeHome();
   try {
-    const { copySkillsToDir } = await import('../../install/common/fs.js');
+    const { copySkillsToDir } = await import('../../packages/product/install/common/fs.js');
 
     const destSkills = join(fakeHome, 'fake-lingma-skills');
     const messages = [];
@@ -183,7 +183,7 @@ test('integration: Lingma uninstall removes only oms handlers within shared even
 });
 
 test('integration: skills directory contains all 17 SKILL.md files', async () => {
-  const { copySkillsToDir } = await import('../../install/common/fs.js');
+  const { copySkillsToDir } = await import('../../packages/product/install/common/fs.js');
   const dest = makeFakeHome();
   const count = await copySkillsToDir(SKILLS_SRC, dest, () => {});
   // 应至少 17 个（可能有 18+ 如果后续新增）

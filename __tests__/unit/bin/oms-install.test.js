@@ -6,10 +6,10 @@ import test from 'node:test';
 import { spawn } from 'node:child_process';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { runOmsInstall, selectHost } from '../../../bin/oms-install.js';
+import { runOmsInstall, selectHost } from '../../../packages/product/bin/oms-install.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-const CLI = path.join(ROOT, 'bin', 'oms-install.js');
+const CLI = path.join(ROOT, 'packages', 'product', 'bin', 'oms-install.js');
 
 const PLAN = {
   schema_version: 1,

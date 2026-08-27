@@ -210,7 +210,7 @@ function fail(phase, result, sandbox) {
 }
 
 async function inspectDefaultRuntimeEvidence(sandbox) {
-  const adapterUrl = pathToFileURL(join(process.cwd(), 'install', 'hosts', 'opencode-adapter.js')).href;
+  const adapterUrl = pathToFileURL(join(process.cwd(), 'packages', 'product', 'install', 'hosts', 'opencode-adapter.js')).href;
   const result = await run(process.execPath, [
     '--input-type=module',
     '--eval',
@@ -316,7 +316,7 @@ test('real OpenCode CLI loads commands and the globally installed tarball plugin
     const packResult = execNpmWithOutput([
       'pack', '--json', '--pack-destination', sandbox.packDir,
     ], {
-      cwd: join(process.cwd(), 'opencode'), env: sandbox.env, encoding: 'utf8',
+      cwd: join(process.cwd(), 'packages', 'opencode-plugin'), env: sandbox.env, encoding: 'utf8',
     });
     const packed = parseNpmPackJson(packResult.stdout, packResult.stderr);
     const packEntry = firstNpmPackEntry(packed, packResult);

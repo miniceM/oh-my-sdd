@@ -13,7 +13,9 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const TESTS_DIR = path.join(PROJECT_ROOT, '__tests__');
-const OPENCODE_RESOURCE_SYNC_SCRIPT = path.join(PROJECT_ROOT, 'opencode', 'scripts', 'copy-resources.mjs');
+const OPENCODE_RESOURCE_SYNC_SCRIPT = path.join(
+  PROJECT_ROOT, 'packages', 'opencode-plugin', 'scripts', 'copy-resources.mjs',
+);
 
 async function findTests(dir) {
   const out = [];

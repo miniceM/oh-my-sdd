@@ -11,7 +11,7 @@ import {
   getBodyForInjection,
   REQUIRED_FRONTMATTER_FIELDS,
   ConstitutionError,
-} from '../../../lib/constitution.js';
+} from '../../../packages/product/lib/constitution.js';
 
 function fixture(name, content) {
   const dir = mkdtempSync(path.join(tmpdir(), 'oms-const-'));
@@ -206,7 +206,7 @@ test('REQUIRED_FRONTMATTER_FIELDS exports expected schema keys', () => {
 test('install.js injection contract: body has no frontmatter structure', async () => {
   const realBaselinePath = path.resolve(
     process.cwd(),
-    'content',
+    'packages', 'product', 'content',
     'enterprise-baseline.md'
   );
   const result = await loadBaseline(realBaselinePath);

@@ -5,8 +5,8 @@ import {
   buildClaudeInvocation,
   ClaudeAdapter,
   isClaudeCliAvailable,
-} from '../../../../install/hosts/claude-adapter.js';
-import { HostAdapter } from '../../../../install/host-adapter.js';
+} from '../../../../packages/product/install/hosts/claude-adapter.js';
+import { HostAdapter } from '../../../../packages/product/install/host-adapter.js';
 
 describe('ClaudeAdapter', () => {
   it('extends HostAdapter', () => {
@@ -44,7 +44,7 @@ describe('ClaudeAdapter', () => {
 
   it('reports a missing host runtime when the Claude CLI is absent', () => {
     const script = `
-      const { ClaudeAdapter } = await import(${JSON.stringify(new URL('../../../../install/hosts/claude-adapter.js', import.meta.url).href)});
+      const { ClaudeAdapter } = await import(${JSON.stringify(new URL('../../../../packages/product/install/hosts/claude-adapter.js', import.meta.url).href)});
       process.stdout.write(JSON.stringify(ClaudeAdapter.describe()));
     `;
     const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {

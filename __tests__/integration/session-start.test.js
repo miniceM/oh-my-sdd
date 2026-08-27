@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const HOOK_PATH = path.resolve(__dirname, '..', '..', 'hooks', 'session-start.js');
-const PLUGIN_ROOT = path.resolve(__dirname, '..', '..');
+const HOOK_PATH = path.resolve(__dirname, '..', '..', 'packages', 'product', 'hooks', 'session-start.js');
+const PLUGIN_ROOT = path.resolve(__dirname, '..', '..', 'packages', 'product');
 
 // Resolve the running node's bin dir so tests that clobber PATH to hide iam
 // can still find `node` itself to spawn the hook.

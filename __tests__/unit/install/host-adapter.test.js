@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { HostAdapter } from '../../../install/host-adapter.js';
+import { HostAdapter } from '../../../packages/product/install/host-adapter.js';
 
 describe('HostAdapter', () => {
   it('has required static properties', () => {

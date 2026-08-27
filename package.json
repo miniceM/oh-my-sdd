@@ -1,79 +1,19 @@
 {
-  "name": "@cli-tools/oh-my-sdd",
-  "version": "0.1.0",
-  "description": "企业级 SDD 工作流 + iam 身份校验 + DOP 埋点（Claude Code 插件）",
+  "private": true,
   "type": "module",
-  "main": "install.js",
-  "bin": {
-    "oms": "./bin/oms.js",
-    "oms-install": "./bin/oms-install.js",
-    "oms-uninstall": "./bin/oms-uninstall.js",
-    "oms-login": "./bin/oms-login.js",
-    "oms-wrapper-verify": "./bin/oms-wrapper-verify.js",
-    "oms-update": "./bin/oms-update.js",
-    "oms-git-hooks": "./bin/oms-git-hooks.js"
-  },
+  "workspaces": ["packages/*"],
   "scripts": {
-    "postinstall": "node install.js",
-    "preuninstall": "node install/uninstall.js",
-    "build": "npm run lint:baseline && npm test",
-    "build:opencode": "cd opencode && npm install && npx tsc",
-    "publish:opencode": "cd opencode && npm publish",
-    "prepublishOnly": "npm run build && npm run build:opencode",
+    "build": "npm run lint:baseline --workspace=@cli-tools/oh-my-sdd && npm run build --workspace=@cli-tools/oh-my-sdd-opencode",
     "test": "node scripts/run-tests.js",
     "test:coverage": "node scripts/run-tests.js --coverage",
     "test:e2e:opencode": "node --test __tests__/integration/opencode/real-cli-e2e.test.js",
     "test:glob": "node --test \"__tests__/**/*.test.js\"",
-    "lint:baseline": "node scripts/check-baseline-tokens.mjs"
+    "lint:baseline": "npm run lint:baseline --workspace=@cli-tools/oh-my-sdd",
+    "sync:opencode": "npm run sync:resources --workspace=@cli-tools/oh-my-sdd-opencode",
+    "release:check": "node scripts/release-check.mjs",
+    "release:version": "changeset version"
   },
-  "files": [
-    ".claude-plugin/",
-    "install.js",
-    "install/",
-    "bin/",
-    "wrapper/",
-    "skills/",
-    "content/",
-    "hooks/",
-    "lib/",
-    "README.md",
-    "opencode/dist/",
-    "opencode/build.js",
-    "opencode/scripts/agents-md.mjs",
-    "opencode/scripts/uninstall.mjs",
-    "opencode/scripts/resource-ownership.mjs"
-  ],
-  "publishConfig": {
-    "registry": "https://npm.enterprise.com/",
-    "access": "restricted"
-  },
-  "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=9.0.0"
-  },
-  "os": [
-    "win32",
-    "darwin",
-    "linux"
-  ],
-  "cpu": [
-    "x64",
-    "arm64"
-  ],
-  "keywords": [
-    "sdd",
-    "claude-code",
-    "plugin",
-    "enterprise"
-  ],
-  "license": "UNLICENSED",
-  "private": false,
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/enterprise/oh-my-sdd.git"
-  },
-  "bugs": {
-    "url": "https://github.com/enterprise/oh-my-sdd/issues"
-  },
-  "homepage": "https://github.com/enterprise/oh-my-sdd#readme"
+  "devDependencies": {
+    "@changesets/cli": "^2.29.7"
+  }
 }

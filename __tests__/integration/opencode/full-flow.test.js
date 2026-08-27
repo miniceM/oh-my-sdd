@@ -56,7 +56,7 @@ const {
   handleToolExecuteAfter,
   handleCommandExecuteBefore,
   handleEvent,
-} = await import('../../../opencode/dist/plugin.js');
+} = await import('../../../packages/opencode-plugin/dist/plugin.js');
 
 test('full-flow: safe file write passes through PreToolUse', async () => {
   // Safe content — should NOT throw

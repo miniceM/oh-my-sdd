@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it, mock } from 'node:test';
-import { announce } from '../../../../install/common/announce.js';
+import { announce } from '../../../../packages/product/install/common/announce.js';
 
 describe('announce', () => {
   it('writes message + newline to stderr', () => {

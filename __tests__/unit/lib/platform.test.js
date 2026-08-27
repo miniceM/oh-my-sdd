@@ -4,7 +4,7 @@ import path from 'node:path';
 import {
   getNodeVersion, checkNodeVersion, getHomeDir, isWindows,
   getPluginInstallDir, getStateDir, isIamInPath, sessionMetaPath
-} from '../../../lib/platform.js';
+} from '../../../packages/product/lib/platform.js';
 
 test('isWindows distinguishes win32 from POSIX platforms', () => {
   assert.equal(isWindows('win32'), true);

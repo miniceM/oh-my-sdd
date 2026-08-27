@@ -12,7 +12,7 @@
 # 做的事：
 #   1. claude plugin uninstall（标记 cache 为 orphan）
 #   2. rm -rf ~/.claude/plugins/cache/oh-my-sdd（物理删 orphan）
-#   3. npm install -g --foreground-scripts ./cli-tools-oh-my-sdd-0.1.0.tgz
+#   3. npm install -g --foreground-scripts <product tarball>
 #      （重新打包 + 装到 npm 全局 + 触发 postinstall → claude plugin install）
 #
 # 然后用 dev-launch-claude.sh 启动 Claude Code 验证。
@@ -23,6 +23,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 PLUGIN_CACHE="$HOME/.claude/plugins/cache/oh-my-sdd"
 TGZ="$PROJECT_ROOT/cli-tools-oh-my-sdd-0.1.0.tgz"
+PRODUCT_VERSION="$(node -p "require('./packages/product/package.json').version")"
+TGZ="$PROJECT_ROOT/cli-tools-oh-my-sdd-$PRODUCT_VERSION.tgz"
 
 cd "$PROJECT_ROOT"
 
@@ -38,7 +40,7 @@ else
 fi
 
 echo "→ 3/4 重新打包 tgz"
-npm pack 2>&1 | tail -1
+npm pack --workspace=@cli-tools/oh-my-sdd --pack-destination "$PROJECT_ROOT" 2>&1 | tail -1
 
 echo "→ 4/4 npm install -g 触发 postinstall"
 npm install -g --foreground-scripts "$TGZ" 2>&1 | tail -10
@@ -46,7 +48,7 @@ npm install -g --foreground-scripts "$TGZ" 2>&1 | tail -10
 echo ""
 echo "✓ 完成。验证："
 echo "  claude plugin list | grep oh-my-sdd"
-echo "  grep '身份声明' $PLUGIN_CACHE/oh-my-sdd/0.1.0/content/enterprise-baseline.md"
+echo "  grep '身份声明' $PLUGIN_CACHE/oh-my-sdd/$PRODUCT_VERSION/content/enterprise-baseline.md"
 echo ""
 echo "启动 Claude Code 测试："
 if [[ -z "${NOMOCK:-}" ]]; then

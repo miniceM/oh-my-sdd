@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isPermissionAskEnabled, handlePermissionAsk } from '../../../opencode/dist/permission.js';
+import { isPermissionAskEnabled, handlePermissionAsk } from '../../../packages/opencode-plugin/dist/permission.js';
 
 test('permission: isPermissionAskEnabled returns false (YAGNI stub)', () => {
   assert.equal(isPermissionAskEnabled(), false);

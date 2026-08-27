@@ -25,7 +25,8 @@ fi
 
 echo
 echo "${CYAN}=== 2. 直接跑 hook 看它本身健康度(用 Claude Code 加载的 cache 路径)===${OFF}"
-CACHE="$HOME/.claude/plugins/cache/oh-my-sdd/oh-my-sdd/0.1.0"
+PRODUCT_VERSION="$(node -p "require('./packages/product/package.json').version")"
+CACHE="$HOME/.claude/plugins/cache/oh-my-sdd/oh-my-sdd/$PRODUCT_VERSION"
 if [[ -f "$CACHE/hooks/session-start.js" ]]; then
   out=$(echo "{\"cwd\":\"$PWD\",\"session_id\":\"diag-$$\"}" \
         | CLAUDE_PLUGIN_ROOT="$CACHE" node "$CACHE/hooks/session-start.js" 2>&1)

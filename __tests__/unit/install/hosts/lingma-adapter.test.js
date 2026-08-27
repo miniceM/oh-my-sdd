@@ -15,12 +15,12 @@ import { fileURLToPath } from 'node:url';
 import {
   LingmaAdapter,
   replacePluginRoot,
-} from '../../../../install/hosts/lingma-adapter.js';
-import { HostAdapter } from '../../../../install/host-adapter.js';
+} from '../../../../packages/product/install/hosts/lingma-adapter.js';
+import { HostAdapter } from '../../../../packages/product/install/host-adapter.js';
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
-const PACKAGE_ROOT = resolve(TEST_DIR, '..', '..', '..', '..');
-const ADAPTER_URL = new URL('../../../../install/hosts/lingma-adapter.js', import.meta.url).href;
+const PACKAGE_ROOT = resolve(TEST_DIR, '..', '..', '..', '..', 'packages', 'product');
+const ADAPTER_URL = new URL('../../../../packages/product/install/hosts/lingma-adapter.js', import.meta.url).href;
 
 function runAdapter(homeDir, method) {
   const script = `

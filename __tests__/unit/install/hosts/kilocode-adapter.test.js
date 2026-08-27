@@ -13,12 +13,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
-import { KiloCodeAdapter } from '../../../../install/hosts/kilocode-adapter.js';
-import { HostAdapter } from '../../../../install/host-adapter.js';
+import { KiloCodeAdapter } from '../../../../packages/product/install/hosts/kilocode-adapter.js';
+import { HostAdapter } from '../../../../packages/product/install/host-adapter.js';
 
 const execFileAsync = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PACKAGE_ROOT = resolve(__dirname, '..', '..', '..', '..');
+const PACKAGE_ROOT = resolve(__dirname, '..', '..', '..', '..', 'packages', 'product');
 const ADAPTER_URL = pathToFileURL(
   join(PACKAGE_ROOT, 'install', 'hosts', 'kilocode-adapter.js')
 ).href;

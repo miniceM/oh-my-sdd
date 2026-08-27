@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { copyDir, rmIfExists, rmIfExistsSync } from '../../../../install/common/fs.js';
+import { copyDir, rmIfExists, rmIfExistsSync } from '../../../../packages/product/install/common/fs.js';
 
 test('copyDir: copies files recursively when recursive: true', async () => {
   const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'copy-test-'));

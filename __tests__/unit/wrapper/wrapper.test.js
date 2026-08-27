@@ -17,7 +17,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
 
 // 动态导入 wrapper 模块
-const wrapper = await import('../../../wrapper/wrapper.js');
+const wrapper = await import('../../../packages/product/wrapper/wrapper.js');
 
 // ---------- 目录配置 ----------
 
@@ -131,7 +131,7 @@ test('verifyWrapper returns boolean', async () => {
 // ---------- wrapper scripts 存在性 ----------
 
 test('wrapper directory contains required scripts', () => {
-  const wrapperDir = path.join(PROJECT_ROOT, 'wrapper');
+  const wrapperDir = path.join(PROJECT_ROOT, 'packages', 'product', 'wrapper');
   assert.ok(existsSync(wrapperDir), 'wrapper directory must exist');
 
   // POSIX wrapper
@@ -145,7 +145,7 @@ test('wrapper directory contains required scripts', () => {
 // ---------- content/ baseline 存在性（content/ 是唯一源，session-start + wrapper 共享）----------
 
 test('content directory contains enterprise-baseline.md (single source of truth)', () => {
-  const contentDir = path.join(PROJECT_ROOT, 'content');
+  const contentDir = path.join(PROJECT_ROOT, 'packages', 'product', 'content');
   assert.ok(existsSync(contentDir), 'content directory must exist');
 
   const baseline = path.join(contentDir, 'enterprise-baseline.md');
@@ -155,7 +155,7 @@ test('content directory contains enterprise-baseline.md (single source of truth)
 // ---------- wrapper script 内容验证 ----------
 
 test('claude.sh references baseline.md', () => {
-  const shPath = path.join(PROJECT_ROOT, 'wrapper', 'claude.sh');
+  const shPath = path.join(PROJECT_ROOT, 'packages', 'product', 'wrapper', 'claude.sh');
   const content = readFileSync(shPath, 'utf8');
   assert.ok(content.includes('baseline.md'), 'must reference baseline.md');
   assert.ok(content.includes('CLAUDE_ENTERPRISE_RULES'), 'must support env override');
@@ -163,7 +163,7 @@ test('claude.sh references baseline.md', () => {
 });
 
 test('claude.ps1 references baseline.md', () => {
-  const ps1Path = path.join(PROJECT_ROOT, 'wrapper', 'claude.ps1');
+  const ps1Path = path.join(PROJECT_ROOT, 'packages', 'product', 'wrapper', 'claude.ps1');
   const content = readFileSync(ps1Path, 'utf8');
   assert.ok(content.includes('baseline.md'), 'must reference baseline.md');
   assert.ok(content.includes('CLAUDE_ENTERPRISE_RULES'), 'must support env override');
@@ -209,9 +209,10 @@ test('wrapper install, verification, reinstall, and uninstall preserve the origi
   process.env.PATH = `${wrapperBin}${path.delimiter}${originalPath ?? ''}`;
 
   const messages = [];
-  assert.equal(await wrapper.installWrapper(PROJECT_ROOT, message => messages.push(message)), true);
+  const productRoot = path.join(PROJECT_ROOT, 'packages', 'product');
+  assert.equal(await wrapper.installWrapper(productRoot, message => messages.push(message)), true);
   assert.equal(wrapper.verifyWrapper(message => messages.push(message)), true);
-  assert.equal(await wrapper.installWrapper(PROJECT_ROOT, message => messages.push(message)), true);
+  assert.equal(await wrapper.installWrapper(productRoot, message => messages.push(message)), true);
 
   const backup = path.join(wrapperBin, 'claude-original');
   assert.equal(existsSync(backup), true);
@@ -256,9 +257,10 @@ test('Windows wrapper lifecycle installs scripts and preserves the original exec
   process.env.PATH = `${wrapperBin}${path.delimiter}${originalEnv.PATH ?? ''}`;
 
   const messages = [];
-  assert.equal(await wrapper.installWrapper(PROJECT_ROOT, message => messages.push(message)), true);
+  const productRoot = path.join(PROJECT_ROOT, 'packages', 'product');
+  assert.equal(await wrapper.installWrapper(productRoot, message => messages.push(message)), true);
   assert.equal(wrapper.verifyWrapper(message => messages.push(message)), true);
-  assert.equal(await wrapper.installWrapper(PROJECT_ROOT, message => messages.push(message)), true);
+  assert.equal(await wrapper.installWrapper(productRoot, message => messages.push(message)), true);
 
   const backup = path.join(wrapperBin, 'claude-original.exe');
   assert.equal(existsSync(backup), true);

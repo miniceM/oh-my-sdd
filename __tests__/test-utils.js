@@ -77,7 +77,7 @@ export function withTempDir(fn) {
  */
 export function resetAllModules() {
   try {
-    const logger = require('../../opencode/dist/logger.js');
+    const logger = require('../../packages/opencode-plugin/dist/logger.js');
     if (typeof logger.resetForTest === 'function') {
       logger.resetForTest();
     }

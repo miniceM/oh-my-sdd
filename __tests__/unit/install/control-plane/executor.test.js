@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { executePlan, createStepResult, summarizeExecution } from '../../../../install/control-plane/executor.js';
+import { executePlan, createStepResult, summarizeExecution } from '../../../../packages/product/install/control-plane/executor.js';
 
 async function collectEvents(generator) {
   const events = [];

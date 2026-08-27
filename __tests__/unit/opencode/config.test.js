@@ -9,7 +9,7 @@ process.env.HOME = tmpHome;
 process.env.USERPROFILE = tmpHome;
 
 // Import after env var is set so config.ts picks up the tmp home
-const { loadConfig, getConfig } = await import('../../../opencode/dist/config.js');
+const { loadConfig, getConfig } = await import('../../../packages/opencode-plugin/dist/config.js');
 
 test('config: loadConfig returns defaults when no config.json exists', () => {
   const cfg = loadConfig();

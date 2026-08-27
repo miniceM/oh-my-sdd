@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
-const PREPARE_MSG_CHECK = path.join(PROJECT_ROOT, 'hooks', 'git', 'prepare-commit-msg-check.js');
+const PREPARE_MSG_CHECK = path.join(PROJECT_ROOT, 'packages', 'product', 'hooks', 'git', 'prepare-commit-msg-check.js');
 
 const MARKER = '# oh-my-sdd: commit template';
 

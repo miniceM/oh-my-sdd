@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { getAdapter, listTools, detectDefault } from '../../../install/host-registry.js';
+import { getAdapter, listTools, detectDefault } from '../../../packages/product/install/host-registry.js';
 
 describe('host-registry', () => {
   it('getAdapter returns the Claude adapter for "claude"', () => {

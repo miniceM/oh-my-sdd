@@ -5,20 +5,20 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SKILL_PATH = path.resolve(__dirname, '..', '..', 'skills', 'sdd-review', 'SKILL.md');
+const SKILL_PATH = path.resolve(__dirname, '..', '..', 'packages', 'product', 'skills', 'sdd-review', 'SKILL.md');
 const MIRROR_SKILL_PATH = path.resolve(
-  __dirname, '..', '..', 'opencode', 'oms-skills', 'sdd-review', 'SKILL.md'
+  __dirname, '..', '..', 'packages', 'opencode-plugin', 'oms-skills', 'sdd-review', 'SKILL.md'
 );
-const SPEC_SKILL_PATH = path.resolve(__dirname, '..', '..', 'skills', 'sdd-spec', 'SKILL.md');
+const SPEC_SKILL_PATH = path.resolve(__dirname, '..', '..', 'packages', 'product', 'skills', 'sdd-spec', 'SKILL.md');
 const MIRROR_SPEC_SKILL_PATH = path.resolve(
-  __dirname, '..', '..', 'opencode', 'oms-skills', 'sdd-spec', 'SKILL.md'
+  __dirname, '..', '..', 'packages', 'opencode-plugin', 'oms-skills', 'sdd-spec', 'SKILL.md'
 );
 const RUNBOOK_PATH = path.resolve(__dirname, '..', '..', 'docs', 'release', 'runbook-internal-test-v0.2.md');
 const PUBLISHED_SKILL_PATH = path.resolve(
-  __dirname, '..', '..', 'opencode', '.opencode', 'skills', 'sdd-review', 'SKILL.md'
+  __dirname, '..', '..', 'packages', 'opencode-plugin', '.opencode', 'skills', 'sdd-review', 'SKILL.md'
 );
 const COMMAND_PATH = path.resolve(
-  __dirname, '..', '..', 'opencode', '.opencode', 'commands', 'sdd-review.md'
+  __dirname, '..', '..', 'packages', 'opencode-plugin', '.opencode', 'commands', 'sdd-review.md'
 );
 
 async function readSkill() {

@@ -111,17 +111,17 @@ git log --oneline | wc -l
 ```bash
 ls -la
 # 必须看到：
-# - .claude-plugin/plugin.json
-# - .claude-plugin/marketplace.json
-# - install.js, uninstall.js
-# - bin/ (7 个 CLI: oms-install, oms-uninstall, oms-login, oms-update,
+# - packages/product/.claude-plugin/plugin.json
+# - packages/product/.claude-plugin/marketplace.json
+# - packages/product/install.js
+# - packages/product/bin/ (7 个 CLI: oms-install, oms-uninstall, oms-login, oms-update,
 #         oms-git-hooks, oms-welcome, oms-wrapper-verify)
-# - skills/ (17 个 skill 目录：5 个 sdd-* + 12 个企业 skill)
-# - content/ (4 个 .md: enterprise-baseline.md, lingma-baseline.md, auth-required.md, welcome-message.md)
-# - hooks/ (4 个 hook + lib/ + git/)
+# - packages/product/skills/ (17 个 skill 目录：5 个 sdd-* + 12 个企业 skill)
+# - packages/product/content/ (4 个 .md: enterprise-baseline.md, lingma-baseline.md, auth-required.md, welcome-message.md)
+# - packages/product/hooks/ (4 个 hook + lib/ + git/)
 # - scripts/ (dev-launch + dev-reinstall + check-baseline-tokens + ...)
-# - wrappers/ (claude.sh, claude.ps1, claude.bat)
-# - opencode/ (独立 TypeScript 子包，含自己的 package.json)
+# - packages/product/wrapper/ (claude.sh, claude.ps1, claude.bat)
+# - packages/opencode-plugin/ (OpenCode 原生桥接；资源从产品包同步)
 # - __tests__/ (单元 + 集成测试，共 352 个 case)
 # - docs/ (specs + plans + roadmap + release)
 # - package.json, package-lock.json, README.md
@@ -149,17 +149,19 @@ claude plugin validate .
 # 期望: ✔ Validation passed
 # 如果有 warning/error，停下查 spec
 
-# 4. OpenCode 子包构建 + 测试
-npm run build:opencode
-cd opencode && npm run typecheck
+# 4. OpenCode 原生桥接构建 + 测试
+npm run build --workspace=@cli-tools/oh-my-sdd-opencode
+npm run typecheck --workspace=@cli-tools/oh-my-sdd-opencode
+npm run sync:opencode
 # 期望: TypeScript 编译 0 错误
 ```
 
 ### 3.2 打包验证
 
 ```bash
-# 打 tgz（这就是要 publish 的产物）
-npm pack
+# 打两个 tgz（产品包与 OpenCode 原生桥接均为发布产物）
+npm pack --workspace=@cli-tools/oh-my-sdd
+npm pack --workspace=@cli-tools/oh-my-sdd-opencode
 
 # 看 tgz 内容（确保含所有必要文件，不含多余）
 tar -tzf cli-tools-oh-my-sdd-0.1.0.tgz | sort
@@ -185,12 +187,12 @@ package/hooks/git/lib/*.js (3 个 git hook 库)
 package/skills/{sdd-spec,sdd-plan,sdd-task,sdd-apply,sdd-review,sdd-constitution,sdd-doc}/SKILL.md (7 个 sdd skill)
 package/skills/{api-design,business-modeling,db-conventions,doc-writer,security-check,testing-strategy,fe-*}/SKILL.md (10 个企业 skill)
 package/wrapper/claude.{sh,ps1,bat}
-package/opencode/dist/*.js + *.d.ts + *.js.map + *.d.ts.map (OpenCode 编译产物)
+OpenCode 桥接包：package/dist/*.js + *.d.ts + *.js.map + *.d.ts.map
 ```
 
 ⚠️ **如果 tgz 缺关键文件**（如 `.claude-plugin/`、`install.js`）：
 - 检查 `package.json` 的 `files` 字段
-- 检查 `opencode/dist/` 是否已构建（缺失时 `npm run build:opencode` 会自动编译）
+- 检查 `packages/opencode-plugin/dist/` 是否已构建，并运行 `npm run sync:opencode`
 - 不能 publish，重打包
 
 ### 3.3 本地安装端到端测试
@@ -579,7 +581,7 @@ npm install -g --foreground-scripts @cli-tools/oh-my-sdd
 - [ ] `npm test` → 352/352 pass
 - [ ] `npm run lint:baseline` → 通过
 - [ ] `claude plugin validate .` → ✔ Validation passed
-- [ ] `npm run build:opencode` → TypeScript 编译 0 错误
+- [ ] `npm run build --workspace=@cli-tools/oh-my-sdd-opencode` → TypeScript 编译 0 错误
 - [ ] `npm pack` 产出的 tgz 含 ~133 个文件
 - [ ] 本地 install + uninstall 测试通过（在测试 HOME 里）
 - [ ] 已 push 到内网 git 仓库
@@ -591,7 +593,7 @@ npm install -g --foreground-scripts @cli-tools/oh-my-sdd
 
 ### OpenCode 子包 Checklist（可选）
 
-- [ ] `cd opencode && npm run build` → TypeScript 编译成功
+- [ ] `npm run build --workspace=@cli-tools/oh-my-sdd-opencode` → TypeScript 编译成功
 - [ ] `npm pack` → 包含 `.opencode/commands/`、`oms-skills/`、`delegated-skills/` 和 `bin/`
 - [ ] `npm publish` 成功
 - [ ] `npm view @cli-tools/oh-my-sdd-opencode@0.2.1` 能查到
