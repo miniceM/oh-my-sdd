@@ -134,6 +134,7 @@ describe('OpenCodeAdapter', () => {
 
     assert.equal(runtime.loaded.state, 'verified');
     assert.equal(runtime.enforced.state, 'verified');
+    assert.equal(runtime.enforced.reason, null);
     assert.equal(report.hosts[0].protection.level, 'enforced');
     assert.equal(report.findings.some((finding) => finding.code.startsWith('runtime-')), false);
   });
@@ -219,6 +220,7 @@ describe('OpenCodeAdapter', () => {
 
     assert.equal(runtime.loaded.state, 'verified');
     assert.equal(runtime.enforced.state, 'unknown');
+    assert.equal(runtime.enforced.reason, 'OpenCode activation does not include tool.execute.before.');
   });
 
   it('reports resource drift from a degraded activation without downgrading loaded evidence', async () => {

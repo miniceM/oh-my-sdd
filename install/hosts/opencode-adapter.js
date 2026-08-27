@@ -368,9 +368,11 @@ export class OpenCodeAdapter extends HostAdapter {
       enforced: {
         state: writeBeforeRegistered ? 'verified' : 'unknown',
         evidence: writeBeforeRegistered ? 'OpenCode activation registered tool.execute.before' : null,
-        reason: active
-          ? 'OpenCode activation does not include tool.execute.before.'
-          : (activation.reason || 'Write prevention evidence requires active runtime'),
+        reason: writeBeforeRegistered
+          ? null
+          : (active
+            ? 'OpenCode activation does not include tool.execute.before.'
+            : (activation.reason || 'Write prevention evidence requires active runtime')),
       },
     };
   }
