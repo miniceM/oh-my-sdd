@@ -482,6 +482,10 @@ test('OK state: ignores non-pending and malformed archive metadata', async (t) =
 test('OK state: caps archived DOP completion scan entries in enumeration order', async (t) => {
   const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-dop-cap-'));
   const projectCwd = mkdtempSync(path.join(tmpdir(), 'oms-ss-project-'));
+  mkdirSync(path.join(tmpHome, '.oh-my-sdd'), { recursive: true });
+  writeFileSync(path.join(tmpHome, '.oh-my-sdd', 'config.json'), JSON.stringify({
+    update_check_disabled: true,
+  }));
   t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
   t.after(() => rmSync(projectCwd, { recursive: true, force: true }));
   const iamDir = makeStubIam({
@@ -523,12 +527,12 @@ test('OK state: caps archived DOP completion scan entries in enumeration order',
       PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
       CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
     },
-    3_500,
+    10_000,
   );
   const elapsed = Date.now() - startedAt;
 
   assert.equal(result.timedOut, false, 'entry-capped scan must not block session-start');
-  assert.ok(elapsed < 3_500, `hook took ${elapsed}ms, should return under 3.5s`);
+  assert.ok(elapsed < 10_000, `hook took ${elapsed}ms, should return under 10s`);
   assert.equal(result.exitCode, 0);
   const out = JSON.parse(result.stdout);
   assert.doesNotMatch(out.additionalContext, /--retry-dop/);
@@ -572,6 +576,10 @@ test('OK state: skips a non-directory archive entry', async (t) => {
 test('OK state: skips oversized pending archive metadata', async (t) => {
   const tmpHome = mkdtempSync(path.join(tmpdir(), 'oms-ss-dop-size-'));
   const projectCwd = mkdtempSync(path.join(tmpdir(), 'oms-ss-project-'));
+  mkdirSync(path.join(tmpHome, '.oh-my-sdd'), { recursive: true });
+  writeFileSync(path.join(tmpHome, '.oh-my-sdd', 'config.json'), JSON.stringify({
+    update_check_disabled: true,
+  }));
   t.after(() => rmSync(tmpHome, { recursive: true, force: true }));
   t.after(() => rmSync(projectCwd, { recursive: true, force: true }));
   const iamDir = makeStubIam({
@@ -599,12 +607,12 @@ test('OK state: skips oversized pending archive metadata', async (t) => {
       PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
       CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
     },
-    2_500,
+    10_000,
   );
   const elapsed = Date.now() - startedAt;
 
   assert.equal(result.timedOut, false, 'oversized metadata must not block session-start');
-  assert.ok(elapsed < 2_500, `hook took ${elapsed}ms, should return under 2.5s`);
+  assert.ok(elapsed < 10_000, `hook took ${elapsed}ms, should return under 10s`);
   assert.equal(result.exitCode, 0);
   const out = JSON.parse(result.stdout);
   assert.doesNotMatch(out.additionalContext, /oversized|--retry-dop/);

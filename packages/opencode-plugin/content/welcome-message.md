@@ -1,15 +1,17 @@
-👋 **欢迎使用 oh-my-sdd（企业 SDD 工作流插件）**
+👋 **欢迎使用 oh-my-sdd 企业 SDD 工作流**
 
-检测到这是你的首次启动（或会话未认证）。
+开始前，先为当前宿主安装适配器并检查状态：
 
-**3 步开始：**
+```bash
+oms-install --tool <claude|lingma|opencode|kilocode>
+oms doctor --tool <id>
+```
 
-1. 确认 `iam` CLI 已安装：`iam --version`
-2. 完成身份认证：`oh-my-sdd-login`（交互式输入用户名/密码）
-3. 重启 Claude Code
+如果当前适配器要求 iam 认证，运行 `oms-login`；认证后重启或重新加载该宿主。认证不是所有宿主的通用前置条件。
 
-之后你将可以使用：
-- `/sdd-spec` `/sdd-plan` `/sdd-task` `/sdd-apply` `/sdd-review` —— SDD 五阶段命令
+安装并确认加载后，可使用：
+
+- `/sdd-spec` `/sdd-plan` `/sdd-task` `/sdd-apply` `/sdd-review` —— SDD 五阶段流程
 - `/api-design` `/security-check` `/doc-writer` —— 企业定制 skills
 
-遇到问题：`oms-doctor` 诊断环境。
+诊断依赖、配置漂移或真实生效状态时，使用 `oms doctor`；需要修复时先运行 `oms repair` 审阅计划。

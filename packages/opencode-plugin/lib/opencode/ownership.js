@@ -13,9 +13,11 @@ import {
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 
 export const MANIFEST_VERSION = 1;
+const TRANSIENT_SYNC_ARTIFACT = /\.oh-my-sdd-sync\.(?:lock|staging-|backup-)/;
+const RESOURCE_DIGEST_ATTEMPTS = 3;
 
 /** Hash a complete file, directory, or symlink tree without following links. */
-export function resourceDigest(target) {
+function digestResourceTree(target) {
   const hash = createHash('sha256');
 
   function visit(current, relativeName) {
@@ -35,13 +37,25 @@ export function resourceDigest(target) {
       return;
     }
     hash.update(`dir:${relativeName}\0`);
-    for (const name of readdirSync(current).sort()) {
+    for (const name of readdirSync(current).filter((name) => !TRANSIENT_SYNC_ARTIFACT.test(name)).sort()) {
       visit(resolve(current, name), relativeName ? `${relativeName}/${name}` : name);
     }
   }
 
   visit(target, '');
   return hash.digest('hex');
+}
+
+export function resourceDigest(target) {
+  for (let attempt = 1; attempt <= RESOURCE_DIGEST_ATTEMPTS; attempt += 1) {
+    try {
+      return digestResourceTree(target);
+    } catch (error) {
+      // Resource sync replaces trees atomically, but a reader can still observe
+      // the tiny remove/rename window. Retry only that expected transient race.
+      if (error?.code !== 'ENOENT' || attempt === RESOURCE_DIGEST_ATTEMPTS) throw error;
+    }
+  }
 }
 
 export function readOwnershipManifest(manifestPath) {

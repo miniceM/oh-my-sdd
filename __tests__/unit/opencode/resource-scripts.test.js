@@ -26,6 +26,7 @@ import {
 } from '../../../packages/opencode-plugin/scripts/copy-resources.mjs';
 import {
   readOwnershipManifest,
+  resourceDigest,
   uninstallOwnedResources,
   writeOwnershipManifest,
 } from '../../../packages/opencode-plugin/scripts/resource-ownership.mjs';
@@ -54,6 +55,22 @@ test('resource sync writes normal diagnostics to stderr', () => {
     copyResources({ rootDir: root, opencodeDir, report: (message) => messages.push(message) });
 
     assert.match(messages.at(-1), /\[copy-resources\] all resources synced/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('resource digest ignores transient sync artifacts beside managed resources', () => {
+  const root = fixture();
+  try {
+    const resource = join(root, 'lib', 'opencode', 'ownership.js');
+    mkdirSync(dirname(resource), { recursive: true });
+    writeFileSync(resource, 'stable resource');
+    const expected = resourceDigest(root);
+
+    withSyncLock(join(root, 'lib.oh-my-sdd-sync.lock'), () => {
+      assert.equal(resourceDigest(root), expected);
+    });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

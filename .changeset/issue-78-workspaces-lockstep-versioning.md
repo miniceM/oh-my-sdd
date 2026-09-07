@@ -2,4 +2,4 @@
 "@cli-tools/oh-my-sdd": minor
 ---
 
-Migrate the enterprise SDD product and OpenCode native bridge to fixed-version npm workspaces.
+Synchronize the enterprise SDD product package and OpenCode native plugin package through the workspace fixed group.

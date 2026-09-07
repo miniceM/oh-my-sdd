@@ -16,19 +16,19 @@ Ring 5 是**单阶段**：code review → validate → archive → 验证 canoni
 
 确认上述前置检查通过；不通过即停止。
 
-### 步骤 1.5：Constitution Authority（委托 review 前置）
+### 步骤 2：Constitution Authority（委托 review 前置）
 
 读 `content/enterprise-baseline.md`，将每条规则作为 reviewer 的触发条件：违反 **HARD_RULE** 自动 **CRITICAL**；违反 **SOFT_RULE** 自动 **Important**。HARD_RULE 包括身份声明、安全/合规底线和提交规范；SOFT_RULE 包括 SDD 工具使用与推荐架构实践。Constitution 冲突 always CRITICAL，不得重新解释或静默忽略。
 
-### 步骤 2：委托 superpowers:requesting-code-review
+### 步骤 3：委托 superpowers:requesting-code-review
 
 派 reviewer 审整支 issue branch（main → 当前分支），收集 Critical/Important/Minor。Critical 或 Important 未修则停止并提示 `/sdd-apply`；不得进入归档或 PR 创建。
 
-### 步骤 2.5：OVERRIDE 扫描
+### 步骤 4：OVERRIDE 扫描
 
 扫描 commit message 和 PR body 草稿中的 `[OVERRIDE] <规则名>: <理由>`：无标记的 HARD_RULE 违反为 **Critical**；理由少于 20 字或模糊为 **Important**；理由清晰（至少 20 字且说明场景与权衡）为 **Minor**。OVERRIDE 只形成审计留痕，不豁免 baseline；将结果合并入 findings 后决定是否阻断。
 
-### 步骤 3：validate 与归档
+### 步骤 5：validate 与归档
 
 1. `Bash("openspec validate <slug> --strict")`；失败即停止。
 2. 在归档**之前**，向 `openspec/changes/<slug>/.meta.json` 写入：`dop_completion:{status:'pending',prepared_at:<ISO timestamp>,prepared_head:<git rev-parse HEAD>}`。
@@ -38,7 +38,7 @@ Ring 5 是**单阶段**：code review → validate → archive → 验证 canoni
 6. **归档后重新严格验证**：`Bash("openspec validate <slug> --strict")`；失败即停止，不能提交或创建 PR。
 7. **PR 提交就绪检查**：从 `lib/sdd-validation.js` 调用 `checkPrSubmissionReadiness(archiveMeta, archiveChangeDir, cwd)`；它必须确认 review ring、`archive_done_at`、尚未记录 `pr_url`，以及前置验证仍新鲜。返回 `allowed !== true` 即停止，不能提交或创建 PR。
 
-### 步骤 4：提交、推送与创建原子 PR
+### 步骤 6：提交、推送与创建原子 PR
 
 PR 必须同时含实现、`openspec/specs/`、`openspec/changes/archive/<slug>/` 及其 archive meta。PR body 含 change-id、proposal 摘要、测试结果、review findings 和 archive/canonical-spec 验证结果。
 
@@ -51,7 +51,7 @@ gh pr create --repo <owner/repo> --base main --head <issue-branch> --body-file <
 
 `gh pr create` 失败时停止并报告错误；不得调用 DOP done。
 
-### 步骤 5：PR 创建成功后完成 DOP
+### 步骤 7：PR 创建成功后完成 DOP
 
 仅在 `gh pr create` 成功返回 PR URL 后调用 `dop change done <change-id>`；change_id 仅从 archive meta 读取。
 

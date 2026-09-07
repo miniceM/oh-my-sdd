@@ -42,7 +42,7 @@ allowed-tools: Bash, Read, Write
 2. design.md 中的 API 接口设计、数据库设计、影响范围分析、非功能需求分别属于哪个 capability
 3. 根据变更类型推断规则确定每个 capability 的 changeTypes 数组
 
-### 步骤 2.5：调用 dop 获取排期信息（sdd-doc 1.1 排期信息章节数据源）
+### 步骤 3：调用 dop 获取排期信息（排期信息章节数据源）
 
 > **重要**：**排期编号 ≠ 变更号**。`change-id` 是 dop 工作流标识（如 `ARD123456`），`release_num` 是排期批次号（如 `R20260620001`），二者**没有派生关系**，必须从 `dop change view` 的 `user_stories[].release_info` 嵌套字段读取。
 
@@ -106,7 +106,7 @@ systemFlag=$(echo -n "<change-id>" | tr '[:lower:]' '[:upper:]' | cut -c1-3)
 >
 > **与 `systemCode` 的区别**：`systemFlag` 是变更所属"族"（从 change-id 前缀派生），`systemCode` 是当前 change 实际挂接的子系统代码（从 dop 拉取）。两者**没有强对应关系**——例如 `ARD222222` 的 `systemFlag=ARD`，但 `systemCode=CARD.points-mall`。
 
-### 步骤 3：生成结构化 JSON
+### 步骤 4：生成结构化 JSON
 
 使用 Write 工具将理解结果写入 `openspec/changes/<slug>/.sdd-doc-data.json`。
 
@@ -116,11 +116,11 @@ JSON 必须符合以下 Schema（完整示例见下文"JSON Schema 参考"）：
 {
   "metadata": {
     "projectTitle": "项目名称",
-    "systemName": "系统名称（→ 步骤 2.5：sub_systems[0].name）",
-    "systemFlag": "系统标志（→ 步骤 2.5.4：change-id 前 3 位大写，本地派生）",
-    "releaseCode": "排期编号（→ 步骤 2.5：user_stories[].release_info.release_num，首个非空）",
-    "releaseName": "排期名称（→ 步骤 2.5：user_stories[].release_info.release_name）",
-    "systemCode": "系统标识（→ 步骤 2.5：sub_systems[0].code）",
+    "systemName": "系统名称（→ 步骤 3：sub_systems[0].name）",
+    "systemFlag": "系统标志（→ 步骤 3 的 systemFlag 子项：change-id 前 3 位大写，本地派生）",
+    "releaseCode": "排期编号（→ 步骤 3：user_stories[].release_info.release_num，首个非空）",
+    "releaseName": "排期名称（→ 步骤 3：user_stories[].release_info.release_name）",
+    "systemCode": "系统标识（→ 步骤 3：sub_systems[0].code）",
     "version": "V0.1",
     "author": "编写人",
     "date": "2026-07-03",
@@ -210,7 +210,7 @@ JSON 必须符合以下 Schema（完整示例见下文"JSON Schema 参考"）：
 }
 ```
 
-### 步骤 3.5：输出文件安全检查（覆盖前确认）
+### 步骤 5：输出文件安全检查（覆盖前确认）
 
 > **目的**：防止已评审/已归档的 `<slug>-需求规格说明书.md` 被无声覆盖。`sdd_doc.py generate()` 内部已默认拒绝覆盖已 git 跟踪的文件，本步骤负责在用户侧触发 AskUserQuestion 二次确认。
 
@@ -274,7 +274,7 @@ python3 skills/sdd-doc/scripts/sdd_doc.py --check-overwrite <output_path>
 >
 > **关于 modified=true**：本地有未提交改动通常意味着用户正在手工调整文档。无论选哪个选项都应先提醒用户"你的本地未提交改动会一并被覆盖/备份"——这需要在 AskUserQuestion 的描述里明确提示，不另设独立选项。
 
-### 步骤 4：执行渲染
+### 步骤 6：执行渲染
 
 ```bash
 python3 skills/sdd-doc/scripts/sdd_doc.py <slug> --data-json <.sdd-doc-data.json路径> [--capability-names "auth=认证,user=用户管理"]
@@ -287,10 +287,10 @@ python3 skills/sdd-doc/scripts/sdd_doc.py <slug> --data-json <.sdd-doc-data.json
    - §1 总体说明（排期信息表格 + 功能列表表格）
    - §2 功能详细分析及设计（每个 capability 9 个固定子章节）
    - §3 非功能需求分析（客户群体/性能/访问集中度/软硬件兼容性/安全/可扩展）
-3. 内部调用 `_check_overwrite_safety` 做覆盖前安全门（见步骤 3.5），**默认拒绝覆盖已 git 跟踪的文件**
+3. 内部调用 `_check_overwrite_safety` 做覆盖前安全门（见步骤 5），**默认拒绝覆盖已 git 跟踪的文件**
 4. 输出：`openspec/changes/<slug>/<slug>-需求规格说明书.md`
 
-### 步骤 5：清理临时文件
+### 步骤 7：清理临时文件
 
 ```bash
 rm openspec/changes/<slug>/.sdd-doc-data.json

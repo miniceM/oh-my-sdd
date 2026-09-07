@@ -9,23 +9,24 @@ Invocation arguments (verbatim): `$ARGUMENTS`
 
 Execute the `sdd-spec` skill following its full workflow.
 
-Locate and follow the skill definition at one of:
+Locate and follow the skill definition at the first existing path:
 - `skills/sdd-spec/SKILL.md` (parent project source)
-- `.opencode/skills/sdd-spec/SKILL.md` (plugin-bundled mirror)
+- `.opencode/skills/sdd-spec/SKILL.md` (project-local OpenCode skill)
 - `~/.config/opencode/skills/sdd-spec/SKILL.md` (global OpenCode install)
 - `.agents/skills/sdd-spec/SKILL.md` (Claude-Code mirror)
 - `~/.agents/skills/sdd-spec/SKILL.md`
 - `.claude/skills/sdd-spec/SKILL.md`
 - `~/.claude/skills/sdd-spec/SKILL.md`
 
-Use the first existing path above. For every delegated skill, apply this mandatory
+For every delegated skill, apply this mandatory
 content-resolution contract:
 
 1. Strip the namespace and colon to obtain `name-without-namespace`.
 2. Read the first existing `SKILL.md` from
    `~/.config/opencode/skills/<name-without-namespace>/`,
    `.opencode/skills/<name-without-namespace>/`,
-   `skills/<name-without-namespace>/`, `.agents/skills/<name-without-namespace>/`,
+   `skills/<name-without-namespace>/`,
+   `.agents/skills/<name-without-namespace>/`,
    `~/.agents/skills/<name-without-namespace>/`,
    `.claude/skills/<name-without-namespace>/`, then
    `~/.claude/skills/<name-without-namespace>/`.

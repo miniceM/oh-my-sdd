@@ -34,21 +34,21 @@ test('SKILL.md declares design.md must contain Constitution Check as a contract 
 
 test('Constitution Check step is ordered before design exploration steps', async () => {
   const skill = await readSkill();
-  const ccIdx = skill.indexOf('### 步骤 1.5：Constitution Check');
-  assert.ok(ccIdx > -1, 'step 1.5 Constitution Check heading must exist');
+  const ccIdx = skill.indexOf('### 步骤 2：Constitution Check');
+  assert.ok(ccIdx > -1, 'step 2 Constitution Check heading must exist');
 
-  // design 探索入口：步骤 3 委托 brainstorming（产 design.md 的关键步骤）
-  const designStepIdx = skill.indexOf('### 步骤 3：委托 superpowers:brainstorming');
-  assert.ok(designStepIdx > -1, 'step 3 (brainstorming/design) heading must exist');
+  // design 探索入口：步骤 4 委托 brainstorming（产 design.md 的关键步骤）
+  const designStepIdx = skill.indexOf('### 步骤 4：委托 superpowers:brainstorming');
+  assert.ok(designStepIdx > -1, 'step 4 (brainstorming/design) heading must exist');
   assert.ok(
     ccIdx < designStepIdx,
     'Constitution Check gate must come before the design/brainstorming step'
   );
 
-  // 还需早于步骤 2（格式约束）以体现"先合规、再格式"的顺序
-  const step2Idx = skill.indexOf('### 步骤 2：格式约束');
-  assert.ok(step2Idx > -1, 'step 2 heading must exist');
-  assert.ok(ccIdx < step2Idx, 'Constitution Check must precede step 2');
+  // 还需早于步骤 3（格式约束）以体现"先合规、再格式"的顺序
+  const step3Idx = skill.indexOf('### 步骤 3：格式约束');
+  assert.ok(step3Idx > -1, 'step 3 heading must exist');
+  assert.ok(ccIdx < step3Idx, 'Constitution Check must precede step 3');
 });
 
 test('SKILL.md explicitly references enterprise-baseline.md as the constitution source', async () => {

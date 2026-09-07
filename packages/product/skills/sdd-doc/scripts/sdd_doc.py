@@ -544,7 +544,7 @@ def _check_overwrite_safety(out_path: Path) -> dict:
       - git 命令缺失 / 超时
       - 文件不存在
 
-    用途：SKILL.md 步骤 3.5 用此函数的结果驱动 AskUserQuestion；
+    用途：SKILL.md 步骤 5 用此函数的结果驱动 AskUserQuestion；
          sdd_doc.py generate() 用 tracked 字段决定是否拒绝覆盖。
     """
     exists = out_path.exists()
@@ -668,7 +668,7 @@ def generate(
 # ============================================================
 
 def check_overwrite_cli(path: str) -> int:
-    """--check-overwrite 模式：仅返回 JSON 状态，不渲染文档。供 SKILL.md 步骤 3.5 调用。"""
+    """--check-overwrite 模式：仅返回 JSON 状态，不渲染文档。供 SKILL.md 步骤 5 调用。"""
     safety = _check_overwrite_safety(Path(path))
     print(json.dumps(safety, ensure_ascii=False, indent=2))
     return 0
@@ -688,7 +688,7 @@ def main() -> int:
     p.add_argument("--force", action="store_true",
                    help="强制覆盖已 git 跟踪的输出文件（默认拒绝，触发 SddDocError）")
     p.add_argument("--check-overwrite", metavar="PATH", default=None,
-                   help="仅检查指定路径的覆盖安全状态（输出 JSON），不渲染文档。供 /sdd-doc 工作流步骤 3.5 调用。")
+                   help="仅检查指定路径的覆盖安全状态（输出 JSON），不渲染文档。供 /sdd-doc 工作流步骤 5 调用。")
     args = p.parse_args()
 
     if args.check_overwrite:

@@ -31,14 +31,14 @@ argument-hint: "[slug 或 change-id]"
 - `Write("openspec/changes/<slug>/tasks.md")`：覆盖更新
 - 验证写入成功 + `docs/superpowers/plans/` 未被污染
 
-### 步骤 3.5：显式 commit（禁止跳过）
+### 步骤 4：显式 commit（禁止跳过）
 
 ```bash
 git add openspec/changes/<slug>/tasks.md
 git commit -m '[<change-id>] task: ring 3 refine - tasks细化'
 ```
 
-### 步骤 4：本地进度标记（不调 dop CLI）
+### 步骤 5：本地进度标记（不调 dop CLI）
 
 真实 dop 没有 `change update`——进度记录到 `.meta.json`：
 
@@ -49,7 +49,7 @@ git commit -m '[<change-id>] task: ring 3 refine - tasks细化'
 - ✅ 基于 design（不重新设计）
 - ✅ 任务 ID 用 `T1, T2, ...`（与 Ring 2 一致）
 - ✅ tasks.md 写到 `openspec/changes/<slug>/`
-- ✅ 步骤 3.5 显式 commit
+- ✅ 步骤 4 显式 commit
 - ❌ 禁止写实现代码（hint OK）
 - ❌ 禁止重新做 design
 - ❌ 禁止改 design.md / specs/*.md

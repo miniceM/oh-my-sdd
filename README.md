@@ -1,365 +1,60 @@
-# @cli-tools/oh-my-sdd
+# oh-my-sdd
 
-企业级 SDD 工作流插件。**支持 4 种 AI 编程工具**：Claude Code、通义灵码 Lingma、OpenCode、KiloCode。skills + HARD_RULE 安全门禁跨工具复用。
+面向 Claude Code、通义灵码 Lingma、OpenCode 和 KiloCode 的企业级 SDD 工作流与控制面，作为两个 npm workspace 包发布。
 
-**核心能力：**
-- 5 个 SDD 斜杠命令：`/sdd-spec` `/sdd-plan` `/sdd-task` `/sdd-apply` `/sdd-review`
-- 企业 Agent baseline 按各工具官方 Rules/Instructions 机制注入
-- 与企业统一身份认证（AIH / `iam` CLI）对接（Claude 路径需要；lingma 路径无需）
-- 与企业绩效管理平台（DOP）对接，上报会话/命令/代码量
+运行时要求：Node.js ≥ 18。
 
 ## 快速开始
 
-> 📖 **详细安装指南**：如需完整安装步骤和故障排除，请参考 [INSTALL.md](INSTALL.md)
-
-按你使用的工具选一条路径。
-
-💡 **安装交互设计**：
-- **安装计划预览与交互确认**：`oms-install` 在执行写入前会先展示结构化安装计划（检测事实、保护级别、目标资源、风险预警），并在终端提示 `确认执行此安装计划？[y/N]`。
-- **免交互与自动化**：脚本或 CI 环境中请添加 `-y` / `--yes` 参数跳过交互确认（如 `oms-install --tool opencode -y`）。
-- **只读预览**：可使用 `oms-install --dry-run` 仅输出计划而不写入文件；支持 `--json` 输出结构化 JSON。
-- **多宿主安全选择**：当检测到机器上安装了多个支持工具时，`oms-install` 会中断并要求显式传入 `--tool <name>` 明确选择；仅在单一工具检测到时默认选择，全部未检测到时回退到 Claude。
-
-### OpenCode
-
-#### 方式一：npm 插件（推荐）
-
-OpenCode 会自动安装和更新 npm 插件；插件的 postinstall 会同步全局 skills、commands 和 `AGENTS.md`。
-
 ```bash
-# 在 ~/.config/opencode/opencode.json 中加入 npm 插件：
-{
-  "plugin": ["@cli-tools/oh-my-sdd-opencode"]
-}
-
-# 启动 OpenCode，插件自动加载
-opencode
-
-# 使用 SDD 命令：
-# /sdd-spec <change-name>
-```
-
-**优点**：
-- OpenCode 自动安装和更新
-- 符合官方插件生态规范
-- 无需手动管理文件
-
-#### 方式二：本地开发模式
-
-用于开发和测试插件功能。
-
-```bash
-# 1. 克隆仓库
-git clone https://github.com/enterprise/oh-my-sdd.git
-cd oh-my-sdd
-
-# 2. 安装根包并注册 OpenCode npm 插件
-npm install                 # 安装根包依赖
-oms-install --tool opencode # 写入 ~/.config/opencode/opencode.json
-
-# 3. 如需在本地构建/验证 OpenCode 子包
-cd opencode
-npm install                 # postinstall 同步全局资源
-npm run build
-
-# 4. 启动 OpenCode
-#    OpenCode 通过 npm 插件加载；资源位于 ~/.config/opencode/
-#    baseline 通过 ~/.config/opencode/AGENTS.md 官方 Instructions 注入
-opencode
-```
-
-⚠️ **前置依赖**：OpenCode（`npm install -g opencode` 或从 https://opencode.ai 下载）
-⚠️ **baseline 注入**：OpenCode 使用官方全局 `~/.config/opencode/AGENTS.md` Rules/Instructions 机制，不额外创建 system message
-⚠️ **HARD_RULE 强制**：通过 TypeScript 适配层将 `permissionDecision: "deny"` 转译为 OpenCode 的 `throw new Error()`；资源同步失败本身采用 fail-open。
-
-### KiloCode
-
-```bash
-# 1. 全局安装
 npm install -g --foreground-scripts @cli-tools/oh-my-sdd
-
-# 2. 显式选择工具
-oms-install --tool kilocode
-
-# 3. 重启 KiloCode IDE
-#    skills 已加载到 ~/.kilo/skills/
-#    /sdd-spec <change-name>
+oms-install --tool claude
+oms-login  # Claude 路径要求 iam 已就绪
+# 重启 Claude Code 后运行 /sdd-spec <change-name>
+oms status --tool claude
 ```
 
-⚠️ **重要限制**：KiloCode 当前无 hook 机制（无 PreToolUse/PostToolUse）。HARD_RULE 强制仅为**建议性**（baseline 注入到 `~/.config/kilo/AGENTS.md`，无运行期阻断）。安全敏感场景建议使用 Claude Code 或 OpenCode。
+完整的宿主安装、升级、验证与卸载操作请见 [INSTALL.md](INSTALL.md)。
 
-### Claude Code（默认）
+## 核心特性
+
+- 提供 `/sdd-spec`、`/sdd-plan`、`/sdd-task`、`/sdd-apply`、`/sdd-review` 工作流。
+- 将企业 baseline 和安全规则适配到四个宿主的原生机制。
+- 通过 `oms` 提供状态、诊断和所有权感知修复能力。
+- Claude Code 与 OpenCode 可在运行期强制执行 HARD_RULE；KiloCode 为 advisory-only。
+- 以 Changesets fixed group 锁步发布产品包与 OpenCode 原生插件包。
+
+## 工作区结构
+
+```
+packages/
+  product/            @cli-tools/oh-my-sdd：多宿主产品、CLI、安装器与 hooks
+  opencode-plugin/    @cli-tools/oh-my-sdd-opencode：OpenCode 原生 npm 插件
+__tests__/            Node.js 内置测试运行器的单元与集成测试
+```
+
+OpenCode 通过 npm 插件及其 `postinstall` 同步全局资源；不使用已废弃的单包 `opencode/` 目录。
+
+## 配置与常用命令
+
+运行时配置位于 `~/.oh-my-sdd/config.json`。常用命令：
 
 ```bash
-# 1. 全局安装（加 --foreground-scripts 才能看到 postinstall 输出）
-npm install -g --foreground-scripts @cli-tools/oh-my-sdd
+npm test
+npm run lint:baseline
+npm run sync:opencode
+npm run release:check
+npm run release:version
 
-# 2. 完成 iam 身份认证（首次）
-oms-login
-
-# 3. 重启 Claude Code，开始使用
-#    /sdd-spec <change-name>
+oms status [--tool <id>] [--json]
+oms doctor [--tool <id>] [--json]
+oms repair [--tool <id>] [--apply]
+oms-git-hooks install|uninstall|status [path]
 ```
 
-### 通义灵码 Lingma
-
-```bash
-# 1. 全局安装
-npm install -g --foreground-scripts @cli-tools/oh-my-sdd
-
-# 2. 显式选择工具
-oms-install --tool lingma
-
-# 3. 重启通义灵码 IDE
-#    skills + rules 已加载到 ~/.lingma/
-#    /sdd-spec <change-name>
-```
-
-### 同一台机器装多工具
-
-```bash
-oms-install                       # 装 Claude（自动检测）
-oms-install --tool lingma          # 再装 lingma
-oms-install --tool opencode        # 再装 OpenCode
-oms-install --tool kilocode        # 再装 KiloCode
-# 四套独立，互不覆盖——skills 各自复制到工具专属目录
-```
-
-> 💡 **关于 `--foreground-scripts`**：npm 默认静默 postinstall 输出（即使 stderr 也吞），加这个 flag 才能看到安装进度和"下一步"提示。**不加也能装成功**，只是看不到提示——安装失败时 npm 会自动显示所有输出。
->
-> 如果想默认看到，可以设 npm config：
-> ```bash
-> npm config set foreground-scripts true
-> ```
-
-## 控制面与运维工具 (`oms` CLI)
-
-oh-my-sdd 提供了面向用户的顶层控制面 CLI `oms`，用于检查保护状态、诊断配置漂移与安全自愈：
-
-```bash
-# 1. 查看工具保护状态与能力分层 (written / registered / loaded / enforced / advisory)
-oms status                      # 检查所有已安装宿主
-oms status --tool opencode      # 检查指定工具
-oms status --json               # 以 JSON 输出状态报告
-
-# 2. 诊断环境依赖、缺失项与配置漂移
-oms doctor                      # 诊断所有宿主
-oms doctor --tool claude        # 诊断指定工具
-
-# 3. 安全自愈与资源修复（严格保护用户修改过的文件）
-oms repair                      # 默认 dry-run：仅生成并展示修复计划，不修改文件
-oms repair --apply              # 确认执行修复
-oms repair --tool lingma --apply # 修复指定工具
-```
-
-### Git 钩子管理 (`oms-git-hooks`)
-
-在项目目录中安装或管理企业提交规范与安全门禁钩子（commit-msg, pre-commit, pre-push, prepare-commit-msg）：
-
-```bash
-oms-git-hooks install           # 为当前 git 仓库安装钩子
-oms-git-hooks status            # 查看钩子安装状态
-oms-git-hooks uninstall         # 卸载钩子并恢复用户备份
-```
-
-## 配置
-
-配置文件位置：`~/.oh-my-sdd/config.json`
-
-```json
-{
-  "dop_endpoint": "https://dop.enterprise.com",
-  "aih_system_name": "sdd",
-  "log_level": "info",
-  "telemetry_disabled": false
-}
-```
-
-**退出埋点：**
-- 用户全局：设 `telemetry_disabled: true`
-- 项目级：在项目根目录创建 `.sdd-no-telemetry` 文件
-
-## 卸载
-
-### 单工具卸载（推荐，保留其他工具的安装）
-
-```bash
-oms-uninstall --tool claude     # 仅清 Claude 路径
-oms-uninstall --tool lingma     # 仅清 lingma 路径
-oms-uninstall --tool opencode   # 仅清 OpenCode 路径
-```
-
-### 完整卸载
-
-现代 npm 不执行卸载生命周期脚本。必须先运行 ownership-aware 卸载器清理或恢复安装产物，再移除 npm 包。状态目录 `~/.oh-my-sdd/` 默认保留（可重装复用）。
-
-```bash
-# 按顺序执行（保留 ~/.oh-my-sdd/ 状态目录，重装可复用）
-oms-uninstall && npm uninstall -g @cli-tools/oh-my-sdd
-```
-
-### 彻底清空（含状态目录）
-
-必须按顺序执行三步（`oms-uninstall` 命令必须在包还装着时跑）：
-
-```bash
-oms-uninstall --purge && npm uninstall -g @cli-tools/oh-my-sdd && rm -rf ~/.oh-my-sdd/
-```
-
-**为什么不能反过来**：`oms-uninstall` 命令本身由被卸载的包提供，包卸了命令也消失；同时 npm 不会代为执行资源清理。
-
-## 强制约束体系（洋葱模型）
-
-oh-my-sdd 采用 **7 层洋葱模型** 实现强制约束，借鉴自 spec-kit 的 Constitution 体系。每一层从外到内逐步收紧，核心原则是"安全 > 合规 > 稳定 > 效率"。
-
-```
-┌─────────────────────────────────────────────────────┐
-│  Layer 7: CI gate                                   │ ← 测试守护 baseline 完整性
-│  (constitution-integrity.test.js + lint)            │
-├─────────────────────────────────────────────────────┤
-│  Layer 6: Amendment 治理                            │ ← /sdd-constitution SemVer 修订流程
-│  (sdd-constitution skill + Sync Impact Report)      │
-├─────────────────────────────────────────────────────┤
-│  Layer 5: Mandatory hooks                           │ ← PreToolUse hard gate (真正阻断)
-│  (pre-tool-use.js: HARD deny / SOFT warn)           │
-├─────────────────────────────────────────────────────┤
-│  Layer 4: Analyze CRITICAL                          │ ← /sdd-review 自动升级 HARD_RULE 违反
-│  (sdd-review skill + OVERRIDE 扫描)                 │
-├─────────────────────────────────────────────────────┤
-│  Layer 3: Plan gate                                 │ ← /sdd-plan 强制 Constitution Check 节
-│  (sdd-plan skill + design.md 必须含规则清单)         │
-├─────────────────────────────────────────────────────┤
-│  Layer 2: 注入层                                    │ ← system prompt 注入 baseline
-│  (wrapper --append-system-prompt-file)              │
-├─────────────────────────────────────────────────────┤
-│  Layer 1: 数据层                                    │ ← 版本化治理文档
-│  (enterprise-baseline.md + frontmatter)             │
-└─────────────────────────────────────────────────────┘
-```
-
-### 各层详解
-
-**Layer 1: 数据层**
-- 文件：`content/enterprise-baseline.md`
-- 格式：YAML frontmatter（`oms_version` / `ratified` / `last_amended`）+ Sync Impact Report + 正文
-- 版本化：SemVer bump 流程（MAJOR=原则重定义，MINOR=新原则，PATCH=措辞）
-- Token 预算：正文 ≤ 1000 token（`scripts/check-baseline-tokens.mjs` 校验）
-
-**Layer 2: 注入层**（按工具机制不同）
-- **Claude Code**：`wrapper/claude.sh` / `wrapper/claude.ps1` → `claude` 命令入口；wrapper 启动时通过 `--append-system-prompt-file` 自动注入 baseline（运行期位置：`~/.config/claude-enterprise/baseline.md` / `~/AppData/Roaming/ClaudeEnterprise/baseline.md`；构建期源在 `content/enterprise-baseline.md`）。绕过：`claude --no-enterprise`。
-- **Lingma**：baseline 写入 `~/.lingma/rules/oh-my-sdd.md`（Always 类型规则，IDE 启动自动加载）。hooks 合并到 `~/.lingma/settings.json` 的 `PreToolUse/PostToolUse/UserPromptSubmit/Stop` 4 个事件。
-
-**Layer 3: Plan gate**
-- Skill：`/sdd-plan`
-- 强制：`design.md` 必须含 `## Constitution Check` 节
-- 内容：列出本 change 触发的 HARD_RULE / SOFT_RULE + 合规策略
-
-**Layer 4: Analyze CRITICAL**
-- Skill：`/sdd-review`
-- 规则：HARD_RULE 违反自动标 Critical，SOFT_RULE 标 Important
-- 逃生舱：PR 描述写 `[OVERRIDE] <规则名>: <理由>` 可降级
-
-**Layer 5: Mandatory hooks**
-- 钩子：`hooks/pre-tool-use.js`（PreToolUse，工具执行前）
-- 硬阻断：`permissionDecision: "deny"` 阻止违规 Edit/Write 落盘
-- 规则集：5 HARD（AK/SK 硬编码、`rm -rf /`、`git push --force` 到 main、`.env` 直编）+ 2 SOFT（README 缺 Quick Start、公共 API 缺 docstring）
-- Fail-safe：规则引擎异常时 deny（而非绕过）
-
-**Layer 6: Amendment 治理**
-- Skill：`/sdd-constitution`
-- 流程：8 步修订（读 baseline → 收集变更 → SemVer bump → 更新 frontmatter → Sync Report → 一致性检查 → 写回 → lint）
-- 留痕：每次修订更新 `last_amended` + Sync Impact Report
-
-**Layer 7: CI gate**
-- 测试：`__tests__/integration/constitution-integrity.test.js`
-- 校验：frontmatter 字段齐全 + 正文 ≤ 1000 token + marker 幂等
-
-### 安全优先级
-
-遇到规则冲突时按此排序裁决：**安全 > 合规 > 稳定 > 效率**
-
-- **HARD_RULE**（不可覆盖）：违反会被 PreToolUse hook 阻断或 `/sdd-review` 标 Critical
-- **SOFT_RULE**（可显式覆盖）：违反时须在 PR 写 `[OVERRIDE] <规则名>: <理由>`
-
-### Spike 验证记录
-
-PostToolUse 的 `permissionDecision: "deny"` 经 spike 验证无法阻断落盘（文件已写入）。PreToolUse 是正确的阻断机制。详见 `docs/spike-posttooluse-deny.md`。
-
-## 设计文档
-
-- v0.1 历史设计 spec：`docs/archive/v0.1-design.md`
-- v0.1 实施计划：`docs/archive/v0.1-plan.md`
-- v0.2 演进 backlog：`docs/roadmap/v0.2-backlog.md`
-- **OpenCode 平台适配器**（v0.3）：
-  - 📖 [实现摘要](docs/superpowers/plans/2026-07-21-opencode-platform-adapter-summary.md)（276行，快速了解架构）
-  - 📚 [完整实现计划](docs/superpowers/plans/2026-07-21-opencode-platform-adapter.md)（详细任务列表）
-- Spike 记录（PostToolUse → PreToolUse 迁移）：`docs/spike-posttooluse-deny.md`
-
-## 系统要求
-
-**通用**（所有工具路径都需要）：
-- Node.js ≥ 18
-- npm ≥ 9
-- `openspec` CLI —— spec 保鲜的核心，archive 时自动 merge delta 到 `openspec/specs/`，让项目 specs 永远反映系统现状
-  ```bash
-  npm install -g @fission-ai/openspec
-  ```
-  未装时 `/sdd-review` 归档阶段会**阻塞**（不再有 mv fallback——mv 不 merge，破坏保鲜）。
-
-**按工具**：
-
-| 工具 | 必需 |
-|------|------|
-| Claude Code | `claude` CLI + `iam` CLI（企业统一身份认证） |
-| 通义灵码 Lingma | 通义灵码 IDE（`lingma` CLI 或 `~/.lingma/` 目录存在） |
-
-**推荐（非必需）**：
-- `superpowers` 6.x Claude Code 插件 —— `/sdd-plan` 委托 writing-plans、`/sdd-apply` 委托 subagent-driven-development、`/sdd-review` 委托 requesting-code-review
-- `gh` CLI —— `/sdd-spec` 创建 issue + 分支、`/sdd-review` 创建 PR
-
-**每个项目首次使用前**：
-```bash
-cd your-project
-openspec init --tools claude
-```
-此命令在项目本地生成 `/opsx:*` 命令（propose/apply/archive/explore）。`/sdd-spec` 等会**直调 openspec CLI**，不依赖项目本地 `/opsx:*`——但你也可以直接用 `/opsx:propose` 跳过企业包装。
-
-**多 sdd-* 命令并存的说明**：
-- `/sdd-*`（oh-my-sdd 提供）：含 iam/dop/gh 集成 + 委托 openspec/superpowers，**企业内部推荐**
-- `/opsx:*`（openspec 项目本地提供）：纯 openspec 工作流，无企业集成
-- `/superpowers:*`（superpowers 提供）：通用 agentic 工作流（brainstorming/writing-plans/executing-plans/code-review）
-
-**操作系统**：Windows 10/11、macOS、Linux（x64/arm64）
-
-## 多工具兼容
-
-oh-my-sdd v0.2+ 支持在多种 AI 编程工具中加载。skills + hooks + HARD_RULE 安全门禁跨工具复用。
-
-| 工具 | 状态 | 安装命令 | Skill 路径 | Hook 机制 |
-|------|------|---------|-----------|-----------|
-| **Claude Code** | ✅ 完整支持（默认） | `npm install -g @cli-tools/oh-my-sdd` | `~/.claude/skills/` | JSON hooks + wrapper |
-| **OpenCode** | ✅ 完整支持（v0.3+） | `oms-install --tool opencode` | `~/.config/opencode/skills/`、`~/.config/opencode/commands/`、`~/.config/opencode/AGENTS.md` | TypeScript adapter + official Instructions |
-| **通义灵码 Lingma** | ✅ 完整支持（基于文档解读） | `oms-install --tool lingma` | `~/.lingma/skills/` | JSON hooks（与 Claude Code 同构） |
-| **KiloCode** | ⚠️ 部分支持（无 hook 强制） | `oms-install --tool kilocode` | `~/.kilo/skills/` | 无 hook 机制，HARD_RULE 仅 advisory |
-| **Cursor** | 📋 v0.3 路线 | — | — | — |
-| **Windsurf** | 📋 v0.3 路线 | — | — | — |
-
-**自动检测**：不传 `--tool` 时，安装器按 Claude → Lingma → OpenCode → KiloCode 顺序调用各适配器的 `isInstalled()`；全部未检测到时回退到 Claude。多工具并存时请显式传 `--tool`。
-
-**多工具并存**：同一台机器可同时为多个工具装 oh-my-sdd。卸载时用 `--tool <name>` 精准卸载单一工具，不影响其他。
-
-### 工具特定说明
-
-**通义灵码 Lingma**：
-- 工具名**与 Claude Code 完全一致**（大写），`hooks/*.js` 零修改
-- baseline 注入到 `~/.lingma/rules/oh-my-sdd.md`（Always 类型规则自动生效）
-- 卸载时从 `~/.lingma/settings.json` 精准删除 4 个 oms hook 事件，保留用户其他 hook
-- ⚠️ 适配基于 `help.aliyun.com/zh/lingma/lingma-cn` 文档解读，未在真实 lingma 上做完整 e2e 验证
-
-### 已知风险
-
-1. **通义灵码 docs 部分未官方验证**：`Stop` 事件与 session-end 的等价关系是文档解读推测，需在 v0.3 实机验证。
-
-## 许可
-
-UNLICENSED（企业内部使用）
+## 开发与排障
+
+- 安装、升级、验证、修复和卸载：[INSTALL.md](INSTALL.md)
+- 贡献边界、测试与 PR 流程：[CONTRIBUTING.md](CONTRIBUTING.md)
+- 面向 Claude Code 的仓库速览：[CLAUDE.md](CLAUDE.md)
+- 面向各类 Agent 的完整工作约束：[AGENTS.md](AGENTS.md)

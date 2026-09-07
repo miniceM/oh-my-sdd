@@ -29,6 +29,9 @@ const ARCHIVE_META_READ_TIMEOUT_MS = 250;
 const MAX_PENDING_DOP_SCAN_ENTRIES = 50;
 const MAX_PENDING_DOP_META_BYTES = 64 * 1024;
 const PENDING_DOP_SCAN_BUDGET_MS = 500;
+// Update notices are opportunistic. A registry timeout must not consume the
+// session-start budget reserved for authentication and DOP reconciliation.
+const UPDATE_CHECK_TIMEOUT_MS = 500;
 
 async function readContent(name) {
   const p = path.join(PLUGIN_ROOT, 'content', name);
@@ -247,7 +250,7 @@ async function main() {
 // 更新检测（非阻塞）
 async function checkForPluginUpdates(currentVersion) {
   try {
-    const result = await checkForUpdates({ currentVersion });
+    const result = await checkForUpdates({ currentVersion, timeoutMs: UPDATE_CHECK_TIMEOUT_MS });
     if (result.hasUpdate && result.latestVersion && result.bump) {
       return buildUpdateNotification({
         currentVersion: result.currentVersion,
