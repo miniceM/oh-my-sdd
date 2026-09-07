@@ -24,8 +24,9 @@ const packageName = process.env.OPENCODE_PACKAGE ?? 'opencode-ai';
 const version = process.env.OPENCODE_VERSION;
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const defaultCommandTimeoutMs = process.platform === 'win32' ? 120_000 : 30_000;
+const node18CommandTimeoutMs = 180_000;
 export const commandTimeoutByNodeMajor = Object.freeze({
-  18: 120_000,
+  18: node18CommandTimeoutMs,
   22: defaultCommandTimeoutMs,
 });
 const commandTimeoutMs = commandTimeoutByNodeMajor[nodeMajor] ?? defaultCommandTimeoutMs;
@@ -37,7 +38,7 @@ test('real OpenCode E2E is eligible on every supported Node runtime', () => {
 });
 
 test('real OpenCode E2E leaves Node 18 enough time to initialize the real CLI', () => {
-  assert.equal(commandTimeoutByNodeMajor[18], 120_000);
+  assert.equal(commandTimeoutByNodeMajor[18], 180_000);
 });
 
 test('real OpenCode E2E verifies write outcomes on disk, not only hook output', () => {

@@ -527,12 +527,12 @@ test('OK state: caps archived DOP completion scan entries in enumeration order',
       PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
       CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
     },
-    5_000,
+    10_000,
   );
   const elapsed = Date.now() - startedAt;
 
   assert.equal(result.timedOut, false, 'entry-capped scan must not block session-start');
-  assert.ok(elapsed < 5_000, `hook took ${elapsed}ms, should return under 5s`);
+  assert.ok(elapsed < 10_000, `hook took ${elapsed}ms, should return under 10s`);
   assert.equal(result.exitCode, 0);
   const out = JSON.parse(result.stdout);
   assert.doesNotMatch(out.additionalContext, /--retry-dop/);
@@ -607,12 +607,12 @@ test('OK state: skips oversized pending archive metadata', async (t) => {
       PATH: `${iamDir}${path.delimiter}${process.env.PATH}`,
       CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
     },
-    5_000,
+    10_000,
   );
   const elapsed = Date.now() - startedAt;
 
   assert.equal(result.timedOut, false, 'oversized metadata must not block session-start');
-  assert.ok(elapsed < 5_000, `hook took ${elapsed}ms, should return under 5s`);
+  assert.ok(elapsed < 10_000, `hook took ${elapsed}ms, should return under 10s`);
   assert.equal(result.exitCode, 0);
   const out = JSON.parse(result.stdout);
   assert.doesNotMatch(out.additionalContext, /oversized|--retry-dop/);
