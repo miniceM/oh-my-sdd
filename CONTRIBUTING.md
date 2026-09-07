@@ -1,91 +1,43 @@
 # Contributing to oh-my-sdd
 
-Thank you for contributing! This guide covers the 4 most common extension scenarios.
+## 工作区边界
 
-## Stable API vs Internal Implementation
+本仓库使用 npm workspaces，并发布两个通过 Changesets fixed group 锁步版本化的包：
 
-**Stable API (SemVer-protected, do not break without MAJOR bump):**
-- `HostAdapter` interface (`install/host-adapter.js`)
-- 5 hook event names declared in `hooks/hooks.json`
-- `content/enterprise-baseline.md` frontmatter schema
-- `skills/*/SKILL.md` frontmatter schema
-- `bin/oms-*.js` CLI argument surface
+- `packages/product/`：`@cli-tools/oh-my-sdd`，拥有多宿主安装器、`oms` CLI、hooks、skills、baseline 和控制面。
+- `packages/opencode-plugin/`：`@cli-tools/oh-my-sdd-opencode`，拥有 OpenCode 原生 npm 插件、构建产物与资源同步脚本。
 
-**Internal (may change between MINOR/PATCH releases):**
-- Everything in `lib/`
-- Everything in `install/common/`
-- Internal structure of `wrapper/`
-- Internal structure of individual adapter files
+不要恢复旧的单包 `opencode/` 目录或将 OpenCode 源码复制为本地插件路径。OpenCode 由 npm 插件和 `postinstall` 资源同步提供。
 
-## 1. Adding a New Host Adapter
+## 开发与验证
 
-The easiest way to understand: look at `install/hosts/kilocode-adapter.js`.
+从仓库根目录执行：
 
-### Steps:
-
-1. **Create** `install/hosts/<yourhost>-adapter.js`:
-
-```js
-import { HostAdapter } from '../host-adapter.js';
-
-export class YourHostAdapter extends HostAdapter {
-  static id = 'yourhost';
-  static displayName = 'Your Host Name';
-
-  static isInstalled() { /* return boolean */ }
-  static preflight(ctx) { /* optional: print warnings */ }
-  static async install(ctx) { /* your install logic */ }
-  static async uninstall(ctx) { /* optional: cleanup */ }
-}
+```bash
+npm test
+npm run lint:baseline
+npm run sync:opencode
+npm run release:check
+npm run release:version
 ```
 
-2. **Register** in `install/host-registry.js`:
+修改产品包的 baseline 时，保持 `content/enterprise-baseline.md` 的 frontmatter、Sync Impact Report 和正文 token 预算约束，并运行 `npm run lint:baseline`。修改 OpenCode 插件资源同步时运行 `npm run sync:opencode`；发布前运行 `npm run release:check`。
 
-```js
-import { YourHostAdapter } from './hosts/yourhost-adapter.js';
+## 扩展指南
 
-const REGISTRY = new Map([
-  // ... existing entries ...
-  ['yourhost', YourHostAdapter],
-]);
-```
+- 新增宿主：在 `packages/product/install/hosts/` 实现适配器，并注册到产品包的宿主注册表；明确其 runtime enforcement 或 advisory 能力。
+- 新增或修改规则：更新产品包 baseline；需要运行期阻断时同步更新规则引擎与 PreToolUse 路径。不得把阻断逻辑迁移到 PostToolUse。
+- 新增 OpenCode 功能：只在 `packages/opencode-plugin/` 内实现插件代码、资源或同步逻辑，并验证构建与同步结果。
 
-3. **Tests auto-discovered** — the adapter-consistency test (`__tests__/unit/install/hosts/adapter-consistency.test.js`) dynamically iterates `listTools()` + `getAdapter()`, so your new adapter is automatically tested (7 assertions per adapter).
+## 提交与 PR 流程
 
-4. **Run tests:** `npm test`
+所有远程交付必须遵循 Issue → 专用分支 → PR：
 
-5. **Update README.md** supported tools list.
+1. 使用本地 `gh` CLI 创建或确认一个开放 Issue，并确保其中有可验证的验收标准和 Markdown checklist。
+2. 从最新 `main` 创建 `<type>/issue-<number>-<short-slug>` 分支；不得直接在默认分支提交或推送。
+3. 仅暂存 Issue 范围内的改动，使用 Conventional Commits，并关联 Issue。
+4. 提交前运行匹配的验证、`git diff --check`，并检查暂存内容和敏感文件。
+5. 仅推送 Issue 分支；使用本地 `gh pr create --repo OWNER/REPO` 向 `main` 创建 PR。
+6. PR 描述必须逐条核验 Issue 验收标准并附上验证证据；合并前不得删除分支。
 
-**Target:** <= 150 lines for the adapter file. If you exceed 200 lines, the abstraction may need revisiting — consider promoting helpers to `install/common/`.
-
-## 2. Adding a New Enterprise Rule (HARD_RULE/SOFT_RULE)
-
-See `skills/sdd-constitution/SKILL.md` for the full SemVer bump process. Quick version:
-
-1. Edit `content/enterprise-baseline.md` to add the rule.
-2. Update `oms_version` in frontmatter.
-3. Add a Sync Impact Report block.
-4. Update `lib/rules.js` if the rule needs runtime enforcement.
-5. Run `npm run lint:baseline` to verify token budget (<= 1000 tokens).
-6. Run `npm test` — the `pre-tool-use.test.js` suite covers rule enforcement.
-
-## 3. Adding a New Skill
-
-Skills live in `skills/<skill-name>/SKILL.md` (plus optional `scripts/` subdirectory).
-
-1. Create `skills/<skill-name>/SKILL.md` with required frontmatter.
-2. If the skill needs helper scripts, put them in `skills/<skill-name>/scripts/` (NOT using `${CLAUDE_SKILL_DIR}`; use relative paths).
-3. Reference from other skills via the superpowers skill convention.
-
-## 4. Modifying the Baseline
-
-See `skills/sdd-constitution/SKILL.md`. The baseline is versioned and has a <= 1000 token budget (body, after stripping frontmatter + Sync Impact Report).
-
-## Commit Format
-
-All commits must follow: `[<change-id>] <type>: <subject>`
-
-- `change-id`: `^[A-Z]{2,6}\d+$` (format-only validation)
-- `type`: Conventional Commits (feat/fix/docs/refactor/test/chore) + SDD ring (spec/plan/task/review)
-
-Example: `[OMS14] feat(install): add new host adapter`
+项目的硬性安全规则、提交格式和发布约束以 [AGENTS.md](AGENTS.md) 为准。

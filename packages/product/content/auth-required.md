@@ -1,17 +1,19 @@
 ⚠️ **未通过 iam 身份认证**
 
-你正在使用企业 Claude Code 插件（oh-my-sdd），但当前 `iam auth status` 显示无有效凭据。
+当前适配器需要 iam 身份认证。
+
+当前会话所属的 oh-my-sdd 适配器检测到 `iam auth status` 没有有效凭据。
 
 **完成认证：**
 
 ```bash
-oh-my-sdd-login
-# 或交互式：iam login -u <你的用户名> -p <你的密码>
+oms-login
 ```
 
-认证后**重启 Claude Code**，baseline 将自动注入。
+认证成功后，重启或重新加载当前宿主，再运行 `oms doctor --tool <id>` 确认该适配器的加载与保护状态。
 
-在认证完成前：
-- 不会注入企业 baseline
-- DOP 不上报任何数据
-- 部分企业命令可能受限
+此提示只适用于启用了 iam 校验的适配器情境（例如 Claude Code 企业路径），并不表示每个 oh-my-sdd 宿主都要求 iam 认证。若不确定当前宿主或认证要求，运行：
+
+```bash
+oms doctor
+```

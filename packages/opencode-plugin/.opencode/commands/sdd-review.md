@@ -11,7 +11,7 @@ Execute the `sdd-review` skill following its full workflow. Ring 5 ends when the
 
 Locate and follow the first existing skill definition:
 - `skills/sdd-review/SKILL.md` (parent project source)
-- `.opencode/skills/sdd-review/SKILL.md` (plugin-bundled mirror)
+- `.opencode/skills/sdd-review/SKILL.md` (project-local OpenCode skill)
 - `~/.config/opencode/skills/sdd-review/SKILL.md` (global OpenCode install)
 - `.agents/skills/sdd-review/SKILL.md` (Claude-Code mirror)
 - `~/.agents/skills/sdd-review/SKILL.md`
@@ -25,7 +25,8 @@ content-resolution contract:
 2. Read the first existing `SKILL.md` from
    `~/.config/opencode/skills/<name-without-namespace>/`,
    `.opencode/skills/<name-without-namespace>/`,
-   `skills/<name-without-namespace>/`, `.agents/skills/<name-without-namespace>/`,
+   `skills/<name-without-namespace>/`,
+   `.agents/skills/<name-without-namespace>/`,
    `~/.agents/skills/<name-without-namespace>/`,
    `.claude/skills/<name-without-namespace>/`, then
    `~/.claude/skills/<name-without-namespace>/`.

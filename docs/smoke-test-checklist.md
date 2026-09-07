@@ -1,73 +1,44 @@
-# oh-my-sdd 发布前手动冒烟测试清单
+# oh-my-sdd 发布前 Smoke Test Checklist
 
-**每次发版前，在三平台（macOS / Linux / Windows）各跑一遍。**
+在干净工作目录完成下列检查。记录命令、退出码、平台和必要的人工观察；不要用固定测试总数作为通过条件。
 
----
+## 1. 根测试与发布一致性
 
-## 1. 安装器交互与控制面验证
+- [ ] `npm test` 退出码为 0。
+- [ ] `npm run release:check` 退出码为 0，两个 workspace 包的锁步版本与发布元数据一致。
+- [ ] `git diff --check` 无空白错误；暂存区仅包含当前 Issue 范围的文件。
 
-### 安装计划与交互确认
+## 2. Baseline
 
-- [ ] 1. `oms-install --dry-run`（输出只读安装计划，不写入任何文件，退出码 0）
-- [ ] 2. `oms-install --tool claude`（终端渲染 Installation Plan，提示 `确认执行此安装计划？[y/N]`；输入 `n` 取消，验证未写入文件）
-- [ ] 3. `oms-install --tool claude -y`（免交互确认，成功执行安装并输出 step 结果）
-- [ ] 4. 多宿主安全阻断：当检测到多个工具且不带 `--tool` 时，验证返回退出码 2 并提示使用 `--tool <name>` 明确选择
+- [ ] `npm run lint:baseline` 退出码为 0。
+- [ ] 手工确认 baseline SSOT 为 `packages/product/content/enterprise-baseline.md`，frontmatter 和 Sync Impact Report 与正文一致。
+- [ ] Claude Code 写入 HARD_RULE 样例时，`PreToolUse` 在工具执行前拒绝，目标文件未落盘。
+- [ ] `PostToolUse` 只用于遥测/上下文反馈；不将其结果作为阻断成功的证据。
 
-### 统一控制面 (`oms` CLI)
+## 3. OpenCode 资源同步
 
-- [ ] 5. `oms status`（显示所有工具探测事实与能力分层：`written/registered/loaded/enforced/advisory`）
-- [ ] 6. `oms doctor`（诊断依赖、缺少项与配置漂移；无异常时输出 `✓ No issues detected.`）
-- [ ] 7. `oms repair`（默认 dry-run 预览自愈计划；`oms repair --apply` 执行自愈并保护用户改动）
-- [ ] 8. `oms-git-hooks install && oms-git-hooks status`（安装 git 门禁钩子并输出 INSTALLED）
+- [ ] `npm run sync:opencode` 退出码为 0。
+- [ ] 通过安装 `@cli-tools/oh-my-sdd-opencode` 或运行其受支持的安装路径，确认 `postinstall` 同步 package-owned resources。
+- [ ] 确认 OpenCode 配置使用 npm plugin `@cli-tools/oh-my-sdd-opencode`，没有旧 `opencode/` 本地目录引用。
+- [ ] 验证受管 skills、`sdd-*.md` commands 与 `AGENTS.md` 中的 oh-my-sdd 受管 baseline block 可被发现；用户在受管区块外的配置保留。
+- [ ] 在隔离的 HOME、测试用户或一次性 OpenCode 配置中运行一个 HARD_RULE 负例，确认插件运行期拒绝；仅在明确同意清理该测试环境后执行 `oms-opencode-uninstall`，并确认仅受管资源被清理或恢复。
 
-### 身份认证
+## 4. 两包构建与打包
 
-- [ ] 9. `oms-login` 交互式认证（密码输入隐藏，devops + gitee 登录成功）
-- [ ] 10. `iam auth status --json` 显示 credentials 数组满足认证要求
+- [ ] `npm run build --workspace=@cli-tools/oh-my-sdd` 退出码为 0。
+- [ ] `npm run build --workspace=@cli-tools/oh-my-sdd-opencode` 退出码为 0。
+- [ ] 分别执行两个包的 `npm pack --dry-run`，检查发布内容不含源码工作区垃圾、凭据或废弃 `opencode/` 目录。
 
----
+## 5. CLI 帮助与宿主验证
 
-## 2. 宿主集成与 SDD 工作流
+- [ ] `oms --help`、`oms-install --help`、`oms-uninstall --help` 均可用；用 `command -v oms-opencode-uninstall` 确认 OpenCode 卸载命令已安装。不要以 `--help` 调用该卸载命令，它会执行全局卸载/清理。
+- [ ] `oms status --tool claude` 与 `oms status --tool opencode` 显示对应宿主的探测/保护状态。
+- [ ] Claude Code 运行 `/sdd-spec`，确认安装的产品包可被发现。
+- [ ] OpenCode 重启后运行 `/sdd-spec`，确认 npm 插件提供的资源可被发现。
+- [ ] KiloCode 安装和 `oms status --tool kilocode` 显示 `advisory`；不得把它记录为运行期强制。
 
-### Claude Code
+## 6. 交付门禁
 
-- [ ] 11. 启动 Claude Code 会话（通过 wrapper `--append-system-prompt-file` 注入 baseline）
-- [ ] 12. 系统提示词含"企业 SDD Agent"
-- [ ] 13. 执行 `/sdd-spec`、`/sdd-plan`、`/sdd-task`、`/sdd-apply`、`/sdd-review` 流程
-- [ ] 14. 触发安全门禁（尝试写含硬编码 AK 的文件，验证 PreToolUse 阻断落盘）
-
-### OpenCode
-
-- [ ] 15. `oms-install --tool opencode -y`
-- [ ] 16. `~/.config/opencode/skills/`、`~/.config/opencode/commands/` 与 `~/.config/opencode/AGENTS.md` 包含受管内容
-- [ ] 17. 启动 OpenCode，验证 `/sdd-spec` 与 HARD_RULE 运行时拦截（throw Error）
-- [ ] 18. 卸载：`oms-uninstall --tool opencode`，验证受管区块清理且用户配置保留
-
-### 通义灵码 Lingma
-
-- [ ] 19. `oms-install --tool lingma -y`
-- [ ] 20. `~/.lingma/skills/` 含技能，`~/.lingma/rules/oh-my-sdd.md` 包含 baseline
-- [ ] 21. `oms-uninstall --tool lingma`，验证只清理 oms 相关 hooks 和 skills
-
-### KiloCode
-
-- [ ] 22. `oms-install --tool kilocode -y`
-- [ ] 23. `~/.kilo/skills/` 包含技能，`~/.config/kilo/AGENTS.md` 包含 baseline
-- [ ] 24. `oms status --tool kilocode` 输出保护级别为 `advisory`
-
----
-
-## 3. 异常路径与卸载
-
-- [ ] 25. 项目根目录建 `.sdd-no-telemetry` 文件，重启会话，DOP 不上报
-- [ ] 26. 设置 `~/.oh-my-sdd/config.json` 的 `telemetry_disabled: true`，DOP 不上报
-- [ ] 27. `oms-uninstall && npm uninstall -g @cli-tools/oh-my-sdd`，验证 `~/.oh-my-sdd/` 状态目录默认保留
-- [ ] 28. `oms-uninstall --purge && npm uninstall -g @cli-tools/oh-my-sdd`，验证完全清空
-
----
-
-## 4. 跨平台验证
-
-- [ ] 29. Windows 平台重复上述流程（重点：ComSpec、PATHEXT、CRLF、引号转义）
-- [ ] 30. Linux 平台重复上述流程（重点：文件权限 0o700/0o600）
-- [ ] 31. macOS 平台重复上述流程
+- [ ] 开放 Issue 有可验证验收标准和 checklist；工作位于 `<type>/issue-<number>-<short-slug>` 分支。
+- [ ] PR 面向 `main`，描述包含范围、验证、阻断、Issue 关联及逐条验收证据。
+- [ ] 未向默认分支直接推送。
