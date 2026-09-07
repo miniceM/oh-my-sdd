@@ -66,7 +66,7 @@ test('OVERRIDE scan step references [OVERRIDE] marker syntax', async () => {
 
 test('Constitution Authority segment appears before superpowers delegation', async () => {
   const skill = await readSkill();
-  // 流程顺序：HARD_RULE 段（步骤 1.5）必须在委托 superpowers:requesting-code-review 之前
+  // 流程顺序：HARD_RULE 段（步骤 2）必须在委托 superpowers:requesting-code-review 之前
   const hardRuleIdx = skill.indexOf('HARD_RULE');
   assert.ok(hardRuleIdx !== -1, 'HARD_RULE must be mentioned in SKILL.md');
   // 找第二个 requesting-code-review（frontmatter description 里有一个，正文委托段有一个）
@@ -76,15 +76,11 @@ test('Constitution Authority segment appears before superpowers delegation', asy
     `superpowers delegation (requesting-code-review @${delegateIdxLast})`);
 });
 
-test('Step 1.5 and Step 2.5 are inserted without renumbering existing steps', async () => {
+test('workflow steps use continuous integer numbering', async () => {
   const skill = await readSkill();
-  // 步骤 1.5 和 2.5 都应存在
-  assert.ok(/步骤 1\.5/.test(skill), 'Step 1.5 should be inserted (no renumbering)');
-  assert.ok(/步骤 2\.5/.test(skill), 'Step 2.5 should be inserted (no renumbering)');
-  // 既有步骤 1、2、3 都保留
-  assert.ok(/### 步骤 1：/.test(skill), 'Step 1 should be preserved');
-  assert.ok(/### 步骤 2：/.test(skill), 'Step 2 should be preserved');
-  assert.ok(/### 步骤 3：/.test(skill), 'Step 3 should be preserved');
+  const headings = [...skill.matchAll(/^### 步骤 (\d+)：/gm)].map((match) => Number(match[1]));
+  assert.deepEqual(headings, [1, 2, 3, 4, 5, 6, 7]);
+  assert.doesNotMatch(skill, /^### 步骤 \d+\.\d+：/gm);
 });
 
 test('Mandatory rules section documents the OVERRIDE contract', async () => {
@@ -169,7 +165,7 @@ test('Ring 5 checks GitHub context and Issue acceptance before a repo-targeted P
 
 test('Post-PR DOP handling leaves archive metadata pending and retry only calls done', async () => {
   const skill = await readSkill();
-  const postPr = skill.slice(skill.indexOf('### 步骤 5：PR 创建成功后完成 DOP'));
+  const postPr = skill.slice(skill.indexOf('### 步骤 7：PR 创建成功后完成 DOP'));
   const retry = skill.slice(skill.indexOf('## `--retry-dop <slug>`'));
   assert.doesNotMatch(postPr, /dop_completion\.status.*(?:done|failed)/);
   assert.match(postPr, /保持.*pending/);

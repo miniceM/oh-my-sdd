@@ -19,7 +19,7 @@ argument-hint: "[slug 或 change-id]"
 - **读上游**（`Read`）：proposal.md、specs/*.md、`.meta.json`（change_id、delta_capabilities）
 - **读项目现状**：对每个 delta_capability，`Read("openspec/specs/<capability>/spec.md")`（如存在）
 
-### 步骤 1.5：Constitution Check（设计前 gate）
+### 步骤 2：Constitution Check（设计前 gate）
 
 > 本节是 design 阶段的合规门，**必须**在设计探索开始前完成，并在设计末尾再评估一次。
 
@@ -49,7 +49,7 @@ argument-hint: "[slug 或 change-id]"
 
 - **未触发任何规则的兜底**：仍必须写 Constitution Check 节，明示 "No HARD_RULE/SOFT_RULE triggered by this change"，不得省略
 
-### 步骤 2：格式约束（避免后续冲突）
+### 步骤 3：格式约束（避免后续冲突）
 
 > **不要强行让 superpowers 用 openspec 模板**——会导致 /sdd-apply 阶段 task-brief 脚本找不到 task。
 
@@ -60,7 +60,7 @@ argument-hint: "[slug 或 change-id]"
 
 openspec validate/archive 只看 tasks.md 存在 + 含 `- [ ]` checkboxes，不强制 header 格式。
 
-### 步骤 3：委托 superpowers:brainstorming（关键）
+### 步骤 4：委托 superpowers:brainstorming（关键）
 
 调用 **`superpowers:brainstorming`** skill，传入：
 - proposal.md + specs/*.md 路径（作为业务背景输入）
@@ -89,7 +89,7 @@ openspec validate/archive 只看 tasks.md 存在 + 含 `- [ ]` checkboxes，不�
 
 brainstorming 会：问问题 → 提方案 → 用户 approve → **自动 chain writing-plans** → 产 tasks 清单。
 
-### 步骤 4：验证 + 自动修正
+### 步骤 5：验证 + 自动修正
 
 - **4a**：`Read("openspec/changes/<slug>/design.md")` + `tasks.md` 确认存在；`docs/superpowers/` 多了文件 → 移到 openspec 目录
 - **4b**：tasks.md 含 `- [ ]` checkbox 格式
@@ -97,10 +97,10 @@ brainstorming 会：问问题 → 提方案 → 用户 approve → **自动 chai
 - **4d：TDD 守门**（企业 baseline HARD_RULE 下沉）：
   扫每个 `### Task N:` 块，确认含 RED / GREEN / REFACTOR 三阶段（或等价"写失败测试 / 最小实现 / 重构"字样）。
   - **全部命中** → 通过，在 design.md 末尾追加一行 `TDD gate: PASS (N tasks all contain RED/GREEN/REFACTOR)`
-  - **任一 task 缺失** → 按 sdd-apply 步骤 2.6 同样的规则自动注入 RED/REFACTOR 步骤，commit：`[<id>] chore: TDD steps auto-injected for Task N (plan-time gate)`
+  - **任一 task 缺失** → 按 sdd-apply 步骤 4 同样的规则自动注入 RED/REFACTOR 步骤，commit：`[<id>] chore: TDD steps auto-injected for Task N (plan-time gate)`
   - 注入失败（task 边界不清）→ 停止，提示用户手动补全后再进 /sdd-apply
 
-### 步骤 4.5：显式 commit（禁止跳过）
+### 步骤 6：显式 commit（禁止跳过）
 
 brainstorming + writing-plans 自带 commit 是侥幸（可能 commit 错位置）。纠正后必须 commit openspec 版本：
 
@@ -111,13 +111,13 @@ git commit -m '[<change-id>] plan: ring 2 freeze - design + tasks ready'
 
 change-id 从 `.meta.json` 读。
 
-### 步骤 5：本地进度标记（不调 dop CLI）
+### 步骤 7：本地进度标记（不调 dop CLI）
 
 真实 dop 没有 `change update`——进度记录到 `.meta.json`：
 
 `Edit("openspec/changes/<slug>/.meta.json")`：把 `dop_status` 设为 `"plan-ready"`，加 `dop_status_at: <ISO timestamp>`。
 
-### 步骤 5.5：Constitution Check 再评估（设计后 gate）
+### 步骤 8：Constitution Check 再评估（设计后 gate）
 
 > 设计阶段完成后，再次扫描 design.md + tasks.md 的实际内容，捕捉 brainstorming 探索过程中新触发的规则。
 
@@ -130,7 +130,7 @@ change-id 从 `.meta.json` 读。
 
 - ✅ iam 校验通过
 - ✅ 委托 brainstorming（不直接调 writing-plans）
-- ✅ 步骤 4.5 显式 commit
+- ✅ 步骤 6 显式 commit
 - ✅ design.md + tasks.md 写到 `openspec/changes/<slug>/`
 - ✅ tasks.md 用 `### Task N:` + `- [ ]` checkbox
 - ✅ 步骤 4c 自动修正 commit message 格式

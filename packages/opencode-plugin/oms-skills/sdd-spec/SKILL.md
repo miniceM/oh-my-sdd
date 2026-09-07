@@ -53,7 +53,7 @@ openspec instructions specs --change <slug> --json      # 拿 specs 模板（自
 
 > **不产 design.md**——由 /sdd-plan 的 brainstorming 交互式产出。
 
-### 步骤 5.5：显式 commit（禁止跳过）
+### 步骤 6：显式 commit（禁止跳过）
 
 未 commit 的产物在 git 历史和 PR review 看来**等于不存在**。
 
@@ -62,7 +62,7 @@ git add openspec/changes/<slug>/proposal.md openspec/changes/<slug>/specs/ opens
 git commit -m '[<change-id>] spec: ring 1 freeze - proposal + delta specs'
 ```
 
-### 步骤 5.6：推荐首次项目安装 git hooks（混合模式）
+### 步骤 7：推荐首次项目安装 git hooks（混合模式）
 
 如果是该项目第一次使用 oh-my-sdd，推荐启用 git hook 校验，把企业约束扩展到开发者工作流：
 
@@ -78,7 +78,7 @@ oms-git-hooks install
 
 已安装到该项目的其他自定义 git hook 会被自动备份（`<type>.oms-backup`），卸载时恢复。紧急绕过：在 commit body 写 `[OVERRIDE] <规则名>: <理由>`，或 pre-commit 用环境变量 `OMS_OVERRIDE_RULES=<rule_id>`。
 
-### 步骤 6：gh 创建 issue + 分支（如有 gh）
+### 步骤 8：gh 创建 issue + 分支（如有 gh）
 
 > **执行顺序**：先按下面 body 模板填好，再 `gh issue create` 一次成型。**禁止** create 后再 edit。
 
@@ -105,7 +105,7 @@ issue 是整个变更的 tracking ticket（从 spec 到原子 PR 提交并完成
 - 解析 issue 编号 NNN
 - `Bash("git checkout -b <NNN>-<slug>")`
 
-### 步骤 7：本地进度标记（不调 dop CLI）
+### 步骤 9：本地进度标记（不调 dop CLI）
 
 真实 dop 没有 `change update` 子命令——进度记录到 `.meta.json`：
 
@@ -116,7 +116,7 @@ issue 是整个变更的 tracking ticket（从 spec 到原子 PR 提交并完成
 - ✅ iam 校验未授权停止
 - ✅ 用 `openspec new change` 创建（不手工 mkdir）
 - ✅ specs 用 openspec delta 模板填（保鲜靠这）
-- ✅ 步骤 5.5 显式 commit（spec freeze）
+- ✅ 步骤 6 显式 commit（spec freeze）
 - ✅ gh issue body 含**整体**验收（非当前阶段），一次成型不 edit
 - ✅ slug 用户确认（自然语言模式）
 - ❌ 禁止跳到实现
